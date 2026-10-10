@@ -1,0 +1,14 @@
+const AuditAction = Object.freeze({
+  LOGIN_SUCCESS: 'LOGIN_SUCCESS',
+  LOGIN_FAILED: 'LOGIN_FAILED',
+  STAFF_CREATED: 'STAFF_CREATED',
+  STAFF_CREATE_DENIED: 'STAFF_CREATE_DENIED',
+});
+
+const LoginFailureReason = Object.freeze({
+  INVALID_CREDENTIALS: 'INVALID_CREDENTIALS',
+  ACCOUNT_PENDING: 'ACCOUNT_PENDING',
+  ACCOUNT_DISABLED: 'ACCOUNT_DISABLED',
+});
+
+module.exports = { AuditAction, LoginFailureReason };

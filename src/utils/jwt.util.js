@@ -4,8 +4,8 @@ const env = require('../config/env');
 const ALGORITHM = 'HS256';
 const ACCESS_TOKEN_TYPE = 'access';
 
-const signAccessToken = ({ userId, role }) =>
-  jwt.sign({ role, type: ACCESS_TOKEN_TYPE }, env.JWT_ACCESS_SECRET, {
+const signAccessToken = ({ userId, email, role }) =>
+  jwt.sign({ email, role, type: ACCESS_TOKEN_TYPE }, env.JWT_ACCESS_SECRET, {
     algorithm: ALGORITHM,
     subject: userId,
     expiresIn: env.JWT_ACCESS_EXPIRES_IN,

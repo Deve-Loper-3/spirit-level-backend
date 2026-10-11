@@ -3,6 +3,11 @@ const AuditAction = Object.freeze({
   LOGIN_FAILED: 'LOGIN_FAILED',
   STAFF_CREATED: 'STAFF_CREATED',
   STAFF_CREATE_DENIED: 'STAFF_CREATE_DENIED',
+  PASSWORD_RESET_REQUESTED: 'PASSWORD_RESET_REQUESTED',
+  PASSWORD_RESET_OTP_VERIFIED: 'PASSWORD_RESET_OTP_VERIFIED',
+  PASSWORD_RESET_OTP_FAILED: 'PASSWORD_RESET_OTP_FAILED',
+  PASSWORD_RESET_COMPLETED: 'PASSWORD_RESET_COMPLETED',
+  LOGOUT: 'LOGOUT',
 });
 
 const LoginFailureReason = Object.freeze({
@@ -11,4 +16,11 @@ const LoginFailureReason = Object.freeze({
   ACCOUNT_DISABLED: 'ACCOUNT_DISABLED',
 });
 
-module.exports = { AuditAction, LoginFailureReason };
+// Why a password-reset request got no OTP (stored in AuditLog.reason).
+const PasswordResetSkipReason = Object.freeze({
+  UNKNOWN_EMAIL: 'UNKNOWN_EMAIL',
+  ACCOUNT_PENDING: 'ACCOUNT_PENDING',
+  ACCOUNT_DISABLED: 'ACCOUNT_DISABLED',
+});
+
+module.exports = { AuditAction, LoginFailureReason, PasswordResetSkipReason };

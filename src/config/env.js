@@ -1,6 +1,20 @@
 require('dotenv').config();
 const { z } = require('zod');
 
+// Default max requests per window for /auth/refresh and /auth/logout (the login limit is much looser).
+// In the test env it is raised, like the other limiters, unless REFRESH_RATE_LIMIT_MAX is set.
+const DEFAULT_REFRESH_RATE_LIMIT_MAX = 60;
+const TEST_REFRESH_RATE_LIMIT_MAX = 100000;
+
+// jsonwebtoken reads a bare number string such as "900" as MILLISECONDS, so only a positive whole
+// number plus a unit is accepted: 15m, 1h, 7d, 30s.
+const ACCESS_TOKEN_EXPIRY_REGEX = /^[1-9]\d*[smhd]$/;
+
+// Obvious template values ("CHANGE_ME", "your_secret", ...) must never be used as the signing key.
+// The .env.example placeholder matches this on purpose, so it fails until it is replaced.
+const PLACEHOLDER_SECRET_REGEX =
+  /change[\s_-]?me|replace[\s_-]?me|your[\s_-]?(jwt[\s_-]?)?secret|random[\s_-]?secret|placeholder|secret[\s_-]?here/i;
+
 // Browsers send the Origin header as scheme://host[:port] (lowercase host, no path).
 const BARE_ORIGIN_REGEX = /^https?:\/\/[^\s/?#]+$/;
 
@@ -20,15 +34,37 @@ const schema = z
     CORS_ORIGINS: z.string().default('*'),
     DATABASE_URL: z.string().min(1, 'DATABASE_URL is required'),
     BCRYPT_SALT_ROUNDS: z.coerce.number().int().positive().default(12),
-    JWT_ACCESS_SECRET: z.string().min(32, 'JWT_ACCESS_SECRET must be at least 32 characters'),
-    JWT_ACCESS_EXPIRES_IN: z.string().min(1).default('15m'),
+    JWT_ACCESS_SECRET: z
+      .string()
+      .min(32, 'JWT_ACCESS_SECRET must be at least 32 characters')
+      .refine((value) => !PLACEHOLDER_SECRET_REGEX.test(value), {
+        message:
+          'JWT_ACCESS_SECRET still looks like a placeholder (e.g. CHANGE_ME): generate a random secret',
+      }),
+    JWT_ACCESS_EXPIRES_IN: z
+      .string()
+      .regex(
+        ACCESS_TOKEN_EXPIRY_REGEX,
+        'JWT_ACCESS_EXPIRES_IN must be a positive whole number followed by s, m, h or d (for example 15m, 1h, 7d); bare numbers are not allowed',
+      )
+      .default('15m'),
     REFRESH_TOKEN_TTL_DAYS: z.coerce.number().int().positive().default(30),
+    // Must stay > 0: reuse detection needs revoked sessions to exist for a while before cleanup.
+    REFRESH_SESSION_CLEANUP_GRACE_DAYS: z.coerce.number().int().positive().default(7),
+    REFRESH_RATE_LIMIT_WINDOW_MS: z.coerce
+      .number()
+      .int()
+      .positive()
+      .default(15 * 60 * 1000),
+    REFRESH_RATE_LIMIT_MAX: z.coerce.number().int().positive().optional(),
     RATE_LIMIT_WINDOW_MS: z.coerce
       .number()
       .int()
       .positive()
       .default(15 * 60 * 1000),
     RATE_LIMIT_MAX: z.coerce.number().int().positive().default(1000),
+    OTP_EXPIRY_MINUTES: z.coerce.number().int().positive().default(10),
+    OTP_MAX_ATTEMPTS: z.coerce.number().int().positive().default(5),
     TRUST_PROXY: z
       .string()
       .default('false')
@@ -113,6 +149,9 @@ const env = Object.freeze({
   isTest: data.NODE_ENV === 'test',
   corsOrigins: data.CORS_ORIGINS.trim() === '*' ? '*' : splitOrigins(data.CORS_ORIGINS),
   trustProxy: data.TRUST_PROXY,
+  refreshRateLimitMax:
+    data.REFRESH_RATE_LIMIT_MAX ??
+    (data.NODE_ENV === 'test' ? TEST_REFRESH_RATE_LIMIT_MAX : DEFAULT_REFRESH_RATE_LIMIT_MAX),
 });
 
 module.exports = env;

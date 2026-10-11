@@ -5,6 +5,13 @@ const { AccountStatus } = require('../constants/status');
 const { createAppError } = require('../errors/AppError');
 const { AppErrors } = require('../constants/errors');
 
+// Like findAuthById plus the email, for building a new access token on refresh.
+const findAuthWithEmailById = (id) =>
+  prisma.user.findUnique({
+    where: { id },
+    select: { id: true, email: true, role: true, status: true },
+  });
+
 const findByEmail = (email) =>
   prisma.user.findUnique({
     where: { email },
@@ -54,6 +61,35 @@ const findForLogin = (email) =>
     },
   });
 
+// A user deleted between authenticate and this write surfaces as P2025.
+const updateProfileImage = async (id, profileImageUrl) => {
+  try {
+    return await prisma.user.update({
+      where: { id },
+      data: { profileImageUrl },
+      select: {
+        id: true,
+        fullName: true,
+        email: true,
+        phone: true,
+        whatsappNumber: true,
+        gender: true,
+        birthDay: true,
+        birthMonth: true,
+        profileImageUrl: true,
+        role: true,
+        status: true,
+        createdAt: true,
+      },
+    });
+  } catch (err) {
+    if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2025') {
+      throw createAppError(AppErrors.USER_NOT_FOUND);
+    }
+    throw err;
+  }
+};
+
 const completeRegistrationTx = async ({ userId, contact, now }) => {
   try {
     return await prisma.$transaction(async (tx) => {
@@ -101,7 +137,9 @@ module.exports = {
   findByEmail,
   findById,
   findAuthById,
+  findAuthWithEmailById,
   createUser,
   findForLogin,
+  updateProfileImage,
   completeRegistrationTx,
 };

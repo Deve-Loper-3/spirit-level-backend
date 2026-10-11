@@ -76,6 +76,26 @@ const AppErrors = Object.freeze({
     message: Messages.INVALID_TOKEN,
     code: 'INVALID_TOKEN',
   }),
+  OTP_INVALID: Object.freeze({
+    statusCode: 400,
+    message: Messages.OTP_INVALID,
+    code: 'OTP_INVALID',
+  }),
+  OTP_EXPIRED: Object.freeze({
+    statusCode: 400,
+    message: Messages.OTP_EXPIRED,
+    code: 'OTP_EXPIRED',
+  }),
+  OTP_ALREADY_USED: Object.freeze({
+    statusCode: 400,
+    message: Messages.OTP_ALREADY_USED,
+    code: 'OTP_ALREADY_USED',
+  }),
+  OTP_ATTEMPTS_EXCEEDED: Object.freeze({
+    statusCode: 429,
+    message: Messages.OTP_ATTEMPTS_EXCEEDED,
+    code: 'OTP_ATTEMPTS_EXCEEDED',
+  }),
 });
 
 module.exports = { AppErrors };

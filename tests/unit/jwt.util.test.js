@@ -23,6 +23,21 @@ describe('jwt.util', () => {
       expect(payload).toMatchObject({ sub: USER_ID, role: Role.MEMBER, type: 'access' });
     });
 
+    it('sets the email claim', () => {
+      const payload = jwt.decode(
+        signAccessToken({ userId: USER_ID, email: 'member@test.invalid', role: Role.MEMBER }),
+      );
+
+      expect(payload).toMatchObject({
+        sub: USER_ID,
+        email: 'member@test.invalid',
+        role: Role.MEMBER,
+        type: 'access',
+      });
+      expect(payload.iat).toEqual(expect.any(Number));
+      expect(payload.exp).toEqual(expect.any(Number));
+    });
+
     it('expires after the configured JWT_ACCESS_EXPIRES_IN', () => {
       const { iat, exp } = jwt.decode(signAccessToken({ userId: USER_ID, role: Role.MEMBER }));
 

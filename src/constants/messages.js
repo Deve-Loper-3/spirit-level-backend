@@ -10,10 +10,25 @@ const Messages = Object.freeze({
   REGISTER_SUCCESS: 'Registration successful',
   REGISTRATION_COMPLETE_SUCCESS: 'Registration completed successfully',
   LOGIN_SUCCESS: 'Login successful',
+  TOKEN_REFRESH_SUCCESS: 'Token refreshed successfully',
   LOGOUT_SUCCESS: 'Logout successful',
   LOGIN_AUDIT_WRITE_FAILED: 'Failed to write login audit log',
   INVALID_CREDENTIALS: 'Invalid email or password',
   PASSWORD_MISMATCH: 'Password and confirm password do not match',
+
+  // Password reset
+  PASSWORD_RESET_OTP_REQUESTED: 'If the email is registered, an OTP has been sent to it',
+  PASSWORD_RESET_OTP_VERIFIED_SUCCESS: 'OTP verified successfully',
+  PASSWORD_RESET_SUCCESS: 'Password has been reset successfully',
+  OTP_INVALID: 'Invalid OTP',
+  OTP_EXPIRED: 'OTP has expired, please request a new one',
+  OTP_ALREADY_USED: 'OTP has already been used, please request a new one',
+  OTP_ATTEMPTS_EXCEEDED: 'Too many incorrect attempts, please request a new OTP',
+  PASSWORD_RESET_EMAIL_FAILED: 'Failed to send password reset OTP email',
+  OTP_REQUIRED: 'OTP is required',
+  OTP_FORMAT_INVALID: 'OTP must be exactly 4 digits',
+  RESET_TOKEN_REQUIRED: 'Reset token is required',
+  REFRESH_TOKEN_REQUIRED: 'Refresh token is required',
 
   // Credential field validation
   EMAIL_REQUIRED: 'Email is required',
@@ -87,6 +102,7 @@ const Messages = Object.freeze({
   // Image upload
   IMAGE_TYPE_NOT_ALLOWED: 'Image must be a JPEG, PNG or WebP file',
   IMAGE_URL_INVALID: 'Profile image URL is not valid',
+  PROFILE_IMAGE_UPDATED_SUCCESS: 'Profile image updated successfully',
   IMAGE_UPLOAD_TOKEN_ISSUED: 'Image upload token issued successfully',
   IMAGE_UPLOAD_TOKEN_FAILED: 'Failed to prepare the image upload, please try again later',
   IMAGE_UPLOAD_NOT_CONFIGURED: 'Image upload is not available right now',

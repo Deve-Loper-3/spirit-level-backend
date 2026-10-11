@@ -3,7 +3,8 @@ const { Gender } = require('../constants/gender');
 const { Relationship } = require('../constants/relationship');
 const { Messages } = require('../constants/messages');
 const { PASSWORD_REGEX, PASSWORD_POLICY_MESSAGE } = require('../utils/password.util');
-const { isTrustedImageUrl } = require('../infra/storage/blob.storage');
+const { OTP_LENGTH } = require('../utils/otp.util');
+const { trustedImageUrl } = require('./uploads.validation');
 
 // Max valid day per month (no year stored; Feb 29 is allowed)
 const MAX_DAYS_PER_MONTH = {
@@ -64,6 +65,12 @@ const emailField = z
   .max(254, Messages.EMAIL_MAX_LENGTH)
   .email(Messages.EMAIL_INVALID);
 
+// Shared by register and reset-password so the password policy lives in one place
+const passwordField = z
+  .string({ error: Messages.PASSWORD_REQUIRED })
+  .max(72, Messages.PASSWORD_MAX_LENGTH)
+  .regex(PASSWORD_REGEX, PASSWORD_POLICY_MESSAGE);
+
 const fullNameField = z
   .string({ error: Messages.FULL_NAME_REQUIRED })
   .trim()
@@ -91,19 +98,9 @@ const registerSchema = z
 
     birthMonth: optionalIntField(1, 12, Messages.BIRTH_MONTH_RANGE),
 
-    profileImageUrl: z.preprocess(
-      toOptionalTrimmedString,
-      z
-        .string({ error: Messages.IMAGE_URL_INVALID })
-        .max(2048, Messages.IMAGE_URL_INVALID)
-        .refine(isTrustedImageUrl, Messages.IMAGE_URL_INVALID)
-        .optional(),
-    ),
+    profileImageUrl: z.preprocess(toOptionalTrimmedString, trustedImageUrl.optional()),
 
-    password: z
-      .string({ error: Messages.PASSWORD_REQUIRED })
-      .max(72, Messages.PASSWORD_MAX_LENGTH)
-      .regex(PASSWORD_REGEX, PASSWORD_POLICY_MESSAGE),
+    password: passwordField,
   })
   .check((ctx) => {
     const { birthDay, birthMonth } = ctx.value;
@@ -189,10 +186,42 @@ const loginSchema = z.object({
     .max(72, Messages.PASSWORD_MAX_LENGTH),
 });
 
+const forgotPasswordSchema = z.object({
+  email: emailField,
+});
+
+const verifyOtpSchema = z.object({
+  email: emailField,
+  otp: z
+    .string({ error: Messages.OTP_REQUIRED })
+    .trim()
+    .regex(new RegExp(`^\\d{${OTP_LENGTH}}$`), Messages.OTP_FORMAT_INVALID),
+});
+
+const resetPasswordSchema = z.object({
+  email: emailField,
+  resetToken: z
+    .string({ error: Messages.RESET_TOKEN_REQUIRED })
+    .trim()
+    .min(1, Messages.RESET_TOKEN_REQUIRED),
+  newPassword: passwordField,
+});
+
+const refreshTokenSchema = z.object({
+  refreshToken: z
+    .string({ error: Messages.REFRESH_TOKEN_REQUIRED })
+    .trim()
+    .min(1, Messages.REFRESH_TOKEN_REQUIRED),
+});
+
 module.exports = {
   registerSchema,
   completeRegistrationSchema,
   loginSchema,
+  refreshTokenSchema,
+  forgotPasswordSchema,
+  verifyOtpSchema,
+  resetPasswordSchema,
   fullNameField,
   emailField,
   phoneField,

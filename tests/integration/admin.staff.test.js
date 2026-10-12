@@ -80,16 +80,19 @@ describe('POST /api/v1/admin/staff', () => {
   const sentTempPassword = () => TEMP_PASSWORD_LINE.exec(mockSendMail.mock.calls[0][0].text)[1];
 
   describe('role policy', () => {
-    it.each([Role.COACH, Role.ADMIN])('lets an ADMIN create a %s (201)', async (role) => {
-      const admin = await createCaller(Role.ADMIN);
-      const body = validBody({ role });
+    it.each([Role.MEMBER, Role.COACH, Role.ADMIN])(
+      'lets an ADMIN create a %s (201)',
+      async (role) => {
+        const admin = await createCaller(Role.ADMIN);
+        const body = validBody({ role });
 
-      const res = await postAs(admin, body);
+        const res = await postAs(admin, body);
 
-      expect(res.status).toBe(201);
-      expect(res.body).toMatchObject({ success: true, message: Messages.STAFF_CREATED_SUCCESS });
-      expect(res.body.data).toMatchObject({ email: body.email, role });
-    });
+        expect(res.status).toBe(201);
+        expect(res.body).toMatchObject({ success: true, message: Messages.STAFF_CREATED_SUCCESS });
+        expect(res.body.data).toMatchObject({ email: body.email, role });
+      },
+    );
 
     it('rejects an ADMIN creating an OWNER (403 STAFF_ROLE_NOT_ALLOWED) and creates nothing', async () => {
       const admin = await createCaller(Role.ADMIN);
@@ -103,7 +106,7 @@ describe('POST /api/v1/admin/staff', () => {
       expect(mockSendMail).not.toHaveBeenCalled();
     });
 
-    it.each([Role.COACH, Role.ADMIN, Role.OWNER])(
+    it.each([Role.MEMBER, Role.COACH, Role.ADMIN, Role.OWNER])(
       'lets an OWNER create a %s (201)',
       async (role) => {
         const owner = await createCaller(Role.OWNER);
@@ -248,7 +251,6 @@ describe('POST /api/v1/admin/staff', () => {
       ['phone missing', 'phone', (b) => ({ ...b, phone: undefined })],
       ['phone invalid', 'phone', (b) => ({ ...b, phone: '12ab' })],
       ['role missing', 'role', (b) => ({ ...b, role: undefined })],
-      ['role MEMBER', 'role', (b) => ({ ...b, role: Role.MEMBER })],
       ['role unknown', 'role', (b) => ({ ...b, role: 'SUPERUSER' })],
     ])('returns 400 for %s', async (_label, field, mutate) => {
       const admin = await createCaller(Role.ADMIN);

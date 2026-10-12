@@ -4,6 +4,7 @@ const {
   loginWithPassword,
   refreshTokens,
   logout: logoutSession,
+  getProfile,
 } = require('../services/auth.service');
 const {
   requestPasswordReset,
@@ -80,6 +81,19 @@ const logout = async (req, res, next) => {
   }
 };
 
+const me = async (req, res, next) => {
+  try {
+    const user = await getProfile(req.user.id);
+    return sendSuccess(res, {
+      statusCode: 200,
+      message: Messages.PROFILE_FETCHED_SUCCESS,
+      data: { user },
+    });
+  } catch (err) {
+    return next(err);
+  }
+};
+
 // Same response for every email, so it never reveals whether the account exists.
 const forgotPassword = async (req, res, next) => {
   try {
@@ -135,6 +149,7 @@ module.exports = {
   login,
   refresh,
   logout,
+  me,
   forgotPassword,
   verifyOtp,
   resetPassword,

@@ -11,6 +11,8 @@ const Messages = Object.freeze({
   REGISTRATION_COMPLETE_SUCCESS: 'Registration completed successfully',
   LOGIN_SUCCESS: 'Login successful',
   TOKEN_REFRESH_SUCCESS: 'Token refreshed successfully',
+  PROFILE_FETCHED_SUCCESS: 'Profile fetched successfully',
+  AUTHORIZATION_DENIED: 'Authorization denied: role not allowed for this endpoint',
   LOGOUT_SUCCESS: 'Logout successful',
   LOGIN_AUDIT_WRITE_FAILED: 'Failed to write login audit log',
   INVALID_CREDENTIALS: 'Invalid email or password',

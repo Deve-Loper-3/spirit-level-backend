@@ -15,8 +15,8 @@ describe('staff.policies - canCreate', () => {
       expect(canCreate(Role.OWNER, Role.OWNER)).toBe(true);
     });
 
-    it('denies creating MEMBER', () => {
-      expect(canCreate(Role.OWNER, Role.MEMBER)).toBe(false);
+    it('allows creating MEMBER', () => {
+      expect(canCreate(Role.OWNER, Role.MEMBER)).toBe(true);
     });
   });
 
@@ -33,17 +33,16 @@ describe('staff.policies - canCreate', () => {
       expect(canCreate(Role.ADMIN, Role.OWNER)).toBe(false);
     });
 
-    it('denies creating MEMBER', () => {
-      expect(canCreate(Role.ADMIN, Role.MEMBER)).toBe(false);
+    it('allows creating MEMBER', () => {
+      expect(canCreate(Role.ADMIN, Role.MEMBER)).toBe(true);
     });
   });
 
-  describe('when caller is COACH or MEMBER', () => {
-    it.each([Role.COACH, Role.MEMBER])('denies %s from creating any role', (callerRole) => {
-      expect(canCreate(callerRole, Role.COACH)).toBe(false);
-      expect(canCreate(callerRole, Role.ADMIN)).toBe(false);
-      expect(canCreate(callerRole, Role.OWNER)).toBe(false);
-      expect(canCreate(callerRole, Role.MEMBER)).toBe(false);
+  describe('when caller is COACH or MEMBER (own role only)', () => {
+    it.each([Role.COACH, Role.MEMBER])('allows %s only the same role', (callerRole) => {
+      const allowed = Object.values(Role).filter((target) => canCreate(callerRole, target));
+
+      expect(allowed).toEqual([callerRole]);
     });
   });
 

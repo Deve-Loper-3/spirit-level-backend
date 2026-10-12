@@ -16,6 +16,7 @@ const {
   findById,
   findForLogin,
   findAuthWithEmailById,
+  findPublicById,
   completeRegistrationTx,
 } = require('../repositories/user.repository');
 const { toPublicUser, toCompletedRegistration } = require('../repositories/user.mapper');
@@ -227,10 +228,18 @@ const logout = async (refreshToken, user, meta) => {
   });
 };
 
+// Profile of the authenticated caller. A user deleted after `authenticate` looks like a bad token.
+const getProfile = async (userId) => {
+  const user = await findPublicById(userId);
+  if (!user) throw createAppError(AppErrors.INVALID_TOKEN);
+  return toPublicUser(user);
+};
+
 module.exports = {
   registerMember,
   completeMemberRegistration,
   loginWithPassword,
   refreshTokens,
   logout,
+  getProfile,
 };

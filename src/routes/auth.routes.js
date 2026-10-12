@@ -18,6 +18,7 @@ const {
   login,
   refresh,
   logout,
+  me,
   forgotPassword,
   verifyOtp,
   resetPassword,
@@ -52,6 +53,9 @@ router.post('/login', authLimiter, validateBody(loginSchema), login);
 router.post('/refresh', refreshLimiter, validateBody(refreshTokenSchema), refresh);
 
 router.post('/logout', refreshLimiter, authenticate, validateBody(refreshTokenSchema), logout);
+
+// Any authenticated, active role may read its own profile.
+router.get('/me', authenticate, me);
 
 router.post(
   '/forgot-password',

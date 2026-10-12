@@ -2,6 +2,8 @@ const { Router } = require('express');
 const env = require('../config/env');
 const { validateBody } = require('../middlewares/validate.middleware');
 const { authenticate } = require('../middlewares/authenticate.middleware');
+const { authorize } = require('../middlewares/authorize.middleware');
+const { Role } = require('../constants/roles');
 const { authLimiter, createAuthLimiter } = require('../middlewares/rateLimiter.middleware');
 const {
   registerSchema,
@@ -18,6 +20,7 @@ const {
   login,
   refresh,
   logout,
+  getMe,
   forgotPassword,
   verifyOtp,
   resetPassword,
@@ -52,6 +55,8 @@ router.post('/login', authLimiter, validateBody(loginSchema), login);
 router.post('/refresh', refreshLimiter, validateBody(refreshTokenSchema), refresh);
 
 router.post('/logout', refreshLimiter, authenticate, validateBody(refreshTokenSchema), logout);
+
+router.get('/me', authenticate, authorize(...Object.values(Role)), getMe);
 
 router.post(
   '/forgot-password',

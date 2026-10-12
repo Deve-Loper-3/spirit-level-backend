@@ -1,4 +1,4 @@
-const { completeMemberRegistration } = require('../../src/services/auth.service');
+const { completeMemberRegistration, getAuthenticatedUser } = require('../../src/services/auth.service');
 const userRepository = require('../../src/repositories/user.repository');
 const { AccountStatus } = require('../../src/constants/status');
 const { AppErrors } = require('../../src/constants/errors');
@@ -104,5 +104,58 @@ describe('auth.service - completeMemberRegistration', () => {
     });
 
     expect(userRepository.completeRegistrationTx).not.toHaveBeenCalled();
+  });
+});
+
+describe('auth.service - getAuthenticatedUser', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+  });
+
+  it('returns public mapped user when user is found', async () => {
+    const mockUser = {
+      id: 'user-uuid-1',
+      fullName: 'Alice Walker',
+      email: 'alice@example.com',
+      phone: '+12025550199',
+      whatsappNumber: null,
+      gender: 'FEMALE',
+      birthDay: 15,
+      birthMonth: 5,
+      profileImageUrl: 'https://blob.example.com/alice.png',
+      role: 'MEMBER',
+      status: 'ACTIVE',
+      createdAt: new Date('2026-01-01T00:00:00.000Z'),
+    };
+
+    userRepository.findProfileById.mockResolvedValue(mockUser);
+
+    const result = await getAuthenticatedUser('user-uuid-1');
+
+    expect(userRepository.findProfileById).toHaveBeenCalledWith('user-uuid-1');
+    expect(result).toEqual({
+      id: 'user-uuid-1',
+      fullName: 'Alice Walker',
+      email: 'alice@example.com',
+      phone: '+12025550199',
+      whatsappNumber: null,
+      gender: 'FEMALE',
+      birthDay: 15,
+      birthMonth: 5,
+      profileImageUrl: 'https://blob.example.com/alice.png',
+      role: 'MEMBER',
+      status: 'ACTIVE',
+      createdAt: mockUser.createdAt,
+    });
+    expect(result.passwordHash).toBeUndefined();
+  });
+
+  it('throws USER_NOT_FOUND when user does not exist', async () => {
+    userRepository.findProfileById.mockResolvedValue(null);
+
+    await expect(getAuthenticatedUser('missing-id')).rejects.toMatchObject({
+      statusCode: AppErrors.USER_NOT_FOUND.statusCode,
+      message: AppErrors.USER_NOT_FOUND.message,
+    });
   });
 });

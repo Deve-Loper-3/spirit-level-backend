@@ -34,15 +34,11 @@ describe('auth.guards', () => {
 
   describe('ensureNotActive', () => {
     it('passes when user status is PENDING', () => {
-      expect(() =>
-        ensureNotActive({ user: { status: AccountStatus.PENDING } }),
-      ).not.toThrow();
+      expect(() => ensureNotActive({ user: { status: AccountStatus.PENDING } })).not.toThrow();
     });
 
     it('throws REGISTRATION_ALREADY_COMPLETED (409) when user status is ACTIVE', () => {
-      expect(() =>
-        ensureNotActive({ user: { status: AccountStatus.ACTIVE } }),
-      ).toThrow(
+      expect(() => ensureNotActive({ user: { status: AccountStatus.ACTIVE } })).toThrow(
         expect.objectContaining({
           statusCode: AppErrors.REGISTRATION_ALREADY_COMPLETED.statusCode,
           message: AppErrors.REGISTRATION_ALREADY_COMPLETED.message,
@@ -53,15 +49,11 @@ describe('auth.guards', () => {
 
   describe('ensurePending', () => {
     it('passes when user status is PENDING', () => {
-      expect(() =>
-        ensurePending({ user: { status: AccountStatus.PENDING } }),
-      ).not.toThrow();
+      expect(() => ensurePending({ user: { status: AccountStatus.PENDING } })).not.toThrow();
     });
 
     it('throws ACCOUNT_NOT_ELIGIBLE (403) when user status is not PENDING (e.g. DISABLED)', () => {
-      expect(() =>
-        ensurePending({ user: { status: AccountStatus.DISABLED } }),
-      ).toThrow(
+      expect(() => ensurePending({ user: { status: AccountStatus.DISABLED } })).toThrow(
         expect.objectContaining({
           statusCode: AppErrors.ACCOUNT_NOT_ELIGIBLE.statusCode,
           message: AppErrors.ACCOUNT_NOT_ELIGIBLE.message,

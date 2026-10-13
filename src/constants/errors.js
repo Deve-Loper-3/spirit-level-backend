@@ -6,6 +6,26 @@ const AppErrors = Object.freeze({
     message: Messages.USER_NOT_FOUND,
     code: 'USER_NOT_FOUND',
   }),
+  COACH_NOT_FOUND: Object.freeze({
+    statusCode: 404,
+    message: Messages.COACH_NOT_FOUND,
+    code: 'COACH_NOT_FOUND',
+  }),
+  COACH_EMAIL_ALREADY_EXISTS: Object.freeze({
+    statusCode: 409,
+    message: Messages.COACH_EMAIL_ALREADY_EXISTS,
+    code: 'COACH_EMAIL_ALREADY_EXISTS',
+  }),
+  VALIDATION_ERROR: Object.freeze({
+    statusCode: 400,
+    message: Messages.VALIDATION_FAILED,
+    code: 'VALIDATION_ERROR',
+  }),
+  INTERNAL_SERVER_ERROR: Object.freeze({
+    statusCode: 500,
+    message: Messages.INTERNAL_SERVER_ERROR,
+    code: 'INTERNAL_SERVER_ERROR',
+  }),
   REGISTRATION_ALREADY_COMPLETED: Object.freeze({
     statusCode: 409,
     message: Messages.REGISTRATION_ALREADY_COMPLETED,

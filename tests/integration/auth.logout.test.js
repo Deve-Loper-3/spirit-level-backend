@@ -7,6 +7,7 @@ const { hashPassword } = require('../../src/utils/password.util');
 const { AuditAction } = require('../../src/constants/audit');
 const { AccountStatus } = require('../../src/constants/status');
 const { Messages } = require('../../src/constants/messages');
+const { AppErrors } = require('../../src/constants/errors');
 const { createTestData } = require('../helpers/testData.helper');
 
 // Remote DB plus bcrypt: each request takes seconds, jest's 5s default is too short.
@@ -105,7 +106,11 @@ describe('POST /api/v1/auth/logout', () => {
       const res = await refresh(tokens.refreshToken);
 
       expect(res.status).toBe(401);
-      expect(res.body).toEqual({ success: false, message: Messages.INVALID_TOKEN });
+      expect(res.body).toEqual({
+        success: false,
+        message: Messages.INVALID_TOKEN,
+        code: AppErrors.INVALID_TOKEN.code,
+      });
     });
 
     it('only ends that session: the same user keeps the session of another device', async () => {
@@ -152,7 +157,11 @@ describe('POST /api/v1/auth/logout', () => {
       const res = await logout(tokens.refreshToken);
 
       expect(res.status).toBe(401);
-      expect(res.body).toEqual({ success: false, message: Messages.NO_TOKEN_PROVIDED });
+      expect(res.body).toEqual({
+        success: false,
+        message: Messages.NO_TOKEN_PROVIDED,
+        code: AppErrors.UNAUTHORIZED.code,
+      });
       expect((await sessionsOf(user.id))[0].revokedAt).toBeNull();
       expect(await logoutAudits(user.id)).toHaveLength(0);
     });
@@ -163,7 +172,11 @@ describe('POST /api/v1/auth/logout', () => {
       const res = await logout(tokens.refreshToken, 'junk.junk.junk');
 
       expect(res.status).toBe(401);
-      expect(res.body).toEqual({ success: false, message: Messages.INVALID_TOKEN });
+      expect(res.body).toEqual({
+        success: false,
+        message: Messages.INVALID_TOKEN,
+        code: AppErrors.INVALID_TOKEN.code,
+      });
       expect((await sessionsOf(user.id))[0].revokedAt).toBeNull();
       expect(await logoutAudits(user.id)).toHaveLength(0);
     });
@@ -174,7 +187,11 @@ describe('POST /api/v1/auth/logout', () => {
       const res = await logout(tokens.refreshToken, signAccess(user, { expiresIn: -10 }));
 
       expect(res.status).toBe(401);
-      expect(res.body).toEqual({ success: false, message: Messages.TOKEN_EXPIRED });
+      expect(res.body).toEqual({
+        success: false,
+        message: Messages.TOKEN_EXPIRED,
+        code: AppErrors.TOKEN_EXPIRED.code,
+      });
       expect((await sessionsOf(user.id))[0].revokedAt).toBeNull();
       expect(await logoutAudits(user.id)).toHaveLength(0);
     });
@@ -293,6 +310,7 @@ describe('POST /api/v1/auth/logout', () => {
       expect(res.body).toEqual({
         success: false,
         message: Messages.VALIDATION_FAILED,
+        code: AppErrors.VALIDATION_ERROR.code,
         errors: [{ field: 'refreshToken', message: Messages.REFRESH_TOKEN_REQUIRED }],
       });
       expect((await sessionsOf(user.id))[0].revokedAt).toBeNull();

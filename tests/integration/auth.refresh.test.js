@@ -123,7 +123,11 @@ describe('POST /api/v1/auth/refresh', () => {
 
       const reused = await refresh(tokens.refreshToken);
       expect(reused.status).toBe(401);
-      expect(reused.body).toEqual({ success: false, message: Messages.INVALID_TOKEN });
+      expect(reused.body).toEqual({
+        success: false,
+        message: Messages.INVALID_TOKEN,
+        code: AppErrors.INVALID_TOKEN.code,
+      });
 
       const sessions = await sessionsOf(user.id);
       expect(sessions).toHaveLength(3);
@@ -167,7 +171,11 @@ describe('POST /api/v1/auth/refresh', () => {
       const res = await refresh('x'.repeat(43));
 
       expect(res.status).toBe(401);
-      expect(res.body).toEqual({ success: false, message: Messages.INVALID_TOKEN });
+      expect(res.body).toEqual({
+        success: false,
+        message: Messages.INVALID_TOKEN,
+        code: AppErrors.INVALID_TOKEN.code,
+      });
     });
 
     it('an access token is not accepted as a refresh token', async () => {
@@ -188,7 +196,11 @@ describe('POST /api/v1/auth/refresh', () => {
       const res = await refresh(tokens.refreshToken);
 
       expect(res.status).toBe(401);
-      expect(res.body).toEqual({ success: false, message: Messages.TOKEN_EXPIRED });
+      expect(res.body).toEqual({
+        success: false,
+        message: Messages.TOKEN_EXPIRED,
+        code: AppErrors.TOKEN_EXPIRED.code,
+      });
       const sessions = await sessionsOf(user.id);
       expect(sessions).toHaveLength(1);
       expect(sessions[0].revokedAt).toBeNull();
@@ -240,6 +252,7 @@ describe('POST /api/v1/auth/refresh', () => {
       expect(res.body).toEqual({
         success: false,
         message: AppErrors.REGISTRATION_INCOMPLETE.message,
+        code: AppErrors.REGISTRATION_INCOMPLETE.code,
       });
       expect(await sessionsOf(user.id)).toHaveLength(1);
     });
@@ -251,7 +264,11 @@ describe('POST /api/v1/auth/refresh', () => {
       const res = await refresh(tokens.refreshToken);
 
       expect(res.status).toBe(401);
-      expect(res.body).toEqual({ success: false, message: Messages.INVALID_TOKEN });
+      expect(res.body).toEqual({
+        success: false,
+        message: Messages.INVALID_TOKEN,
+        code: AppErrors.INVALID_TOKEN.code,
+      });
     });
 
     it('the access token from /auth/login works on a real protected route', async () => {
@@ -269,7 +286,11 @@ describe('POST /api/v1/auth/refresh', () => {
       const res = await callProtected(tokens.refreshToken);
 
       expect(res.status).toBe(401);
-      expect(res.body).toEqual({ success: false, message: Messages.INVALID_TOKEN });
+      expect(res.body).toEqual({
+        success: false,
+        message: Messages.INVALID_TOKEN,
+        code: AppErrors.INVALID_TOKEN.code,
+      });
     });
 
     it('the new access token carries the role stored in the DB, not the old one', async () => {

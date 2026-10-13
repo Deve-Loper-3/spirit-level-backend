@@ -36,9 +36,7 @@ describe('POST /api/v1/auth/register/complete (smoke test)', () => {
 
     authService.completeMemberRegistration.mockResolvedValue(mockResult);
 
-    const res = await request(app)
-      .post('/api/v1/auth/register/complete')
-      .send(validPayload);
+    const res = await request(app).post('/api/v1/auth/register/complete').send(validPayload);
 
     expect(res.status).toBe(200);
     expect(res.body.success).toBe(true);
@@ -72,9 +70,7 @@ describe('POST /api/v1/auth/register/complete (smoke test)', () => {
 
     authService.completeMemberRegistration.mockResolvedValue(mockResult);
 
-    const res = await request(app)
-      .post('/api/v1/auth/register/complete')
-      .send(payload);
+    const res = await request(app).post('/api/v1/auth/register/complete').send(payload);
 
     expect(res.status).toBe(200);
     expect(res.body.success).toBe(true);
@@ -99,9 +95,7 @@ describe('POST /api/v1/auth/register/complete (smoke test)', () => {
       },
     };
 
-    const res = await request(app)
-      .post('/api/v1/auth/register/complete')
-      .send(invalidPayload);
+    const res = await request(app).post('/api/v1/auth/register/complete').send(invalidPayload);
 
     expect(res.status).toBe(400);
     expect(res.body.success).toBe(false);

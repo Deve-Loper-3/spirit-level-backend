@@ -83,5 +83,14 @@ describe('staff.repository', () => {
       });
       expect(result).toEqual({ id: 'u-tx-1' });
     });
+
+    it('lets the caller override the default ACTIVE status', async () => {
+      prisma.user.create.mockResolvedValue({ id: 'u-2' });
+      const input = { id: 'u-2', email: 'x@example.com', status: AccountStatus.DISABLED };
+
+      await createStaffUser(input);
+
+      expect(prisma.user.create.mock.calls[0][0].data.status).toBe(AccountStatus.DISABLED);
+    });
   });
 });

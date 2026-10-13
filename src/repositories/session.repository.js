@@ -54,8 +54,9 @@ const revokeById = async (id, now = new Date()) => {
 };
 
 // Revokes every active session of the user. Returns how many were revoked.
-const revokeAllByUser = async (userId, now = new Date()) => {
-  const { count } = await prisma.refreshSession.updateMany({
+// `client` is the prisma client or a transaction client, so a caller can join its transaction.
+const revokeAllByUser = async (userId, now = new Date(), client = prisma) => {
+  const { count } = await client.refreshSession.updateMany({
     where: { userId, revokedAt: null },
     data: { revokedAt: now },
   });

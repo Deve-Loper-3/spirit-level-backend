@@ -3,6 +3,7 @@ const prisma = require('../../src/config/prisma');
 const { Gender } = require('../../src/constants/gender');
 const { Role } = require('../../src/constants/roles');
 const { AccountStatus } = require('../../src/constants/status');
+const { CoachType, CoachStatus } = require('../../src/constants/coach');
 
 // Creates users directly in the DB and remembers every id/email so cleanup() removes all of it.
 // Audit rows are deleted explicitly: AuditLog.userId is SET NULL on user delete, so rows would be orphaned.
@@ -40,6 +41,21 @@ const createTestData = (label) => {
     return user;
   };
 
+  // A COACH user plus its Coach profile. Deleting the user in cleanup() removes the profile too.
+  const createCoach = async ({ user: userOverrides = {}, coach: coachOverrides = {} } = {}) => {
+    const user = await createUser({ role: Role.COACH, fullName: 'Seeded Coach', ...userOverrides });
+    const coach = await prisma.coach.create({
+      data: {
+        id: crypto.randomUUID(),
+        userId: user.id,
+        coachType: CoachType.SALARIED,
+        status: CoachStatus.ACTIVE,
+        ...coachOverrides,
+      },
+    });
+    return { user, coach };
+  };
+
   const cleanup = async () => {
     await prisma.auditLog.deleteMany({
       where: { OR: [{ userId: { in: userIds } }, { email: { in: emails } }] },
@@ -47,7 +63,7 @@ const createTestData = (label) => {
     await prisma.user.deleteMany({ where: { id: { in: userIds } } });
   };
 
-  return { newEmail, createUser, cleanup };
+  return { newEmail, createUser, createCoach, cleanup };
 };
 
 module.exports = { createTestData };

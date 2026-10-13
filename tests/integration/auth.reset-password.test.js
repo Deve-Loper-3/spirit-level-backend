@@ -112,7 +112,7 @@ describe('POST /api/v1/auth/reset-password', () => {
 
   const expectErrorBody = (res, status, appError) => {
     expect(res.status).toBe(status);
-    expect(res.body).toEqual({ success: false, message: appError.message });
+    expect(res.body).toEqual({ success: false, message: appError.message, code: appError.code });
   };
 
   describe('full flow: forgot-password -> verify-otp -> reset-password', () => {
@@ -389,7 +389,11 @@ describe('POST /api/v1/auth/reset-password', () => {
       for (const tokens of [phone, laptop, tablet]) {
         const res = await refresh(tokens.refreshToken);
         expect(res.status).toBe(401);
-        expect(res.body).toEqual({ success: false, message: Messages.INVALID_TOKEN });
+        expect(res.body).toEqual({
+          success: false,
+          message: Messages.INVALID_TOKEN,
+          code: AppErrors.INVALID_TOKEN.code,
+        });
       }
       const sessions = await prisma.refreshSession.findMany({ where: { userId: user.id } });
       expect(sessions).toHaveLength(3);

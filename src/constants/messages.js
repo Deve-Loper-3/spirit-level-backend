@@ -93,10 +93,27 @@ const Messages = Object.freeze({
   // Resources
   USER_NOT_FOUND: 'User not found',
 
+  // Coach
+  COACH_NOT_FOUND: 'Coach not found',
+  COACH_EMAIL_ALREADY_EXISTS: 'A coach with this email already exists',
+  COACH_CREATED_SUCCESS: 'Coach created successfully',
+  COACH_UPDATED_SUCCESS: 'Coach updated successfully',
+  COACH_STATUS_UPDATED_SUCCESS: 'Coach status updated successfully',
+  COACH_UPDATE_EMPTY: 'Provide at least one field to update',
+  COACH_TYPE_INVALID: 'Coach type must be one of: SALARIED, FREELANCE',
+  COACH_STATUS_INVALID: 'Coach status must be one of: ACTIVE, INACTIVE',
+  COACH_BIO_INVALID: 'Bio must be a string',
+  COACH_BIO_MAX_LENGTH: 'Bio must be at most 1000 characters',
+  COACH_ID_INVALID: 'Coach id must be a valid UUID',
+  COACH_SEARCH_INVALID: 'Search must be text of at most 100 characters',
+  PAGE_INVALID: 'Page must be a whole number between 1 and 100000',
+  LIMIT_INVALID: 'Limit must be a whole number between 1 and 100',
+
   // Staff
   STAFF_CREATED_SUCCESS: 'Staff account created successfully',
   STAFF_ROLE_NOT_ALLOWED: 'You are not allowed to create a staff account with this role',
-  STAFF_ROLE_INVALID: 'Role must be one of: COACH, ADMIN, OWNER',
+  STAFF_ROLE_INVALID: 'Role must be one of: MEMBER, ADMIN, OWNER',
+  STAFF_COACH_USE_COACH_ENDPOINT: 'Coaches are created with POST /api/v1/admin/staff/coaches',
   STAFF_CREATE_DENIED_REASON: (actorRole, targetRole) =>
     `${actorRole || 'UNKNOWN'} attempted to create ${targetRole}`,
   STAFF_INVITATION_EMAIL_FAILED: 'Failed to send staff invitation email',

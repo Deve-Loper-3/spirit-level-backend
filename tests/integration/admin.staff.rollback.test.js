@@ -39,7 +39,7 @@ describe('POST /api/v1/admin/staff - transaction rollback', () => {
         fullName: 'Rollback Staff',
         email: staffEmail,
         phone: '+12025550123',
-        role: Role.COACH,
+        role: Role.ADMIN,
       });
 
     expect(res.status).toBe(500);

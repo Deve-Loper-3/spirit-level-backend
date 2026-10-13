@@ -1,4 +1,7 @@
-const { createStaff: createStaffAccount } = require('../services/staff.service');
+const {
+  createStaff: createStaffAccount,
+  createCoach: createCoachAccount,
+} = require('../services/staff.service');
 const { sendSuccess } = require('../utils/apiResponse.util');
 const { getRequestMeta } = require('../utils/requestMeta.util');
 const { Messages } = require('../constants/messages');
@@ -18,4 +21,18 @@ const createStaff = async (req, res, next) => {
   }
 };
 
-module.exports = { createStaff };
+const createCoach = async (req, res, next) => {
+  try {
+    const actor = { id: req.user.id, role: req.user.role };
+    const { coach, emailSent } = await createCoachAccount(actor, req.body, getRequestMeta(req));
+    return sendSuccess(res, {
+      statusCode: 201,
+      message: Messages.COACH_CREATED_SUCCESS,
+      data: { ...coach, emailSent },
+    });
+  } catch (err) {
+    return next(err);
+  }
+};
+
+module.exports = { createStaff, createCoach };

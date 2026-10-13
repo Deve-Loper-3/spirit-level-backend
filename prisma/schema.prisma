@@ -47,12 +47,24 @@ enum AuditAction {
   PASSWORD_RESET_OTP_FAILED
   PASSWORD_RESET_COMPLETED
   LOGOUT
+  COACH_UPDATED
+  COACH_STATUS_CHANGED
 }
 
 enum LoginFailureReason {
   INVALID_CREDENTIALS
   ACCOUNT_PENDING
   ACCOUNT_DISABLED
+}
+
+enum CoachType {
+  SALARIED
+  FREELANCE
+}
+
+enum CoachStatus {
+  ACTIVE
+  INACTIVE
 }
 
 model User {
@@ -73,6 +85,7 @@ model User {
   registrationCompletedAt DateTime?
   lastLoginAt             DateTime?
   emergencyContact        EmergencyContact?
+  coach                   Coach?
   refreshSessions         RefreshSession[]
   auditLogs               AuditLog[]
   passwordResetOtps       PasswordResetOtp[]
@@ -89,6 +102,20 @@ model EmergencyContact {
   relationship Relationship?
   createdAt    DateTime      @default(now())
   updatedAt    DateTime      @updatedAt
+}
+
+model Coach {
+  id        String      @id
+  userId    String      @unique
+  user      User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  coachType CoachType
+  bio       String?
+  status    CoachStatus @default(ACTIVE)
+  createdAt DateTime    @default(now())
+  updatedAt DateTime    @updatedAt
+
+  @@index([status])
+  @@index([coachType])
 }
 
 model RefreshSession {

@@ -65,7 +65,7 @@ describe('POST /api/v1/auth/verify-otp', () => {
 
   const expectErrorBody = (res, status, appError) => {
     expect(res.status).toBe(status);
-    expect(res.body).toEqual({ success: false, message: appError.message });
+    expect(res.body).toEqual({ success: false, message: appError.message, code: appError.code });
   };
 
   describe('correct OTP', () => {

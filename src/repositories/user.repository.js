@@ -110,6 +110,17 @@ const updateProfileImage = async (id, profileImageUrl) => {
   }
 };
 
+// Moves the user from `from` to `to` only if the user currently has status `from`; any other
+// status (for example PENDING) is left alone. Returns how many rows changed (0 or 1).
+// `client` is the prisma client or a transaction client.
+const updateStatusIfCurrent = async (id, { from, to }, client = prisma) => {
+  const { count } = await client.user.updateMany({
+    where: { id, status: from },
+    data: { status: to },
+  });
+  return count;
+};
+
 const completeRegistrationTx = async ({ userId, contact, now }) => {
   try {
     return await prisma.$transaction(async (tx) => {
@@ -162,5 +173,6 @@ module.exports = {
   createUser,
   findForLogin,
   updateProfileImage,
+  updateStatusIfCurrent,
   completeRegistrationTx,
 };

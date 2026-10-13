@@ -4,6 +4,7 @@ const { createApp } = require('../../src/app');
 const prisma = require('../../src/config/prisma');
 const { Role } = require('../../src/constants/roles');
 const { Messages } = require('../../src/constants/messages');
+const { AppErrors } = require('../../src/constants/errors');
 const { createTestData } = require('../helpers/testData.helper');
 const { bearerFor } = require('../helpers/auth.helper');
 
@@ -48,7 +49,11 @@ describe('client-sent role is ignored', () => {
       const res = await forge(req).send(body);
 
       expect(res.status).toBe(403);
-      expect(res.body).toEqual({ success: false, message: Messages.FORBIDDEN });
+      expect(res.body).toEqual({
+        success: false,
+        message: Messages.FORBIDDEN,
+        code: AppErrors.FORBIDDEN.code,
+      });
       expect(await prisma.user.findUnique({ where: { email: body.email } })).toBeNull();
     });
 
@@ -61,7 +66,11 @@ describe('client-sent role is ignored', () => {
         .send(staffBody());
 
       expect(res.status).toBe(403);
-      expect(res.body).toEqual({ success: false, message: Messages.FORBIDDEN });
+      expect(res.body).toEqual({
+        success: false,
+        message: Messages.FORBIDDEN,
+        code: AppErrors.FORBIDDEN.code,
+      });
     });
   });
 

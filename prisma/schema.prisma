@@ -1,0 +1,139 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  MEMBER
+  COACH
+  ADMIN
+  OWNER
+}
+
+enum AccountStatus {
+  PENDING
+  ACTIVE
+  DISABLED
+}
+
+enum Gender {
+  MALE
+  FEMALE
+  NON_BINARY
+  PREFER_NOT_TO_SAY
+}
+
+enum Relationship {
+  PARENT
+  SPOUSE
+  SIBLING
+  CHILD
+  FRIEND
+  GUARDIAN
+  OTHER
+}
+
+enum AuditAction {
+  LOGIN_SUCCESS
+  LOGIN_FAILED
+  STAFF_CREATED
+  STAFF_CREATE_DENIED
+  PASSWORD_RESET_REQUESTED
+  PASSWORD_RESET_OTP_VERIFIED
+  PASSWORD_RESET_OTP_FAILED
+  PASSWORD_RESET_COMPLETED
+  LOGOUT
+}
+
+enum LoginFailureReason {
+  INVALID_CREDENTIALS
+  ACCOUNT_PENDING
+  ACCOUNT_DISABLED
+}
+
+model User {
+  id                      String             @id
+  fullName                String
+  email                   String             @unique
+  phone                   String
+  whatsappNumber          String?
+  gender                  Gender
+  birthDay                Int?
+  birthMonth              Int?
+  profileImageUrl         String?
+  passwordHash            String
+  role                    Role               @default(MEMBER)
+  status                  AccountStatus      @default(PENDING)
+  mustChangePassword      Boolean            @default(false)
+  waiverAcceptedAt        DateTime?
+  registrationCompletedAt DateTime?
+  lastLoginAt             DateTime?
+  emergencyContact        EmergencyContact?
+  refreshSessions         RefreshSession[]
+  auditLogs               AuditLog[]
+  passwordResetOtps       PasswordResetOtp[]
+  createdAt               DateTime           @default(now())
+  updatedAt               DateTime           @updatedAt
+}
+
+model EmergencyContact {
+  id           String        @id
+  userId       String        @unique
+  user         User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  name         String?
+  phone        String
+  relationship Relationship?
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
+}
+
+model RefreshSession {
+  id        String    @id
+  userId    String
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tokenHash String    @unique
+  expiresAt DateTime
+  revokedAt DateTime?
+  ipAddress String?
+  userAgent String?
+  createdAt DateTime  @default(now())
+
+  @@index([userId])
+}
+
+model PasswordResetOtp {
+  id             String    @id
+  userId         String
+  user           User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  otpHash        String
+  expiresAt      DateTime
+  attempts       Int       @default(0)
+  verifiedAt     DateTime?
+  usedAt         DateTime?
+  invalidatedAt  DateTime?
+  resetTokenHash String?   @unique
+  ipAddress      String?
+  createdAt      DateTime  @default(now())
+
+  @@index([userId, createdAt])
+}
+
+model AuditLog {
+  id        String      @id
+  userId    String?
+  user      User?       @relation(fields: [userId], references: [id], onDelete: SetNull)
+  action    AuditAction
+  reason    String?
+  email     String?
+  actorId   String?
+  actorRole String?
+  ipAddress String?
+  userAgent String?
+  createdAt DateTime    @default(now())
+
+  @@index([userId, createdAt])
+}

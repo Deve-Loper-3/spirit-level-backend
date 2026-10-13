@@ -1,0 +1,16 @@
+node_modules
+.env
+.env.*
+!.env.example
+dist/
+build/
+coverage/
+logs/
+*.log
+.kilo/
+.DS_Store
+.agents
+.claude
+.freebuff
+.windsurf
+# docs/CODEMAP.md

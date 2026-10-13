@@ -139,8 +139,9 @@ Base path `/api/v1`. "Bearer" = `Authorization: Bearer <access token>` through t
 | `POST /uploads/profile-image/token` | — | own limiter | Vercel Blob client-upload token |
 | `PATCH /uploads/profile-image` | Bearer | — | updates the profile image URL |
 | `POST /admin/staff` | Bearer + ADMIN/OWNER | — | creates a staff user and emails a temporary password |
+| `GET /auth/me` | Bearer | — | returns safe profile fields of the authenticated caller |
 
-Not implemented: `GET /auth/me`, change-password, any endpoint that lists or revokes sessions.
+Not implemented: change-password, any endpoint that lists or revokes sessions.
 
 ## 9. Authentication in detail
 
@@ -148,7 +149,7 @@ Not implemented: `GET /auth/me`, change-password, any endpoint that lists or rev
 
 **Access token** (`utils/jwt.util.js`): HS256 only, signed with `JWT_ACCESS_SECRET`, claims `sub` (user id), `email`, `role`, `type: "access"`, `iat`, `exp`. Verification pins the algorithm and rejects any token whose `type` is not `access`.
 
-**`authenticate` middleware:** reads the Bearer token (missing → 401), verifies it (expired → 401 `TOKEN_EXPIRED`, anything else invalid → 401 `INVALID_TOKEN`), then loads the user from the database and takes **role and status from the database, not from the token**. Disabled or pending users get 403. `authorize(...roles)` runs after it.
+**`authenticate` middleware:** reads the Bearer token (missing → 401), verifies it (expired → 401 `TOKEN_EXPIRED`, anything else invalid → 401 `INVALID_TOKEN`), then loads the user from the database and takes **role and status from the database, not from the token**. Disabled or pending users get 403. `authorize(...roles)` runs after it: rejects unauthorized roles with 403 `FORBIDDEN` and logs structured warning (`logger.warn` recording `userId`, `role`, `method`, `endpoint`, `ip`, `timestamp`).
 
 **Refresh token** (`utils/token.util.js`): 32 random bytes, base64url (43 characters). Only its SHA-256 hash is stored in `RefreshSession`, with user id, expiry, IP and user agent. A user can have many active sessions (one per login/device).
 
@@ -197,11 +198,11 @@ On Windows use `npx.cmd` instead of `npx` for local tools.
 - **Unit tests** (`tests/unit`) mock repositories and need no database. **Integration tests** (`tests/integration`) call the real app with supertest and the real database; each suite creates its own users with `tests/helpers/testData.helper.js` (`createTestData(label)` → `createUser()`, `cleanup()`) and deletes them afterwards. Set `jest.setTimeout(30000)` or more in DB suites.
 - `tests/helpers/auth.helper.js` `bearerFor(user)` gives a Bearer header for protected-route tests.
 - Rate-limit tests build an isolated app with `jest.isolateModules` and small limits.
-- Known state: `tests/integration/auth.me.test.js` is an empty placeholder (no `/auth/me` route exists), so jest reports one failing suite for it; every other suite passes.
+- `tests/integration/auth.me.test.js`: integration suite for `GET /auth/me` (200 per role with safe fields only, 401 unauthenticated/invalid/expired, 403 disabled/pending).
 - Other checks: `npm run lint`, `npm run format`.
 
 ## 15. Extension points and what is not built
 
 - Placeholders: `src/config/container.js`, `src/utils/asyncHandler.util.js`, `src/utils/duration.util.js`, `src/infra/cache/`, `src/infra/queue/`, `src/docs/` (API documentation).
-- Not implemented: `GET /auth/me`, change-password (and enforcement of `mustChangePassword`), logout from all devices, a job to delete stale refresh sessions, revocation of already issued access tokens, Docker files.
+- Not implemented: change-password (and enforcement of `mustChangePassword`), logout from all devices, a job to delete stale refresh sessions, revocation of already issued access tokens, Docker files.
 - Operational reminders: set `TRUST_PROXY` correctly behind a proxy; rate-limit counters are in memory per process; do not run destructive scripts against the shared database.

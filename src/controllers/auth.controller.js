@@ -4,6 +4,7 @@ const {
   loginWithPassword,
   refreshTokens,
   logout: logoutSession,
+  getAuthenticatedUser,
 } = require('../services/auth.service');
 const {
   requestPasswordReset,
@@ -129,12 +130,26 @@ const resetPassword = async (req, res, next) => {
   }
 };
 
+const getMe = async (req, res, next) => {
+  try {
+    const user = await getAuthenticatedUser(req.user.id);
+    return sendSuccess(res, {
+      statusCode: 200,
+      message: Messages.SUCCESS,
+      data: user,
+    });
+  } catch (err) {
+    return next(err);
+  }
+};
+
 module.exports = {
   register,
   completeRegister,
   login,
   refresh,
   logout,
+  getMe,
   forgotPassword,
   verifyOtp,
   resetPassword,

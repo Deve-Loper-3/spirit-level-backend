@@ -16,6 +16,7 @@ const {
   findById,
   findForLogin,
   findAuthWithEmailById,
+  findProfileById,
   completeRegistrationTx,
 } = require('../repositories/user.repository');
 const { toPublicUser, toCompletedRegistration } = require('../repositories/user.mapper');
@@ -227,10 +228,19 @@ const logout = async (refreshToken, user, meta) => {
   });
 };
 
+const getAuthenticatedUser = async (userId) => {
+  const user = await findProfileById(userId);
+  if (!user) {
+    throw createAppError(AppErrors.USER_NOT_FOUND);
+  }
+  return toPublicUser(user);
+};
+
 module.exports = {
   registerMember,
   completeMemberRegistration,
   loginWithPassword,
   refreshTokens,
   logout,
+  getAuthenticatedUser,
 };

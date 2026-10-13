@@ -63,8 +63,8 @@ Backend/
 │   └── infra/              mail/notify.service, storage/blob.storage (cache/ and queue/ are placeholders)
 └── tests/
     ├── helpers/            testData.helper (creates and cleans test users), auth.helper (bearerFor)
-    ├── integration/        23 files, hit the real database through supertest
-    └── unit/               40 files, no database
+    ├── integration/        24 files, hit the real database through supertest
+    └── unit/               42 files, no database
 ```
 
 Layering rule: **route → validate → controller → service → repository → Prisma**. Only repositories (and the transaction in `staff.service`) talk to Prisma. Controllers never contain business logic.
@@ -138,8 +138,8 @@ Base path `/api/v1`. "Bearer" = `Authorization: Bearer <access token>` through t
 | `POST /auth/reset-password` | — | own limiter | also revokes all refresh sessions |
 | `POST /uploads/profile-image/token` | — | own limiter | Vercel Blob client-upload token |
 | `PATCH /uploads/profile-image` | Bearer | — | updates the profile image URL |
-| `POST /admin/staff` | Bearer + ADMIN/OWNER | — | creates a staff user and emails a temporary password |
-| `GET /auth/me` | Bearer | — | returns safe profile fields of the authenticated caller |
+| `GET /auth/me` | Bearer (any active role) | — | profile of the caller (public fields only) |
+| `POST /admin/staff` | Bearer + ADMIN/OWNER | — | creates a MEMBER, COACH, ADMIN or OWNER user (what each caller may create: `services/staff.policies.js`) and emails a temporary password |
 
 Not implemented: change-password, any endpoint that lists or revokes sessions.
 
@@ -149,7 +149,9 @@ Not implemented: change-password, any endpoint that lists or revokes sessions.
 
 **Access token** (`utils/jwt.util.js`): HS256 only, signed with `JWT_ACCESS_SECRET`, claims `sub` (user id), `email`, `role`, `type: "access"`, `iat`, `exp`. Verification pins the algorithm and rejects any token whose `type` is not `access`.
 
-**`authenticate` middleware:** reads the Bearer token (missing → 401), verifies it (expired → 401 `TOKEN_EXPIRED`, anything else invalid → 401 `INVALID_TOKEN`), then loads the user from the database and takes **role and status from the database, not from the token**. Disabled or pending users get 403. `authorize(...roles)` runs after it: rejects unauthorized roles with 403 `FORBIDDEN` and logs structured warning (`logger.warn` recording `userId`, `role`, `method`, `endpoint`, `ip`, `timestamp`).
+**Authorization:** `authorize(...roles)` (after `authenticate`) lets a request through only if `req.user.role` (loaded from the DB, never from the body, query, a header or the token's `role` claim) is listed; otherwise 403 with the generic `FORBIDDEN` message, and one warning log line with user id, role, method, URL without query, IP, client type and timestamp. It throws when registered with an unknown role name. There is no role ranking: list every allowed role.
+
+**`authenticate` middleware:** reads the Bearer token (missing → 401), verifies it (expired → 401 `TOKEN_EXPIRED`, anything else invalid → 401 `INVALID_TOKEN`), then loads the user from the database and takes **role and status from the database, not from the token**. Disabled or pending users get 403. `authorize(...roles)` runs after it.
 
 **Refresh token** (`utils/token.util.js`): 32 random bytes, base64url (43 characters). Only its SHA-256 hash is stored in `RefreshSession`, with user id, expiry, IP and user agent. A user can have many active sessions (one per login/device).
 
@@ -198,7 +200,7 @@ On Windows use `npx.cmd` instead of `npx` for local tools.
 - **Unit tests** (`tests/unit`) mock repositories and need no database. **Integration tests** (`tests/integration`) call the real app with supertest and the real database; each suite creates its own users with `tests/helpers/testData.helper.js` (`createTestData(label)` → `createUser()`, `cleanup()`) and deletes them afterwards. Set `jest.setTimeout(30000)` or more in DB suites.
 - `tests/helpers/auth.helper.js` `bearerFor(user)` gives a Bearer header for protected-route tests.
 - Rate-limit tests build an isolated app with `jest.isolateModules` and small limits.
-- `tests/integration/auth.me.test.js`: integration suite for `GET /auth/me` (200 per role with safe fields only, 401 unauthenticated/invalid/expired, 403 disabled/pending).
+- Known state: every suite passes (there is no empty placeholder suite any more).
 - Other checks: `npm run lint`, `npm run format`.
 
 ## 15. Extension points and what is not built

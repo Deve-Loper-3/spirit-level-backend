@@ -38,6 +38,26 @@ const findAuthById = (id) =>
     },
   });
 
+// Exactly the fields of `toPublicUser`; never selects passwordHash.
+const findPublicById = (id) =>
+  prisma.user.findUnique({
+    where: { id },
+    select: {
+      id: true,
+      fullName: true,
+      email: true,
+      phone: true,
+      whatsappNumber: true,
+      gender: true,
+      birthDay: true,
+      birthMonth: true,
+      profileImageUrl: true,
+      role: true,
+      status: true,
+      createdAt: true,
+    },
+  });
+
 const createUser = (data) => prisma.user.create({ data });
 
 // passwordHash is selected on purpose (credential check); callers must map to a public shape.
@@ -133,31 +153,12 @@ const completeRegistrationTx = async ({ userId, contact, now }) => {
   }
 };
 
-const findProfileById = (id) =>
-  prisma.user.findUnique({
-    where: { id },
-    select: {
-      id: true,
-      fullName: true,
-      email: true,
-      phone: true,
-      whatsappNumber: true,
-      gender: true,
-      birthDay: true,
-      birthMonth: true,
-      profileImageUrl: true,
-      role: true,
-      status: true,
-      createdAt: true,
-    },
-  });
-
 module.exports = {
   findByEmail,
   findById,
   findAuthById,
+  findPublicById,
   findAuthWithEmailById,
-  findProfileById,
   createUser,
   findForLogin,
   updateProfileImage,

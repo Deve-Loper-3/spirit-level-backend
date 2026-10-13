@@ -2,8 +2,6 @@ const { Router } = require('express');
 const env = require('../config/env');
 const { validateBody } = require('../middlewares/validate.middleware');
 const { authenticate } = require('../middlewares/authenticate.middleware');
-const { authorize } = require('../middlewares/authorize.middleware');
-const { Role } = require('../constants/roles');
 const { authLimiter, createAuthLimiter } = require('../middlewares/rateLimiter.middleware');
 const {
   registerSchema,
@@ -20,7 +18,7 @@ const {
   login,
   refresh,
   logout,
-  getMe,
+  me,
   forgotPassword,
   verifyOtp,
   resetPassword,
@@ -56,7 +54,8 @@ router.post('/refresh', refreshLimiter, validateBody(refreshTokenSchema), refres
 
 router.post('/logout', refreshLimiter, authenticate, validateBody(refreshTokenSchema), logout);
 
-router.get('/me', authenticate, authorize(...Object.values(Role)), getMe);
+// Any authenticated, active role may read its own profile.
+router.get('/me', authenticate, me);
 
 router.post(
   '/forgot-password',

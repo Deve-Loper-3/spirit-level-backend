@@ -1,8 +1,5 @@
 const { ZodError } = require('zod');
-const {
-  createStaffSchema,
-  validateCreateStaff,
-} = require('../../src/validators/staff.validation');
+const { createStaffSchema, validateCreateStaff } = require('../../src/validators/staff.validation');
 const { Role } = require('../../src/constants/roles');
 const { Messages } = require('../../src/constants/messages');
 
@@ -34,16 +31,9 @@ describe('staff.validation - createStaffSchema', () => {
     expect(result.fullName).toBe('Alice Smith');
   });
 
-  it.each([Role.COACH, Role.ADMIN, Role.OWNER])('accepts role %s', (role) => {
+  it.each([Role.MEMBER, Role.COACH, Role.ADMIN, Role.OWNER])('accepts role %s', (role) => {
     const result = createStaffSchema.parse({ ...validPayload, role });
     expect(result.role).toBe(role);
-  });
-
-  it('rejects MEMBER role with STAFF_ROLE_INVALID', () => {
-    const result = createStaffSchema.safeParse({ ...validPayload, role: Role.MEMBER });
-
-    expect(result.success).toBe(false);
-    expect(result.error.issues[0].message).toBe(Messages.STAFF_ROLE_INVALID);
   });
 
   it.each(['SUPERADMIN', 'USER', '', undefined, null])('rejects invalid role %j', (role) => {

@@ -12,7 +12,7 @@ const createStaffSchema = z
 
     phone: phoneField(Messages.PHONE_REQUIRED),
 
-    role: z.enum([Role.COACH, Role.ADMIN, Role.OWNER], {
+    role: z.enum([Role.MEMBER, Role.COACH, Role.ADMIN, Role.OWNER], {
       error: Messages.STAFF_ROLE_INVALID,
     }),
   })

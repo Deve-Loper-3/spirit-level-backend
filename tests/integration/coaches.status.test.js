@@ -78,6 +78,22 @@ describe('PATCH /api/v1/coaches/:coachId/status', () => {
       });
       expect((await reloadCoach(coach.id)).status).toBe(CoachStatus.INACTIVE);
       expect((await reloadUser(user.id)).status).toBe(AccountStatus.DISABLED);
+      expect(Object.keys(res.body.data).sort()).toEqual(
+        [
+          'bio',
+          'coachType',
+          'createdAt',
+          'email',
+          'fullName',
+          'id',
+          'phone',
+          'profileImageUrl',
+          'status',
+          'updatedAt',
+          'userId',
+        ].sort(),
+      );
+      expect(JSON.stringify(res.body)).not.toMatch(/passwordHash|tempPassword|"role"/i);
     });
 
     it('revokes every active refresh session, keeps earlier revocations and spares other users', async () => {

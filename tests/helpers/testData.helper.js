@@ -6,6 +6,7 @@ const { AccountStatus } = require('../../src/constants/status');
 const { CoachType, CoachStatus } = require('../../src/constants/coach');
 
 // Creates users directly in the DB and remembers every id/email so cleanup() removes all of it.
+// Users that the API created for an email from newEmail() are removed too (matched by email).
 // Audit rows are deleted explicitly: AuditLog.userId is SET NULL on user delete, so rows would be orphaned.
 const createTestData = (label) => {
   const userIds = [];
@@ -60,7 +61,9 @@ const createTestData = (label) => {
     await prisma.auditLog.deleteMany({
       where: { OR: [{ userId: { in: userIds } }, { email: { in: emails } }] },
     });
-    await prisma.user.deleteMany({ where: { id: { in: userIds } } });
+    await prisma.user.deleteMany({
+      where: { OR: [{ id: { in: userIds } }, { email: { in: emails } }] },
+    });
   };
 
   return { newEmail, createUser, createCoach, cleanup };

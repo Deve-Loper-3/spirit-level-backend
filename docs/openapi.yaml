@@ -1,0 +1,1001 @@
+openapi: 3.0.3
+info:
+  title: Spirit Level API
+  version: 1.0.0
+  description: |
+    Backend API for Spirit Level.
+
+    **Base path:** `/api/v1` for versioned routes. Health checks live under `/health`.
+
+    **Auth:** Protected routes expect `Authorization: Bearer <accessToken>`.
+    Refresh tokens are sent in the JSON body (not cookies).
+
+    **Envelope:** Success responses use `{ success: true, message, data }`.
+    Errors use `{ success: false, message, errors? }`.
+  contact:
+    url: https://github.com/spirit-level-App/Backend
+
+servers:
+  - url: http://localhost:5000
+    description: Local development (default PORT)
+
+tags:
+  - name: Health
+    description: Liveness and readiness probes
+  - name: Auth
+    description: Registration, login, session, and password reset
+  - name: Uploads
+    description: Profile image upload token and update
+  - name: Admin Staff
+    description: Staff account management (ADMIN / OWNER)
+
+paths:
+  /health:
+    get:
+      tags: [Health]
+      summary: Liveness check
+      description: Returns OK if the process is running.
+      operationId: getHealth
+      responses:
+        '200':
+          description: Process is alive
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [status, uptime, timestamp]
+                properties:
+                  status:
+                    type: string
+                    example: ok
+                  uptime:
+                    type: number
+                    description: Process uptime in seconds
+                  timestamp:
+                    type: string
+                    format: date-time
+
+  /health/ready:
+    get:
+      tags: [Health]
+      summary: Readiness check
+      description: Verifies the database connection is usable.
+      operationId: getHealthReady
+      responses:
+        '200':
+          description: Dependencies are ready
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [status, db]
+                properties:
+                  status:
+                    type: string
+                    example: ready
+                  db:
+                    type: string
+                    example: up
+        '503':
+          description: Database is not ready
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [status, db]
+                properties:
+                  status:
+                    type: string
+                    example: not_ready
+                  db:
+                    type: string
+                    example: down
+
+  /api/v1/auth/register:
+    post:
+      tags: [Auth]
+      summary: Register a new member (step 1)
+      description: |
+        Creates a PENDING member account. Complete registration with
+        `POST /api/v1/auth/register/complete` before login.
+        Rate limited.
+      operationId: register
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RegisterRequest'
+            example:
+              fullName: Jane Doe
+              email: jane@example.com
+              phone: '+12025551234'
+              whatsappNumber: '+12025551235'
+              gender: FEMALE
+              birthDay: 15
+              birthMonth: 8
+              profileImageUrl: https://store.public.blob.vercel-storage.com/profile-images/uuid.png
+              password: SecurePass1
+      responses:
+        '201':
+          description: Registration successful
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/SuccessEnvelope'
+                  - type: object
+                    properties:
+                      message:
+                        example: Registration successful
+                      data:
+                        $ref: '#/components/schemas/PublicUser'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '409':
+          description: Email or phone already exists
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+              example:
+                success: false
+                message: User already exists
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+
+  /api/v1/auth/register/complete:
+    post:
+      tags: [Auth]
+      summary: Complete member registration (step 2)
+      description: |
+        Adds emergency contact and accepts the waiver. Activates the account
+        for login. Rate limited.
+      operationId: completeRegister
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CompleteRegistrationRequest'
+            example:
+              registrationId: 550e8400-e29b-41d4-a716-446655440000
+              emergencyContact:
+                name: John Doe
+                phone: '+12025559999'
+                relationship: PARENT
+              waiverAccepted: true
+      responses:
+        '200':
+          description: Registration completed
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/SuccessEnvelope'
+                  - type: object
+                    properties:
+                      message:
+                        example: Registration completed successfully
+                      data:
+                        $ref: '#/components/schemas/CompletedRegistration'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+
+  /api/v1/auth/login:
+    post:
+      tags: [Auth]
+      summary: Login with email and password
+      description: |
+        Returns a public user profile and access/refresh tokens.
+        Incomplete (PENDING) or DISABLED accounts cannot log in.
+        Rate limited.
+      operationId: login
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LoginRequest'
+            example:
+              email: jane@example.com
+              password: SecurePass1
+      responses:
+        '200':
+          description: Login successful
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/SuccessEnvelope'
+                  - type: object
+                    properties:
+                      message:
+                        example: Login successful
+                      data:
+                        type: object
+                        required: [user, tokens]
+                        properties:
+                          user:
+                            $ref: '#/components/schemas/PublicUser'
+                          tokens:
+                            $ref: '#/components/schemas/TokenPair'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          description: Invalid credentials or account not eligible
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+
+  /api/v1/auth/refresh:
+    post:
+      tags: [Auth]
+      summary: Rotate refresh token and issue a new access token
+      description: |
+        Presents a refresh token; receives a new access token and a rotated refresh token.
+        Reuse of a revoked refresh token invalidates all sessions for that user.
+        Has its own stricter rate limit.
+      operationId: refresh
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RefreshTokenRequest'
+      responses:
+        '200':
+          description: Tokens refreshed
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/SuccessEnvelope'
+                  - type: object
+                    properties:
+                      message:
+                        example: Token refreshed successfully
+                      data:
+                        type: object
+                        required: [tokens]
+                        properties:
+                          tokens:
+                            $ref: '#/components/schemas/TokenPair'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          description: Invalid, expired, or reused refresh token
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+
+  /api/v1/auth/logout:
+    post:
+      tags: [Auth]
+      summary: Logout current refresh-token session
+      description: |
+        Requires a valid access token. Revokes the given refresh-token session.
+        Response message is the same whether the refresh token was valid or not.
+        Shares the refresh rate limiter.
+      operationId: logout
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RefreshTokenRequest'
+      responses:
+        '200':
+          description: Logout acknowledged
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/SuccessEnvelope'
+                  - type: object
+                    properties:
+                      message:
+                        example: Logout successful
+                      data:
+                        nullable: true
+                        example: null
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+
+  /api/v1/auth/me:
+    get:
+      tags: [Auth]
+      summary: Get current user profile
+      description: Any authenticated, active role may read its own profile.
+      operationId: me
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Profile fetched
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/SuccessEnvelope'
+                  - type: object
+                    properties:
+                      message:
+                        example: Profile fetched successfully
+                      data:
+                        type: object
+                        required: [user]
+                        properties:
+                          user:
+                            $ref: '#/components/schemas/PublicUser'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /api/v1/auth/forgot-password:
+    post:
+      tags: [Auth]
+      summary: Request password-reset OTP
+      description: |
+        Always returns the same success message whether or not the email exists.
+        Sends a 4-digit OTP by email when the account is eligible. Rate limited.
+      operationId: forgotPassword
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ForgotPasswordRequest'
+      responses:
+        '200':
+          description: Request accepted (email may or may not exist)
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/SuccessEnvelope'
+                  - type: object
+                    properties:
+                      message:
+                        example: If the email is registered, an OTP has been sent to it
+                      data:
+                        nullable: true
+                        example: null
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+
+  /api/v1/auth/verify-otp:
+    post:
+      tags: [Auth]
+      summary: Verify password-reset OTP
+      description: |
+        Exchanges a valid OTP for a short-lived `resetToken` used by reset-password.
+        Rate limited.
+      operationId: verifyOtp
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/VerifyOtpRequest'
+            example:
+              email: jane@example.com
+              otp: '1234'
+      responses:
+        '200':
+          description: OTP verified
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/SuccessEnvelope'
+                  - type: object
+                    properties:
+                      message:
+                        example: OTP verified successfully
+                      data:
+                        type: object
+                        required: [resetToken, expiresAt]
+                        properties:
+                          resetToken:
+                            type: string
+                            description: Opaque token for reset-password
+                          expiresAt:
+                            type: string
+                            format: date-time
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          description: Invalid, expired, used, or locked-out OTP
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+
+  /api/v1/auth/reset-password:
+    post:
+      tags: [Auth]
+      summary: Reset password with reset token
+      description: |
+        Sets a new password using the `resetToken` from verify-otp.
+        Revokes existing sessions for that user. Rate limited.
+      operationId: resetPassword
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ResetPasswordRequest'
+      responses:
+        '200':
+          description: Password reset
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/SuccessEnvelope'
+                  - type: object
+                    properties:
+                      message:
+                        example: Password has been reset successfully
+                      data:
+                        nullable: true
+                        example: null
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          description: Invalid or expired reset token
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+
+  /api/v1/uploads/profile-image/token:
+    post:
+      tags: [Uploads]
+      summary: Issue a client upload token for a profile image
+      description: |
+        Public endpoint (usable before registration). Returns a short-lived
+        Vercel Blob client token and PUT instructions. Max size 4 MB.
+        Allowed types: `image/jpeg`, `image/png`, `image/webp`. Rate limited.
+      operationId: issueProfileImageToken
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ProfileImageTokenRequest'
+            example:
+              contentType: image/jpeg
+      responses:
+        '200':
+          description: Upload token issued
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/SuccessEnvelope'
+                  - type: object
+                    properties:
+                      message:
+                        example: Image upload token issued successfully
+                      data:
+                        $ref: '#/components/schemas/ProfileImageUploadToken'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+        '502':
+          description: Failed to prepare upload with storage provider
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '503':
+          description: Blob storage not configured
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+
+  /api/v1/uploads/profile-image:
+    patch:
+      tags: [Uploads]
+      summary: Update or clear the authenticated user's profile image
+      description: |
+        Set `profileImageUrl` to a trusted Vercel Blob URL under `profile-images/`,
+        or send an empty string / null to clear the image.
+      operationId: updateProfileImage
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateProfileImageRequest'
+      responses:
+        '200':
+          description: Profile image updated
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/SuccessEnvelope'
+                  - type: object
+                    properties:
+                      message:
+                        example: Profile image updated successfully
+                      data:
+                        $ref: '#/components/schemas/PublicUser'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /api/v1/admin/staff:
+    post:
+      tags: [Admin Staff]
+      summary: Create a staff account
+      description: |
+        ADMIN or OWNER only. Creates an ACTIVE staff user and emails a temporary password
+        (`tempPassword` is never returned in the API body). `emailSent` indicates whether
+        the invitation email was delivered.
+      operationId: createStaff
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateStaffRequest'
+            example:
+              fullName: Coach Taylor
+              email: coach@example.com
+              phone: '+12025558888'
+              role: COACH
+      responses:
+        '201':
+          description: Staff account created
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/SuccessEnvelope'
+                  - type: object
+                    properties:
+                      message:
+                        example: Staff account created successfully
+                      data:
+                        $ref: '#/components/schemas/StaffUser'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          description: Caller role not allowed, or cannot create the requested role
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '409':
+          description: Email or phone already exists
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: Access token from login or refresh
+
+  responses:
+    ValidationError:
+      description: Request body failed validation
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorEnvelope'
+          example:
+            success: false
+            message: Validation failed
+            errors:
+              - field: email
+                message: Must be a valid email address
+
+    Unauthorized:
+      description: Missing, invalid, or expired access token
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorEnvelope'
+          example:
+            success: false
+            message: Authentication token was not provided
+
+    TooManyRequests:
+      description: Rate limit exceeded
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorEnvelope'
+          example:
+            success: false
+            message: Too many requests, please try again later
+
+  schemas:
+    SuccessEnvelope:
+      type: object
+      required: [success, message, data]
+      properties:
+        success:
+          type: boolean
+          example: true
+        message:
+          type: string
+        data:
+          description: Endpoint-specific payload; may be null
+
+    ErrorEnvelope:
+      type: object
+      required: [success, message]
+      properties:
+        success:
+          type: boolean
+          example: false
+        message:
+          type: string
+        errors:
+          type: array
+          items:
+            type: object
+            properties:
+              field:
+                type: string
+              message:
+                type: string
+
+    Gender:
+      type: string
+      enum: [MALE, FEMALE, NON_BINARY, PREFER_NOT_TO_SAY]
+
+    Relationship:
+      type: string
+      enum: [PARENT, SPOUSE, SIBLING, CHILD, FRIEND, GUARDIAN, OTHER]
+
+    Role:
+      type: string
+      enum: [MEMBER, COACH, ADMIN, OWNER]
+
+    AccountStatus:
+      type: string
+      enum: [PENDING, ACTIVE, DISABLED]
+
+    ImageContentType:
+      type: string
+      enum: [image/jpeg, image/png, image/webp]
+
+    PublicUser:
+      type: object
+      required:
+        - id
+        - fullName
+        - email
+        - phone
+        - gender
+        - role
+        - status
+        - createdAt
+      properties:
+        id:
+          type: string
+          format: uuid
+        fullName:
+          type: string
+        email:
+          type: string
+          format: email
+        phone:
+          type: string
+          description: E.164-style international number
+          example: '+12025551234'
+        whatsappNumber:
+          type: string
+          nullable: true
+        gender:
+          $ref: '#/components/schemas/Gender'
+        birthDay:
+          type: integer
+          minimum: 1
+          maximum: 31
+          nullable: true
+        birthMonth:
+          type: integer
+          minimum: 1
+          maximum: 12
+          nullable: true
+        profileImageUrl:
+          type: string
+          format: uri
+          nullable: true
+        role:
+          $ref: '#/components/schemas/Role'
+        status:
+          $ref: '#/components/schemas/AccountStatus'
+        createdAt:
+          type: string
+          format: date-time
+
+    CompletedRegistration:
+      type: object
+      required: [id, status, registrationCompletedAt]
+      properties:
+        id:
+          type: string
+          format: uuid
+        status:
+          $ref: '#/components/schemas/AccountStatus'
+        registrationCompletedAt:
+          type: string
+          format: date-time
+
+    TokenPair:
+      type: object
+      required:
+        - accessToken
+        - accessTokenExpiresIn
+        - refreshToken
+        - refreshTokenExpiresAt
+      properties:
+        accessToken:
+          type: string
+          description: JWT for Authorization Bearer header
+        accessTokenExpiresIn:
+          type: string
+          description: Duration string (e.g. 15m)
+          example: 15m
+        refreshToken:
+          type: string
+          description: Opaque refresh token (store securely)
+        refreshTokenExpiresAt:
+          type: string
+          format: date-time
+
+    StaffUser:
+      type: object
+      required: [id, fullName, email, phone, role, status, emailSent]
+      properties:
+        id:
+          type: string
+          format: uuid
+        fullName:
+          type: string
+        email:
+          type: string
+          format: email
+        phone:
+          type: string
+        role:
+          $ref: '#/components/schemas/Role'
+        status:
+          $ref: '#/components/schemas/AccountStatus'
+        emailSent:
+          type: boolean
+          description: Whether the invitation email with temp password was sent
+
+    ProfileImageUploadToken:
+      type: object
+      required:
+        - clientToken
+        - expiresAt
+        - maxSizeBytes
+        - allowedContentTypes
+        - upload
+      properties:
+        clientToken:
+          type: string
+        expiresAt:
+          type: string
+          format: date-time
+        maxSizeBytes:
+          type: integer
+          example: 4194304
+        allowedContentTypes:
+          type: array
+          items:
+            $ref: '#/components/schemas/ImageContentType'
+        upload:
+          type: object
+          required: [method, url, headers]
+          properties:
+            method:
+              type: string
+              example: PUT
+            url:
+              type: string
+              format: uri
+            headers:
+              type: object
+              additionalProperties:
+                type: string
+              description: Headers required for the direct PUT to Vercel Blob
+
+    RegisterRequest:
+      type: object
+      required: [fullName, email, phone, gender, password]
+      properties:
+        fullName:
+          type: string
+          minLength: 2
+          maxLength: 100
+        email:
+          type: string
+          format: email
+          maxLength: 254
+        phone:
+          type: string
+          description: International phone; spaces/dashes/parens stripped then validated
+          example: '+12025551234'
+        whatsappNumber:
+          type: string
+          description: Optional; same phone format as phone
+        gender:
+          $ref: '#/components/schemas/Gender'
+        birthDay:
+          type: integer
+          minimum: 1
+          maximum: 31
+          description: Required together with birthMonth when either is set
+        birthMonth:
+          type: integer
+          minimum: 1
+          maximum: 12
+        profileImageUrl:
+          type: string
+          format: uri
+          description: Optional trusted Vercel Blob URL under profile-images/
+        password:
+          type: string
+          minLength: 8
+          maxLength: 72
+          description: At least one uppercase, one lowercase, and one digit
+
+    CompleteRegistrationRequest:
+      type: object
+      required: [registrationId, emergencyContact, waiverAccepted]
+      properties:
+        registrationId:
+          type: string
+          format: uuid
+        emergencyContact:
+          type: object
+          required: [phone]
+          properties:
+            name:
+              type: string
+              minLength: 2
+              maxLength: 100
+            phone:
+              type: string
+              description: Must differ from the member phone
+            relationship:
+              $ref: '#/components/schemas/Relationship'
+        waiverAccepted:
+          type: boolean
+          enum: [true]
+          description: Must be literally true
+
+    LoginRequest:
+      type: object
+      required: [email, password]
+      properties:
+        email:
+          type: string
+          format: email
+        password:
+          type: string
+          minLength: 1
+          maxLength: 72
+
+    RefreshTokenRequest:
+      type: object
+      required: [refreshToken]
+      properties:
+        refreshToken:
+          type: string
+          minLength: 1
+
+    ForgotPasswordRequest:
+      type: object
+      required: [email]
+      properties:
+        email:
+          type: string
+          format: email
+
+    VerifyOtpRequest:
+      type: object
+      required: [email, otp]
+      properties:
+        email:
+          type: string
+          format: email
+        otp:
+          type: string
+          pattern: '^\d{4}$'
+          description: Exactly 4 digits
+
+    ResetPasswordRequest:
+      type: object
+      required: [email, resetToken, newPassword]
+      properties:
+        email:
+          type: string
+          format: email
+        resetToken:
+          type: string
+          minLength: 1
+        newPassword:
+          type: string
+          minLength: 8
+          maxLength: 72
+          description: Same password policy as registration
+
+    ProfileImageTokenRequest:
+      type: object
+      required: [contentType]
+      properties:
+        contentType:
+          $ref: '#/components/schemas/ImageContentType'
+
+    UpdateProfileImageRequest:
+      type: object
+      required: [profileImageUrl]
+      properties:
+        profileImageUrl:
+          type: string
+          nullable: true
+          description: Trusted blob URL, or empty string / null to clear
+
+    CreateStaffRequest:
+      type: object
+      additionalProperties: false
+      required: [fullName, email, phone, role]
+      properties:
+        fullName:
+          type: string
+          minLength: 2
+          maxLength: 100
+        email:
+          type: string
+          format: email
+        phone:
+          type: string
+        role:
+          type: string
+          enum: [MEMBER, COACH, ADMIN, OWNER]
+          description: Creation privileges depend on the caller's role

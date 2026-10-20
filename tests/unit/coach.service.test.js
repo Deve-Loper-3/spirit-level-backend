@@ -334,6 +334,30 @@ describe('coach.service', () => {
       await expect(update({ email: 'coach1@example.com' })).resolves.toBeDefined();
     });
 
+    it('revokes all refresh sessions when the email actually changes', async () => {
+      sessionRepository.revokeAllByUser.mockResolvedValue(1);
+
+      await update({ email: 'new@example.com' });
+
+      expect(sessionRepository.revokeAllByUser).toHaveBeenCalledWith(
+        'user-1',
+        expect.any(Date),
+        mockTx,
+      );
+    });
+
+    it('does not revoke sessions when the email is unchanged (including case-only)', async () => {
+      await update({ email: 'Coach1@Example.com' });
+
+      expect(sessionRepository.revokeAllByUser).not.toHaveBeenCalled();
+    });
+
+    it('does not revoke sessions when the update does not include email', async () => {
+      await update({ bio: 'Only bio' });
+
+      expect(sessionRepository.revokeAllByUser).not.toHaveBeenCalled();
+    });
+
     it('throws 409 COACH_EMAIL_ALREADY_EXISTS when another account uses the email', async () => {
       userRepository.findByEmail.mockResolvedValue({ id: 'someone-else' });
 

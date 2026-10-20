@@ -8,6 +8,7 @@ coverage/
 logs/
 *.log
 .kilo/
+.cursor/
 .DS_Store
 .agents
 .claude

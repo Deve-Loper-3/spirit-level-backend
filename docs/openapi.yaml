@@ -10,8 +10,12 @@ info:
     **Auth:** Protected routes expect `Authorization: Bearer <accessToken>`.
     Refresh tokens are sent in the JSON body (not cookies).
 
-    **Envelope:** Success responses use `{ success: true, message, data }`.
-    Errors use `{ success: false, message, errors? }`.
+    **Envelope:** Success responses use `{ success: true, message?, data }`.
+    List endpoints may also include `pagination`.
+    Errors use `{ success: false, message, code?, errors? }`.
+
+    **Coaches:** Create via `POST /api/v1/admin/staff/coaches` (not generic staff create).
+    Soft-delete is status deactivation only (no hard DELETE).
   contact:
     url: https://github.com/spirit-level-App/Backend
 
@@ -27,7 +31,9 @@ tags:
   - name: Uploads
     description: Profile image upload token and update
   - name: Admin Staff
-    description: Staff account management (ADMIN / OWNER)
+    description: Staff and coach account provisioning (ADMIN / OWNER)
+  - name: Coaches
+    description: Coach list, profile, update, and status
 
 paths:
   /health:
@@ -557,9 +563,13 @@ paths:
       tags: [Admin Staff]
       summary: Create a staff account
       description: |
-        ADMIN or OWNER only. Creates an ACTIVE staff user and emails a temporary password
+        ADMIN or OWNER only. Creates an ACTIVE user and emails a temporary password
         (`tempPassword` is never returned in the API body). `emailSent` indicates whether
         the invitation email was delivered.
+
+        Allowed roles: `MEMBER`, `ADMIN`, `OWNER`.
+        To create a coach, use `POST /api/v1/admin/staff/coaches` instead
+        (`role: COACH` on this endpoint returns 400).
       operationId: createStaff
       security:
         - bearerAuth: []
@@ -570,10 +580,10 @@ paths:
             schema:
               $ref: '#/components/schemas/CreateStaffRequest'
             example:
-              fullName: Coach Taylor
-              email: coach@example.com
+              fullName: Admin Taylor
+              email: admin@example.com
               phone: '+12025558888'
-              role: COACH
+              role: ADMIN
       responses:
         '201':
           description: Staff account created
@@ -605,6 +615,286 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorEnvelope'
 
+  /api/v1/admin/staff/coaches:
+    post:
+      tags: [Admin Staff, Coaches]
+      summary: Create a coach account and profile
+      description: |
+        ADMIN or OWNER only. Creates a COACH user, linked Coach profile, and emails a
+        temporary password (`tempPassword` never in the response body).
+        Default coach status is `ACTIVE` (linked user ACTIVE). Creating as `INACTIVE`
+        sets the linked user to DISABLED.
+      operationId: createCoach
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateCoachRequest'
+            example:
+              fullName: Coach Taylor
+              email: coach@example.com
+              phone: '+12025557777'
+              coachType: SALARIED
+              bio: Strength and conditioning
+              status: ACTIVE
+      responses:
+        '201':
+          description: Coach created
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/SuccessEnvelope'
+                  - type: object
+                    properties:
+                      message:
+                        example: Coach created successfully
+                      data:
+                        $ref: '#/components/schemas/CoachWithEmailSent'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          description: Caller cannot create coaches
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '409':
+          description: Email already exists
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+              example:
+                success: false
+                message: A coach with this email already exists
+
+  /api/v1/coaches:
+    get:
+      tags: [Coaches]
+      summary: List coaches (paginated)
+      description: |
+        Readers: ADMIN, OWNER, COACH, MEMBER.
+
+        **Managers (ADMIN, OWNER):** full coach rows; may filter by `status` and `coachType`;
+        search matches `fullName` or `email`.
+
+        **Everyone else:** ACTIVE coaches only in the public view (no email/phone);
+        may only pass `page`, `limit`, `search` (name only). Extra filter params → 400.
+      operationId: listCoaches
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: page
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100000
+            default: 1
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 20
+        - name: search
+          in: query
+          schema:
+            type: string
+            maxLength: 100
+          description: Blank/omitted means no search
+        - name: status
+          in: query
+          schema:
+            $ref: '#/components/schemas/CoachStatus'
+          description: Managers only
+        - name: coachType
+          in: query
+          schema:
+            $ref: '#/components/schemas/CoachType'
+          description: Managers only
+      responses:
+        '200':
+          description: Paginated coach list
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CoachListResponse'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+
+  /api/v1/coaches/me:
+    get:
+      tags: [Coaches]
+      summary: Get the authenticated coach's own profile
+      description: COACH role only. Returns 404 if the user has no Coach row.
+      operationId: getMyCoach
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Own coach profile (full view)
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/SuccessEnvelope'
+                  - type: object
+                    properties:
+                      data:
+                        $ref: '#/components/schemas/Coach'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/CoachNotFound'
+
+  /api/v1/coaches/{coachId}:
+    get:
+      tags: [Coaches]
+      summary: Get a coach by id
+      description: |
+        Managers and the coach themself get the full view.
+        Others get the public view for ACTIVE coaches only.
+        Invisible coaches return 404 (not 403).
+      operationId: getCoach
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/CoachId'
+      responses:
+        '200':
+          description: Coach profile
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/SuccessEnvelope'
+                  - type: object
+                    properties:
+                      data:
+                        oneOf:
+                          - $ref: '#/components/schemas/Coach'
+                          - $ref: '#/components/schemas/PublicCoach'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/CoachNotFound'
+    patch:
+      tags: [Coaches]
+      summary: Update a coach profile
+      description: |
+        ADMIN / OWNER may update any coach (fullName, email, phone, profileImageUrl, bio, coachType).
+        COACH may update only their own profile (fullName, phone, profileImageUrl, bio) —
+        not email, coachType, or status.
+        Status changes use `PATCH /api/v1/coaches/{coachId}/status`.
+        At least one field is required. Audit stores field names only (not values).
+        Changing email revokes all refresh sessions for that coach.
+      operationId: updateCoach
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/CoachId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateCoachRequest'
+      responses:
+        '200':
+          description: Coach updated (full view)
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/SuccessEnvelope'
+                  - type: object
+                    properties:
+                      message:
+                        example: Coach updated successfully
+                      data:
+                        $ref: '#/components/schemas/Coach'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          description: Not allowed to edit this coach (e.g. another coach's profile)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '404':
+          $ref: '#/components/responses/CoachNotFound'
+        '409':
+          description: Email already taken
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+
+  /api/v1/coaches/{coachId}/status:
+    patch:
+      tags: [Coaches]
+      summary: Activate or deactivate a coach
+      description: |
+        ADMIN or OWNER only. Syncs linked user status (ACTIVE ↔ DISABLED) when the
+        user is already in the matching `from` status; PENDING users are not changed.
+        Setting INACTIVE revokes all refresh sessions for that user.
+        Idempotent when the status is already the requested value (no audit/session change).
+      operationId: setCoachStatus
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/CoachId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SetCoachStatusRequest'
+            example:
+              status: INACTIVE
+      responses:
+        '200':
+          description: Coach status applied (full view)
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/SuccessEnvelope'
+                  - type: object
+                    properties:
+                      message:
+                        example: Coach status updated successfully
+                      data:
+                        $ref: '#/components/schemas/Coach'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/CoachNotFound'
+
 components:
   securitySchemes:
     bearerAuth:
@@ -612,6 +902,16 @@ components:
       scheme: bearer
       bearerFormat: JWT
       description: Access token from login or refresh
+
+  parameters:
+    CoachId:
+      name: coachId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+      description: Coach profile id (not the user id)
 
   responses:
     ValidationError:
@@ -637,6 +937,26 @@ components:
             success: false
             message: Authentication token was not provided
 
+    Forbidden:
+      description: Authenticated but not allowed for this action
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorEnvelope'
+          example:
+            success: false
+            message: You do not have permission to perform this action
+
+    CoachNotFound:
+      description: Coach missing or not visible to the caller
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorEnvelope'
+          example:
+            success: false
+            message: Coach not found
+
     TooManyRequests:
       description: Rate limit exceeded
       content:
@@ -650,15 +970,18 @@ components:
   schemas:
     SuccessEnvelope:
       type: object
-      required: [success, message, data]
+      required: [success, data]
       properties:
         success:
           type: boolean
           example: true
         message:
           type: string
+          description: Present on most write/auth responses; may be omitted on some reads
         data:
           description: Endpoint-specific payload; may be null
+        pagination:
+          $ref: '#/components/schemas/Pagination'
 
     ErrorEnvelope:
       type: object
@@ -669,6 +992,9 @@ components:
           example: false
         message:
           type: string
+        code:
+          type: string
+          description: Machine-readable error code when provided
         errors:
           type: array
           items:
@@ -997,5 +1323,189 @@ components:
           type: string
         role:
           type: string
-          enum: [MEMBER, COACH, ADMIN, OWNER]
-          description: Creation privileges depend on the caller's role
+          enum: [MEMBER, ADMIN, OWNER]
+          description: |
+            Creation privileges depend on the caller's role.
+            Use POST /api/v1/admin/staff/coaches for coaches
+            (sending COACH here returns 400 with that guidance).
+
+    CoachType:
+      type: string
+      enum: [SALARIED, FREELANCE]
+
+    CoachStatus:
+      type: string
+      enum: [ACTIVE, INACTIVE]
+
+    Pagination:
+      type: object
+      required: [page, limit, total, totalPages]
+      properties:
+        page:
+          type: integer
+          example: 1
+        limit:
+          type: integer
+          example: 20
+        total:
+          type: integer
+          example: 6
+        totalPages:
+          type: integer
+          example: 1
+
+    Coach:
+      type: object
+      description: Full coach view (managers and the coach themself)
+      required:
+        - id
+        - userId
+        - fullName
+        - email
+        - phone
+        - coachType
+        - status
+        - createdAt
+        - updatedAt
+      properties:
+        id:
+          type: string
+          format: uuid
+        userId:
+          type: string
+          format: uuid
+        fullName:
+          type: string
+        email:
+          type: string
+          format: email
+        phone:
+          type: string
+        profileImageUrl:
+          type: string
+          format: uri
+          nullable: true
+        bio:
+          type: string
+          nullable: true
+          maxLength: 1000
+        coachType:
+          $ref: '#/components/schemas/CoachType'
+        status:
+          $ref: '#/components/schemas/CoachStatus'
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+
+    PublicCoach:
+      type: object
+      description: Public coach view (no contact or account identifiers)
+      required: [id, fullName]
+      properties:
+        id:
+          type: string
+          format: uuid
+        fullName:
+          type: string
+        profileImageUrl:
+          type: string
+          format: uri
+          nullable: true
+        bio:
+          type: string
+          nullable: true
+
+    CoachWithEmailSent:
+      allOf:
+        - $ref: '#/components/schemas/Coach'
+        - type: object
+          required: [emailSent]
+          properties:
+            emailSent:
+              type: boolean
+              description: Whether the invitation email with temp password was sent
+
+    CoachListResponse:
+      type: object
+      required: [success, data, pagination]
+      properties:
+        success:
+          type: boolean
+          example: true
+        data:
+          type: array
+          items:
+            oneOf:
+              - $ref: '#/components/schemas/Coach'
+              - $ref: '#/components/schemas/PublicCoach'
+        pagination:
+          $ref: '#/components/schemas/Pagination'
+
+    CreateCoachRequest:
+      type: object
+      additionalProperties: false
+      required: [fullName, email, phone, coachType]
+      properties:
+        fullName:
+          type: string
+          minLength: 2
+          maxLength: 100
+        email:
+          type: string
+          format: email
+        phone:
+          type: string
+        coachType:
+          $ref: '#/components/schemas/CoachType'
+        bio:
+          type: string
+          maxLength: 1000
+        profileImageUrl:
+          type: string
+          format: uri
+          description: Optional trusted Vercel Blob URL under profile-images/
+        status:
+          $ref: '#/components/schemas/CoachStatus'
+          description: Defaults to ACTIVE when omitted
+
+    UpdateCoachRequest:
+      type: object
+      additionalProperties: false
+      description: |
+        Partial update; at least one field required.
+        ADMIN/OWNER may send any of these fields.
+        COACH may only send fullName, phone, profileImageUrl, bio.
+      properties:
+        fullName:
+          type: string
+          minLength: 2
+          maxLength: 100
+        email:
+          type: string
+          format: email
+          description: Managers only
+        phone:
+          type: string
+        profileImageUrl:
+          type: string
+          nullable: true
+          description: Trusted blob URL, or null to clear
+        bio:
+          type: string
+          nullable: true
+          maxLength: 1000
+          description: Null clears the bio
+        coachType:
+          $ref: '#/components/schemas/CoachType'
+          description: Managers only
+
+    SetCoachStatusRequest:
+      type: object
+      additionalProperties: false
+      required: [status]
+      properties:
+        status:
+          $ref: '#/components/schemas/CoachStatus'

@@ -211,7 +211,7 @@ describe('PATCH /api/v1/coaches/:coachId', () => {
       expect(oldLogin.status).toBe(401);
     });
 
-    it('does not revoke the sessions of the coach', async () => {
+    it('revokes the sessions of the coach so old refresh tokens stop working', async () => {
       const { user, coach } = await seedCoach();
       const login = await request(app)
         .post(LOGIN_URL)
@@ -221,7 +221,7 @@ describe('PATCH /api/v1/coaches/:coachId', () => {
       await patch(admin, coach.id, { email: testData.newEmail() });
 
       const refreshed = await request(app).post(REFRESH_URL).send({ refreshToken });
-      expect(refreshed.status).toBe(200);
+      expect(refreshed.status).toBe(401);
     });
 
     it('accepts the coach own current email, also in another case', async () => {

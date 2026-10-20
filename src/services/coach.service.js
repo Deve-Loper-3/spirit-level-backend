@@ -84,12 +84,17 @@ const getMyCoach = async (caller) => {
 // `allowedFields` is what the route offers; it is capped again by the caller's role. Callers other
 // than managers may only edit their own profile. User and coach columns change in one
 // transaction together with the audit row, which stores field NAMES only, never values.
+// A real email change also revokes every refresh session so old devices cannot stay signed in.
 const updateCoach = async ({ actor, coachId, changes, allowedFields, meta }) => {
   const coach = await requireCoach(coachId);
   assertCanEdit(actor, coach);
 
   const allowed = pick(changes, editableFields(actor.role, allowedFields));
   await assertEmailAvailable(allowed.email, coach.user.id);
+
+  const emailChanged =
+    typeof allowed.email === 'string' &&
+    allowed.email.toLowerCase() !== coach.user.email.toLowerCase();
 
   try {
     const updated = await prisma.$transaction(async (tx) => {
@@ -101,6 +106,7 @@ const updateCoach = async ({ actor, coachId, changes, allowedFields, meta }) => 
         },
         tx,
       );
+      if (emailChanged) await revokeAllByUser(coach.user.id, new Date(), tx);
       await createAuditLog(tx, {
         userId: row.user.id,
         action: AuditAction.COACH_UPDATED,

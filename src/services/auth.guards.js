@@ -22,7 +22,11 @@ const ensurePending = ({ user }) => {
 };
 
 const ensureEmergencyPhoneDiffers = ({ user, input }) => {
-  if (input?.emergencyContact?.phone && user?.phone && input.emergencyContact.phone === user.phone) {
+  if (
+    input?.emergencyContact?.phone &&
+    user?.phone &&
+    input.emergencyContact.phone === user.phone
+  ) {
     throw createAppError(AppErrors.EMERGENCY_PHONE_SAME_AS_MEMBER);
   }
 };

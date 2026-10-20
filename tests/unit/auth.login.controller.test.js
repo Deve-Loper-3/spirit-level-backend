@@ -54,6 +54,10 @@ describe('POST /api/v1/auth/login (controller)', () => {
       .send({ email: 'member@test.invalid', password: 'Password123' });
 
     expect(res.status).toBe(401);
-    expect(res.body).toEqual({ success: false, message: Messages.INVALID_CREDENTIALS });
+    expect(res.body).toEqual({
+      success: false,
+      message: Messages.INVALID_CREDENTIALS,
+      code: AppErrors.INVALID_CREDENTIALS.code,
+    });
   });
 });

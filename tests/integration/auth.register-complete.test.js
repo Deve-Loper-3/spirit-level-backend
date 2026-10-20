@@ -82,19 +82,13 @@ describe('POST /api/v1/auth/register/complete', () => {
       extraClientField: 'must-be-stripped',
     };
 
-    const res = await request(app)
-      .post('/api/v1/auth/register/complete')
-      .send(payload);
+    const res = await request(app).post('/api/v1/auth/register/complete').send(payload);
 
     expect(res.status).toBe(200);
     expect(res.body.success).toBe(true);
     expect(res.body.message).toBe(Messages.REGISTRATION_COMPLETE_SUCCESS);
 
-    expect(Object.keys(res.body.data).sort()).toEqual([
-      'id',
-      'registrationCompletedAt',
-      'status',
-    ]);
+    expect(Object.keys(res.body.data).sort()).toEqual(['id', 'registrationCompletedAt', 'status']);
     expect(res.body.data.id).toBe(member.id);
     expect(res.body.data.status).toBe(AccountStatus.ACTIVE);
     expect(res.body.data.registrationCompletedAt).toBeDefined();
@@ -128,9 +122,7 @@ describe('POST /api/v1/auth/register/complete', () => {
       waiverAccepted: true,
     };
 
-    const res = await request(app)
-      .post('/api/v1/auth/register/complete')
-      .send(payload);
+    const res = await request(app).post('/api/v1/auth/register/complete').send(payload);
 
     expect(res.status).toBe(200);
     expect(res.body.success).toBe(true);
@@ -164,9 +156,7 @@ describe('POST /api/v1/auth/register/complete', () => {
       waiverAccepted: true,
     };
 
-    const res = await request(app)
-      .post('/api/v1/auth/register/complete')
-      .send(payload);
+    const res = await request(app).post('/api/v1/auth/register/complete').send(payload);
 
     expect(res.status).toBe(200);
     expect(res.body.success).toBe(true);
@@ -192,9 +182,7 @@ describe('POST /api/v1/auth/register/complete', () => {
         waiverAccepted: true,
       };
 
-      const res = await request(app)
-        .post('/api/v1/auth/register/complete')
-        .send(payload);
+      const res = await request(app).post('/api/v1/auth/register/complete').send(payload);
 
       expect(res.status).toBe(400);
       expect(res.body.success).toBe(false);
@@ -216,9 +204,7 @@ describe('POST /api/v1/auth/register/complete', () => {
         waiverAccepted: true,
       };
 
-      const res = await request(app)
-        .post('/api/v1/auth/register/complete')
-        .send(payload);
+      const res = await request(app).post('/api/v1/auth/register/complete').send(payload);
 
       expect(res.status).toBe(400);
       expect(res.body.success).toBe(false);
@@ -241,9 +227,7 @@ describe('POST /api/v1/auth/register/complete', () => {
         waiverAccepted: false,
       };
 
-      const res = await request(app)
-        .post('/api/v1/auth/register/complete')
-        .send(payload);
+      const res = await request(app).post('/api/v1/auth/register/complete').send(payload);
 
       expect(res.status).toBe(400);
       expect(res.body.success).toBe(false);
@@ -265,9 +249,7 @@ describe('POST /api/v1/auth/register/complete', () => {
         emergencyContact: generateEmergencyContact(),
       };
 
-      const res = await request(app)
-        .post('/api/v1/auth/register/complete')
-        .send(payload);
+      const res = await request(app).post('/api/v1/auth/register/complete').send(payload);
 
       expect(res.status).toBe(400);
       expect(res.body.success).toBe(false);
@@ -290,9 +272,7 @@ describe('POST /api/v1/auth/register/complete', () => {
         waiverAccepted: true,
       };
 
-      const res = await request(app)
-        .post('/api/v1/auth/register/complete')
-        .send(payload);
+      const res = await request(app).post('/api/v1/auth/register/complete').send(payload);
 
       expect(res.status).toBe(400);
       expect(res.body.success).toBe(false);
@@ -315,9 +295,7 @@ describe('POST /api/v1/auth/register/complete', () => {
         waiverAccepted: true,
       };
 
-      const res = await request(app)
-        .post('/api/v1/auth/register/complete')
-        .send(payload);
+      const res = await request(app).post('/api/v1/auth/register/complete').send(payload);
 
       expect(res.status).toBe(400);
       expect(res.body.success).toBe(false);
@@ -339,9 +317,7 @@ describe('POST /api/v1/auth/register/complete', () => {
         waiverAccepted: true,
       };
 
-      const res = await request(app)
-        .post('/api/v1/auth/register/complete')
-        .send(payload);
+      const res = await request(app).post('/api/v1/auth/register/complete').send(payload);
 
       expect(res.status).toBe(400);
       expect(res.body.success).toBe(false);
@@ -365,9 +341,7 @@ describe('POST /api/v1/auth/register/complete', () => {
       waiverAccepted: true,
     };
 
-    const res = await request(app)
-      .post('/api/v1/auth/register/complete')
-      .send(payload);
+    const res = await request(app).post('/api/v1/auth/register/complete').send(payload);
 
     expect(res.status).toBe(AppErrors.EMERGENCY_PHONE_SAME_AS_MEMBER.statusCode);
     expect(res.body.success).toBe(false);
@@ -392,9 +366,7 @@ describe('POST /api/v1/auth/register/complete', () => {
       waiverAccepted: true,
     };
 
-    const res = await request(app)
-      .post('/api/v1/auth/register/complete')
-      .send(payload);
+    const res = await request(app).post('/api/v1/auth/register/complete').send(payload);
 
     expect(res.status).toBe(AppErrors.USER_NOT_FOUND.statusCode);
     expect(res.body.success).toBe(false);
@@ -409,16 +381,12 @@ describe('POST /api/v1/auth/register/complete', () => {
       waiverAccepted: true,
     };
 
-    const firstRes = await request(app)
-      .post('/api/v1/auth/register/complete')
-      .send(payload);
+    const firstRes = await request(app).post('/api/v1/auth/register/complete').send(payload);
     expect(firstRes.status).toBe(200);
 
     const firstCompletedAt = firstRes.body.data.registrationCompletedAt;
 
-    const secondRes = await request(app)
-      .post('/api/v1/auth/register/complete')
-      .send(payload);
+    const secondRes = await request(app).post('/api/v1/auth/register/complete').send(payload);
 
     expect(secondRes.status).toBe(AppErrors.REGISTRATION_ALREADY_COMPLETED.statusCode);
     expect(secondRes.body.success).toBe(false);
@@ -454,9 +422,7 @@ describe('POST /api/v1/auth/register/complete', () => {
       waiverAccepted: true,
     };
 
-    const res = await request(app)
-      .post('/api/v1/auth/register/complete')
-      .send(payload);
+    const res = await request(app).post('/api/v1/auth/register/complete').send(payload);
 
     expect(res.status).toBe(AppErrors.ACCOUNT_NOT_ELIGIBLE.statusCode);
     expect(res.body.success).toBe(false);

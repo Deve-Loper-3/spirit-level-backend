@@ -9,6 +9,7 @@ const { toPublicUser } = require('../../src/repositories/user.mapper');
 const { AccountStatus } = require('../../src/constants/status');
 const { AuditAction, LoginFailureReason } = require('../../src/constants/audit');
 const { Messages } = require('../../src/constants/messages');
+const { AppErrors } = require('../../src/constants/errors');
 const { createTestData } = require('../helpers/testData.helper');
 
 // Remote DB plus bcrypt: each request takes seconds, jest's 5s default is too short.
@@ -134,7 +135,11 @@ describe('POST /api/v1/auth/login', () => {
       const res = await login({ email: user.email, password: WRONG_PASSWORD });
 
       expect(res.status).toBe(401);
-      expect(res.body).toEqual({ success: false, message: Messages.INVALID_CREDENTIALS });
+      expect(res.body).toEqual({
+        success: false,
+        message: Messages.INVALID_CREDENTIALS,
+        code: AppErrors.INVALID_CREDENTIALS.code,
+      });
       const logs = await findLogs(user.email, AuditAction.LOGIN_FAILED);
       expect(logs).toHaveLength(1);
       expect(logs[0]).toMatchObject({
@@ -179,7 +184,11 @@ describe('POST /api/v1/auth/login', () => {
       const res = await login({ email: user.email, password: PASSWORD });
 
       expect(res.status).toBe(403);
-      expect(res.body).toEqual({ success: false, message: Messages.REGISTRATION_INCOMPLETE });
+      expect(res.body).toEqual({
+        success: false,
+        message: Messages.REGISTRATION_INCOMPLETE,
+        code: AppErrors.REGISTRATION_INCOMPLETE.code,
+      });
       const logs = await findLogs(user.email, AuditAction.LOGIN_FAILED);
       expect(logs).toHaveLength(1);
       expect(logs[0]).toMatchObject({
@@ -195,7 +204,11 @@ describe('POST /api/v1/auth/login', () => {
       const res = await login({ email: user.email, password: PASSWORD });
 
       expect(res.status).toBe(403);
-      expect(res.body).toEqual({ success: false, message: Messages.ACCOUNT_DISABLED });
+      expect(res.body).toEqual({
+        success: false,
+        message: Messages.ACCOUNT_DISABLED,
+        code: AppErrors.ACCOUNT_DISABLED.code,
+      });
       const logs = await findLogs(user.email, AuditAction.LOGIN_FAILED);
       expect(logs).toHaveLength(1);
       expect(logs[0]).toMatchObject({
@@ -211,7 +224,11 @@ describe('POST /api/v1/auth/login', () => {
       const res = await login({ email: user.email, password: WRONG_PASSWORD });
 
       expect(res.status).toBe(401);
-      expect(res.body).toEqual({ success: false, message: Messages.INVALID_CREDENTIALS });
+      expect(res.body).toEqual({
+        success: false,
+        message: Messages.INVALID_CREDENTIALS,
+        code: AppErrors.INVALID_CREDENTIALS.code,
+      });
     });
   });
 

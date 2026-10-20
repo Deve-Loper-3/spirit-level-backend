@@ -1,24 +1,31 @@
 const crypto = require('crypto');
-const { Prisma } = require('@prisma/client');
 const prisma = require('../config/prisma');
+const { isUniqueConstraintError } = require('../utils/prismaError.util');
 const { createAppError } = require('../errors/AppError');
 const { AppErrors } = require('../constants/errors');
 const { AuditAction } = require('../constants/audit');
 const { Messages } = require('../constants/messages');
+const { Role } = require('../constants/roles');
+const { CoachStatus, UserStatusByCoachStatus } = require('../constants/coach');
 const { hashPassword, generateTempPassword } = require('../utils/password.util');
 const { canCreate } = require('./staff.policies');
 const { toStaffResponse } = require('../repositories/staff.mapper');
+const { toCoachResponse } = require('../repositories/coach.mapper');
 const { findByEmail } = require('../repositories/user.repository');
 const logger = require('../config/logger');
 const { createStaffUser } = require('../repositories/staff.repository');
+const { createCoachProfile } = require('../repositories/coach.repository');
 const { createAuditLog } = require('../repositories/audit-log.repository');
 const { sendStaffInvitation } = require('../infra/mail/notify.service');
 
-const isUniqueConstraintError = (err) =>
-  (err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2002') ||
-  err?.code === 'P2002';
-
-const createStaff = async (actor, payload, requestMeta) => {
+// Shared by every staff-like account. `duplicateError` is what a taken email answers with;
+// `createProfile(tx, user)` is an optional hook that runs inside the same transaction.
+const registerStaffUser = async (
+  actor,
+  payload,
+  requestMeta,
+  { duplicateError = AppErrors.USER_ALREADY_EXISTS, createProfile } = {},
+) => {
   // 1. Role creation authorization check
   if (!canCreate(actor?.role, payload.role)) {
     const reason = Messages.STAFF_CREATE_DENIED_REASON(actor?.role, payload.role);
@@ -36,7 +43,7 @@ const createStaff = async (actor, payload, requestMeta) => {
   // 2. Duplicate email check (phone is intentionally not checked for uniqueness)
   const existingUser = await findByEmail(payload.email);
   if (existingUser) {
-    throw createAppError(AppErrors.USER_ALREADY_EXISTS);
+    throw createAppError(duplicateError);
   }
 
   // 3. Generate credentials: UUID, CSPRNG temporary password, BCrypt hash
@@ -44,21 +51,12 @@ const createStaff = async (actor, payload, requestMeta) => {
   const tempPassword = generateTempPassword();
   const passwordHash = await hashPassword(tempPassword);
 
-  // 4. Atomic transaction: create staff user + record STAFF_CREATED audit log
-  let createdUser;
+  // 4. Atomic transaction: create user + optional profile + record STAFF_CREATED audit log
+  let created;
   try {
-    createdUser = await prisma.$transaction(async (tx) => {
-      const user = await createStaffUser(
-        {
-          id: userId,
-          fullName: payload.fullName,
-          email: payload.email,
-          phone: payload.phone,
-          role: payload.role,
-          passwordHash,
-        },
-        tx,
-      );
+    created = await prisma.$transaction(async (tx) => {
+      const user = await createStaffUser({ ...payload, id: userId, passwordHash }, tx);
+      const profile = createProfile ? await createProfile(tx, user) : undefined;
 
       await createAuditLog(tx, {
         userId: user.id,
@@ -69,12 +67,12 @@ const createStaff = async (actor, payload, requestMeta) => {
         meta: requestMeta,
       });
 
-      return user;
+      return { user, profile };
     });
   } catch (err) {
-    // 5. Map concurrent unique-constraint race error to 409 USER_ALREADY_EXISTS
+    // 5. Map concurrent unique-constraint race error to the duplicate-email 409
     if (isUniqueConstraintError(err)) {
-      throw createAppError(AppErrors.USER_ALREADY_EXISTS);
+      throw createAppError(duplicateError);
     }
     throw err;
   }
@@ -83,6 +81,7 @@ const createStaff = async (actor, payload, requestMeta) => {
   // Send staff invitation email with tempPassword after transaction commits.
   // Failure must be caught and logged (never logging tempPassword or email body),
   // must not roll back the user, and must not fail the request.
+  const { user: createdUser } = created;
   let emailSent = false;
   try {
     await sendStaffInvitation(
@@ -106,11 +105,38 @@ const createStaff = async (actor, payload, requestMeta) => {
     );
   }
 
+  return { ...created, tempPassword, emailSent };
+};
+
+const createStaff = async (actor, payload, requestMeta) => {
+  const { user, tempPassword, emailSent } = await registerStaffUser(actor, payload, requestMeta);
+
   return {
-    user: toStaffResponse(createdUser),
+    user: toStaffResponse(user),
     tempPassword,
     emailSent,
   };
 };
 
-module.exports = { createStaff };
+// A coach is a COACH user plus a Coach profile. The image is stored on the user.
+const createCoach = async (actor, payload, requestMeta) => {
+  const { coachType, bio, status = CoachStatus.ACTIVE, ...userFields } = payload;
+
+  const { user, profile, emailSent } = await registerStaffUser(
+    actor,
+    { ...userFields, role: Role.COACH, status: UserStatusByCoachStatus[status] },
+    requestMeta,
+    {
+      duplicateError: AppErrors.COACH_EMAIL_ALREADY_EXISTS,
+      createProfile: (tx, createdUser) =>
+        createCoachProfile(
+          { id: crypto.randomUUID(), userId: createdUser.id, coachType, bio, status },
+          tx,
+        ),
+    },
+  );
+
+  return { coach: toCoachResponse(user, profile), emailSent };
+};
+
+module.exports = { createStaff, createCoach };

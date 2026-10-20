@@ -98,6 +98,7 @@ describe('Auth routes rate limiting (integration)', () => {
       expect(res3.body).toEqual({
         success: false,
         message: AppErrors.TOO_MANY_REQUESTS.message,
+        code: AppErrors.TOO_MANY_REQUESTS.code,
       });
     },
   );

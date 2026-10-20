@@ -2,11 +2,13 @@ const { Prisma } = require('@prisma/client');
 const prisma = require('../../src/config/prisma');
 const userRepository = require('../../src/repositories/user.repository');
 const staffRepository = require('../../src/repositories/staff.repository');
+const coachRepository = require('../../src/repositories/coach.repository');
 const auditLogRepository = require('../../src/repositories/audit-log.repository');
 const notifyService = require('../../src/infra/mail/notify.service');
 const logger = require('../../src/config/logger');
-const { createStaff } = require('../../src/services/staff.service');
+const { createStaff, createCoach } = require('../../src/services/staff.service');
 const { Role } = require('../../src/constants/roles');
+const { CoachType, CoachStatus } = require('../../src/constants/coach');
 const { AccountStatus } = require('../../src/constants/status');
 const { AuditAction } = require('../../src/constants/audit');
 const { AppErrors } = require('../../src/constants/errors');
@@ -18,6 +20,7 @@ jest.mock('../../src/config/prisma', () => ({
 }));
 jest.mock('../../src/repositories/user.repository');
 jest.mock('../../src/repositories/staff.repository');
+jest.mock('../../src/repositories/coach.repository');
 jest.mock('../../src/repositories/audit-log.repository');
 jest.mock('../../src/infra/mail/notify.service');
 jest.mock('../../src/config/logger', () => ({
@@ -327,6 +330,147 @@ describe('staff.service - createStaff', () => {
       expect(serializedLogs).not.toContain('$2b$');
       expect(loggedMeta).not.toHaveProperty('password');
       expect(loggedMeta).not.toHaveProperty('tempPassword');
+    });
+  });
+
+  describe('createCoach', () => {
+    const coachPayload = {
+      fullName: 'Casey Coach',
+      email: 'casey.coach@example.com',
+      phone: '+15551234567',
+      coachType: CoachType.FREELANCE,
+      bio: 'Spirit level specialist',
+      profileImageUrl: 'https://teststore.public.blob.vercel-storage.com/profile-images/a.jpg',
+    };
+    const createdAt = new Date('2026-10-13T00:00:00.000Z');
+
+    beforeEach(() => {
+      staffRepository.createStaffUser.mockImplementation(async (data) => ({
+        ...data,
+        createdAt,
+      }));
+      coachRepository.createCoachProfile.mockImplementation(async (data) => ({
+        ...data,
+        createdAt,
+        updatedAt: createdAt,
+      }));
+    });
+
+    it('creates the COACH user, the coach profile and the audit row in ONE transaction', async () => {
+      const result = await createCoach(actorAdmin, coachPayload, meta);
+
+      expect(prisma.$transaction).toHaveBeenCalledTimes(1);
+      expect(staffRepository.createStaffUser).toHaveBeenCalledWith(
+        expect.objectContaining({
+          fullName: coachPayload.fullName,
+          email: coachPayload.email,
+          phone: coachPayload.phone,
+          profileImageUrl: coachPayload.profileImageUrl,
+          role: Role.COACH,
+          status: AccountStatus.ACTIVE,
+        }),
+        mockTx,
+      );
+      expect(coachRepository.createCoachProfile).toHaveBeenCalledWith(
+        {
+          id: expect.any(String),
+          userId: expect.any(String),
+          coachType: CoachType.FREELANCE,
+          bio: coachPayload.bio,
+          status: CoachStatus.ACTIVE,
+        },
+        mockTx,
+      );
+      expect(auditLogRepository.createAuditLog).toHaveBeenCalledWith(
+        mockTx,
+        expect.objectContaining({ action: AuditAction.STAFF_CREATED, actorId: actorAdmin.id }),
+      );
+      expect(result.emailSent).toBe(true);
+    });
+
+    it('links the profile to the created user and returns the full coach view', async () => {
+      const { coach } = await createCoach(actorOwner, coachPayload, meta);
+
+      const userData = staffRepository.createStaffUser.mock.calls[0][0];
+      expect(coach).toMatchObject({
+        userId: userData.id,
+        fullName: coachPayload.fullName,
+        email: coachPayload.email,
+        phone: coachPayload.phone,
+        profileImageUrl: coachPayload.profileImageUrl,
+        bio: coachPayload.bio,
+        coachType: CoachType.FREELANCE,
+        status: CoachStatus.ACTIVE,
+      });
+      expect(JSON.stringify(coach)).not.toMatch(/passwordHash|tempPassword/);
+    });
+
+    it('creates the user DISABLED when the coach is INACTIVE', async () => {
+      const { coach } = await createCoach(
+        actorAdmin,
+        { ...coachPayload, status: CoachStatus.INACTIVE },
+        meta,
+      );
+
+      expect(staffRepository.createStaffUser.mock.calls[0][0].status).toBe(AccountStatus.DISABLED);
+      expect(coachRepository.createCoachProfile.mock.calls[0][0].status).toBe(CoachStatus.INACTIVE);
+      expect(coach.status).toBe(CoachStatus.INACTIVE);
+    });
+
+    it('still sends the invitation email for an INACTIVE coach', async () => {
+      await createCoach(actorAdmin, { ...coachPayload, status: CoachStatus.INACTIVE }, meta);
+
+      expect(notifyService.sendStaffInvitation).toHaveBeenCalledTimes(1);
+      expect(notifyService.sendStaffInvitation.mock.calls[0][0]).toMatchObject({
+        email: coachPayload.email,
+        role: Role.COACH,
+      });
+    });
+
+    it('throws 409 COACH_EMAIL_ALREADY_EXISTS when the email is taken by any account', async () => {
+      userRepository.findByEmail.mockResolvedValue({ id: 'existing', role: Role.MEMBER });
+
+      await expect(createCoach(actorAdmin, coachPayload, meta)).rejects.toMatchObject({
+        statusCode: 409,
+        code: AppErrors.COACH_EMAIL_ALREADY_EXISTS.code,
+      });
+      expect(prisma.$transaction).not.toHaveBeenCalled();
+    });
+
+    it('maps a unique-constraint race to 409 COACH_EMAIL_ALREADY_EXISTS', async () => {
+      const raceError = new Error('Unique constraint failed');
+      raceError.code = 'P2002';
+      prisma.$transaction.mockRejectedValue(raceError);
+
+      await expect(createCoach(actorAdmin, coachPayload, meta)).rejects.toMatchObject({
+        statusCode: 409,
+        code: AppErrors.COACH_EMAIL_ALREADY_EXISTS.code,
+      });
+      expect(notifyService.sendStaffInvitation).not.toHaveBeenCalled();
+    });
+
+    it('denies a non-staff caller with STAFF_CREATE_DENIED and creates nothing', async () => {
+      const actorMember = { id: 'member-id-1', role: Role.MEMBER };
+
+      await expect(createCoach(actorMember, coachPayload, meta)).rejects.toMatchObject({
+        statusCode: 403,
+        code: AppErrors.STAFF_ROLE_NOT_ALLOWED.code,
+      });
+      expect(auditLogRepository.createAuditLog).toHaveBeenCalledWith(
+        prisma,
+        expect.objectContaining({ action: AuditAction.STAFF_CREATE_DENIED }),
+      );
+      expect(prisma.$transaction).not.toHaveBeenCalled();
+      expect(coachRepository.createCoachProfile).not.toHaveBeenCalled();
+    });
+
+    it('rethrows a failing profile insert and sends no email', async () => {
+      coachRepository.createCoachProfile.mockRejectedValue(new Error('coach insert failed'));
+
+      await expect(createCoach(actorAdmin, coachPayload, meta)).rejects.toThrow(
+        'coach insert failed',
+      );
+      expect(notifyService.sendStaffInvitation).not.toHaveBeenCalled();
     });
   });
 });

@@ -1,6 +1,9 @@
-jest.mock('../../src/services/staff.service', () => ({ createStaff: jest.fn() }));
+jest.mock('../../src/services/staff.service', () => ({
+  createStaff: jest.fn(),
+  createCoach: jest.fn(),
+}));
 
-const { createStaff } = require('../../src/controllers/staff.controller');
+const { createStaff, createCoach } = require('../../src/controllers/staff.controller');
 const staffService = require('../../src/services/staff.service');
 const { Messages } = require('../../src/constants/messages');
 const { Role } = require('../../src/constants/roles');
@@ -93,6 +96,56 @@ describe('staff.controller - createStaff', () => {
     const next = jest.fn();
 
     await createStaff(buildReq(), res, next);
+
+    expect(next).toHaveBeenCalledWith(error);
+    expect(res.status).not.toHaveBeenCalled();
+  });
+});
+
+describe('staff.controller - createCoach', () => {
+  const COACH = {
+    id: 'coach-id',
+    userId: 'staff-id',
+    fullName: 'Sam Coach',
+    coachType: 'FREELANCE',
+  };
+
+  beforeEach(() => {
+    staffService.createCoach.mockResolvedValue({ coach: COACH, emailSent: true });
+  });
+
+  it('responds 201 with the coach and emailSent in the standard shape', async () => {
+    const res = buildRes();
+
+    await createCoach(buildReq(), res, jest.fn());
+
+    expect(res.status).toHaveBeenCalledWith(201);
+    expect(res.json).toHaveBeenCalledWith({
+      success: true,
+      message: Messages.COACH_CREATED_SUCCESS,
+      data: { ...COACH, emailSent: true },
+    });
+  });
+
+  it('passes only id and role as actor, the body as payload and the request meta', async () => {
+    const req = buildReq();
+
+    await createCoach(req, buildRes(), jest.fn());
+
+    expect(staffService.createCoach).toHaveBeenCalledWith(
+      { id: 'actor-id', role: Role.ADMIN },
+      req.body,
+      { ipAddress: '203.0.113.7', userAgent: 'jest-staff/1.0' },
+    );
+  });
+
+  it('forwards service errors to next and sends no response', async () => {
+    const error = new Error('boom');
+    staffService.createCoach.mockRejectedValue(error);
+    const res = buildRes();
+    const next = jest.fn();
+
+    await createCoach(buildReq(), res, next);
 
     expect(next).toHaveBeenCalledWith(error);
     expect(res.status).not.toHaveBeenCalled();

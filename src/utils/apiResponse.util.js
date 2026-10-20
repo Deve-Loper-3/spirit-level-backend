@@ -1,9 +1,12 @@
-const sendSuccess = (res, { statusCode = 200, message, data }) => {
-  return res.status(statusCode).json({ success: true, message, data });
+const sendSuccess = (res, { statusCode = 200, message, data, pagination }) => {
+  const body = { success: true, message, data };
+  if (pagination) body.pagination = pagination;
+  return res.status(statusCode).json(body);
 };
 
-const sendError = (res, { statusCode, message, errors }) => {
+const sendError = (res, { statusCode, message, code, errors }) => {
   const body = { success: false, message };
+  if (code) body.code = code;
   if (errors && errors.length > 0) body.errors = errors;
   return res.status(statusCode).json(body);
 };

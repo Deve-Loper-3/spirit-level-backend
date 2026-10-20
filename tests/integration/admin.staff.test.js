@@ -17,6 +17,7 @@ const { AccountStatus } = require('../../src/constants/status');
 const { Gender } = require('../../src/constants/gender');
 const { AuditAction } = require('../../src/constants/audit');
 const { Messages } = require('../../src/constants/messages');
+const { AppErrors } = require('../../src/constants/errors');
 const { createTestData } = require('../helpers/testData.helper');
 const { bearerFor } = require('../helpers/auth.helper');
 
@@ -60,7 +61,7 @@ describe('POST /api/v1/admin/staff', () => {
     fullName: 'Staff Member',
     email: newStaffEmail(),
     phone: newPhone(),
-    role: Role.COACH,
+    role: Role.ADMIN,
     ...overrides,
   });
 
@@ -80,19 +81,16 @@ describe('POST /api/v1/admin/staff', () => {
   const sentTempPassword = () => TEMP_PASSWORD_LINE.exec(mockSendMail.mock.calls[0][0].text)[1];
 
   describe('role policy', () => {
-    it.each([Role.MEMBER, Role.COACH, Role.ADMIN])(
-      'lets an ADMIN create a %s (201)',
-      async (role) => {
-        const admin = await createCaller(Role.ADMIN);
-        const body = validBody({ role });
+    it.each([Role.MEMBER, Role.ADMIN])('lets an ADMIN create a %s (201)', async (role) => {
+      const admin = await createCaller(Role.ADMIN);
+      const body = validBody({ role });
 
-        const res = await postAs(admin, body);
+      const res = await postAs(admin, body);
 
-        expect(res.status).toBe(201);
-        expect(res.body).toMatchObject({ success: true, message: Messages.STAFF_CREATED_SUCCESS });
-        expect(res.body.data).toMatchObject({ email: body.email, role });
-      },
-    );
+      expect(res.status).toBe(201);
+      expect(res.body).toMatchObject({ success: true, message: Messages.STAFF_CREATED_SUCCESS });
+      expect(res.body.data).toMatchObject({ email: body.email, role });
+    });
 
     it('rejects an ADMIN creating an OWNER (403 STAFF_ROLE_NOT_ALLOWED) and creates nothing', async () => {
       const admin = await createCaller(Role.ADMIN);
@@ -101,12 +99,16 @@ describe('POST /api/v1/admin/staff', () => {
       const res = await postAs(admin, body);
 
       expect(res.status).toBe(403);
-      expect(res.body).toEqual({ success: false, message: Messages.STAFF_ROLE_NOT_ALLOWED });
+      expect(res.body).toEqual({
+        success: false,
+        message: Messages.STAFF_ROLE_NOT_ALLOWED,
+        code: AppErrors.STAFF_ROLE_NOT_ALLOWED.code,
+      });
       expect(await findUser(body.email)).toBeNull();
       expect(mockSendMail).not.toHaveBeenCalled();
     });
 
-    it.each([Role.MEMBER, Role.COACH, Role.ADMIN, Role.OWNER])(
+    it.each([Role.MEMBER, Role.ADMIN, Role.OWNER])(
       'lets an OWNER create a %s (201)',
       async (role) => {
         const owner = await createCaller(Role.OWNER);
@@ -126,7 +128,11 @@ describe('POST /api/v1/admin/staff', () => {
       const res = await postAs(caller, body);
 
       expect(res.status).toBe(403);
-      expect(res.body).toEqual({ success: false, message: Messages.FORBIDDEN });
+      expect(res.body).toEqual({
+        success: false,
+        message: Messages.FORBIDDEN,
+        code: AppErrors.FORBIDDEN.code,
+      });
       expect(await findUser(body.email)).toBeNull();
     });
   });
@@ -136,14 +142,22 @@ describe('POST /api/v1/admin/staff', () => {
       const res = await post(undefined, validBody());
 
       expect(res.status).toBe(401);
-      expect(res.body).toEqual({ success: false, message: Messages.NO_TOKEN_PROVIDED });
+      expect(res.body).toEqual({
+        success: false,
+        message: Messages.NO_TOKEN_PROVIDED,
+        code: AppErrors.UNAUTHORIZED.code,
+      });
     });
 
     it('returns 401 INVALID_TOKEN for an invalid token', async () => {
       const res = await post('Bearer not-a-jwt', validBody());
 
       expect(res.status).toBe(401);
-      expect(res.body).toEqual({ success: false, message: Messages.INVALID_TOKEN });
+      expect(res.body).toEqual({
+        success: false,
+        message: Messages.INVALID_TOKEN,
+        code: AppErrors.INVALID_TOKEN.code,
+      });
     });
 
     it('returns 401 TOKEN_EXPIRED for an expired token', async () => {
@@ -157,7 +171,11 @@ describe('POST /api/v1/admin/staff', () => {
       const res = await post(`Bearer ${expired}`, validBody());
 
       expect(res.status).toBe(401);
-      expect(res.body).toEqual({ success: false, message: Messages.TOKEN_EXPIRED });
+      expect(res.body).toEqual({
+        success: false,
+        message: Messages.TOKEN_EXPIRED,
+        code: AppErrors.TOKEN_EXPIRED.code,
+      });
     });
 
     it('returns 401 INVALID_TOKEN when the token user no longer exists', async () => {
@@ -166,7 +184,11 @@ describe('POST /api/v1/admin/staff', () => {
       const res = await postAs(ghost, validBody());
 
       expect(res.status).toBe(401);
-      expect(res.body).toEqual({ success: false, message: Messages.INVALID_TOKEN });
+      expect(res.body).toEqual({
+        success: false,
+        message: Messages.INVALID_TOKEN,
+        code: AppErrors.INVALID_TOKEN.code,
+      });
     });
 
     it('uses the DB role, not the token role: demoted ADMIN is rejected', async () => {
@@ -193,16 +215,16 @@ describe('POST /api/v1/admin/staff', () => {
     });
 
     it.each([
-      [AccountStatus.DISABLED, Messages.ACCOUNT_DISABLED],
-      [AccountStatus.PENDING, Messages.REGISTRATION_INCOMPLETE],
-    ])('rejects a %s caller (403)', async (status, message) => {
+      [AccountStatus.DISABLED, AppErrors.ACCOUNT_DISABLED],
+      [AccountStatus.PENDING, AppErrors.REGISTRATION_INCOMPLETE],
+    ])('rejects a %s caller (403)', async (status, appError) => {
       const admin = await createCaller(Role.ADMIN, { status });
       const body = validBody();
 
       const res = await postAs(admin, body);
 
       expect(res.status).toBe(403);
-      expect(res.body).toEqual({ success: false, message });
+      expect(res.body).toEqual({ success: false, message: appError.message, code: appError.code });
       expect(await findUser(body.email)).toBeNull();
     });
   });
@@ -215,7 +237,11 @@ describe('POST /api/v1/admin/staff', () => {
       const res = await postAs(admin, validBody({ email: existing.email }));
 
       expect(res.status).toBe(409);
-      expect(res.body).toEqual({ success: false, message: Messages.USER_ALREADY_EXISTS });
+      expect(res.body).toEqual({
+        success: false,
+        message: Messages.USER_ALREADY_EXISTS,
+        code: AppErrors.USER_ALREADY_EXISTS.code,
+      });
     });
 
     it('treats the email case-insensitively (different case is still a duplicate)', async () => {
@@ -260,6 +286,23 @@ describe('POST /api/v1/admin/staff', () => {
       expect(res.status).toBe(400);
       expect(res.body.message).toBe(Messages.VALIDATION_FAILED);
       expect(res.body.errors.map((e) => e.field)).toContain(field);
+    });
+
+    it('returns 400 VALIDATION_ERROR for role COACH, points to the coach endpoint and creates nothing', async () => {
+      const admin = await createCaller(Role.ADMIN);
+      const body = validBody({ role: Role.COACH });
+
+      const res = await postAs(admin, body);
+
+      expect(res.status).toBe(400);
+      expect(res.body).toEqual({
+        success: false,
+        message: Messages.VALIDATION_FAILED,
+        code: AppErrors.VALIDATION_ERROR.code,
+        errors: [{ field: 'role', message: Messages.STAFF_COACH_USE_COACH_ENDPOINT }],
+      });
+      expect(await findUser(body.email)).toBeNull();
+      expect(mockSendMail).not.toHaveBeenCalled();
     });
 
     it.each([
@@ -357,14 +400,14 @@ describe('POST /api/v1/admin/staff', () => {
   describe('invitation email', () => {
     it('sends exactly one email to the new staff member with their role', async () => {
       const admin = await createCaller(Role.ADMIN);
-      const body = validBody({ role: Role.COACH });
+      const body = validBody({ role: Role.ADMIN });
 
       await postAs(admin, body);
 
       expect(mockSendMail).toHaveBeenCalledTimes(1);
       const mail = mockSendMail.mock.calls[0][0];
       expect(mail.to).toBe(body.email);
-      expect(mail.text).toContain(`role of ${Role.COACH}`);
+      expect(mail.text).toContain(`role of ${Role.ADMIN}`);
       expect(mail.text).toContain(body.fullName);
     });
 

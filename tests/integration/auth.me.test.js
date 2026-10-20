@@ -8,6 +8,7 @@ const env = require('../../src/config/env');
 const { Role } = require('../../src/constants/roles');
 const { AccountStatus } = require('../../src/constants/status');
 const { Messages } = require('../../src/constants/messages');
+const { AppErrors } = require('../../src/constants/errors');
 const { createTestData } = require('../helpers/testData.helper');
 const { bearerFor } = require('../helpers/auth.helper');
 
@@ -64,14 +65,22 @@ describe('GET /api/v1/auth/me', () => {
     const res = await getMe();
 
     expect(res.status).toBe(401);
-    expect(res.body).toEqual({ success: false, message: Messages.NO_TOKEN_PROVIDED });
+    expect(res.body).toEqual({
+      success: false,
+      message: Messages.NO_TOKEN_PROVIDED,
+      code: AppErrors.UNAUTHORIZED.code,
+    });
   });
 
   it('returns 401 INVALID_TOKEN for an invalid token', async () => {
     const res = await getMe('Bearer not-a-jwt');
 
     expect(res.status).toBe(401);
-    expect(res.body).toEqual({ success: false, message: Messages.INVALID_TOKEN });
+    expect(res.body).toEqual({
+      success: false,
+      message: Messages.INVALID_TOKEN,
+      code: AppErrors.INVALID_TOKEN.code,
+    });
   });
 
   it('returns 401 TOKEN_EXPIRED for an expired token', async () => {
@@ -84,25 +93,33 @@ describe('GET /api/v1/auth/me', () => {
     const res = await getMe(`Bearer ${expired}`);
 
     expect(res.status).toBe(401);
-    expect(res.body).toEqual({ success: false, message: Messages.TOKEN_EXPIRED });
+    expect(res.body).toEqual({
+      success: false,
+      message: Messages.TOKEN_EXPIRED,
+      code: AppErrors.TOKEN_EXPIRED.code,
+    });
   });
 
   it('returns 401 INVALID_TOKEN when the token user no longer exists', async () => {
     const res = await getMe(bearerFor({ id: crypto.randomUUID(), role: Role.MEMBER }));
 
     expect(res.status).toBe(401);
-    expect(res.body).toEqual({ success: false, message: Messages.INVALID_TOKEN });
+    expect(res.body).toEqual({
+      success: false,
+      message: Messages.INVALID_TOKEN,
+      code: AppErrors.INVALID_TOKEN.code,
+    });
   });
 
   it.each([
-    [AccountStatus.DISABLED, Messages.ACCOUNT_DISABLED],
-    [AccountStatus.PENDING, Messages.REGISTRATION_INCOMPLETE],
-  ])('returns 403 for a %s account', async (status, message) => {
+    [AccountStatus.DISABLED, AppErrors.ACCOUNT_DISABLED],
+    [AccountStatus.PENDING, AppErrors.REGISTRATION_INCOMPLETE],
+  ])('returns 403 for a %s account', async (status, appError) => {
     const user = await testData.createUser({ status });
 
     const res = await getMe(bearerFor(user));
 
     expect(res.status).toBe(403);
-    expect(res.body).toEqual({ success: false, message });
+    expect(res.body).toEqual({ success: false, message: appError.message, code: appError.code });
   });
 });

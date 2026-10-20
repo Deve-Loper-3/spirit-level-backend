@@ -8,7 +8,7 @@ describe('staff.validation - createStaffSchema', () => {
     fullName: 'John Doe',
     email: 'Coach.John@example.com',
     phone: '+1 202-555-1234',
-    role: Role.COACH,
+    role: Role.ADMIN,
   };
 
   it('successfully parses a valid payload and normalizes email and phone', () => {
@@ -18,7 +18,7 @@ describe('staff.validation - createStaffSchema', () => {
       fullName: 'John Doe',
       email: 'coach.john@example.com',
       phone: '+12025551234',
-      role: Role.COACH,
+      role: Role.ADMIN,
     });
   });
 
@@ -31,9 +31,17 @@ describe('staff.validation - createStaffSchema', () => {
     expect(result.fullName).toBe('Alice Smith');
   });
 
-  it.each([Role.MEMBER, Role.COACH, Role.ADMIN, Role.OWNER])('accepts role %s', (role) => {
+  it.each([Role.MEMBER, Role.ADMIN, Role.OWNER])('accepts role %s', (role) => {
     const result = createStaffSchema.parse({ ...validPayload, role });
     expect(result.role).toBe(role);
+  });
+
+  it('rejects role COACH and points to the coach endpoint', () => {
+    const result = createStaffSchema.safeParse({ ...validPayload, role: Role.COACH });
+
+    expect(result.success).toBe(false);
+    expect(result.error.issues[0].message).toBe(Messages.STAFF_COACH_USE_COACH_ENDPOINT);
+    expect(result.error.issues[0].path).toEqual(['role']);
   });
 
   it.each(['SUPERADMIN', 'USER', '', undefined, null])('rejects invalid role %j', (role) => {

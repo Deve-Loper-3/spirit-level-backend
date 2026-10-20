@@ -7,7 +7,7 @@ const createAuthLimiter = (options = {}) => {
   const isTest = env.NODE_ENV === 'test';
   // In test environment, default to a very high limit unless RATE_LIMIT_MAX is explicitly set in env or options
   const hasEnvMax = Boolean(process.env.RATE_LIMIT_MAX);
-  const defaultMax = hasEnvMax ? env.RATE_LIMIT_MAX : (isTest ? 100000 : env.RATE_LIMIT_MAX);
+  const defaultMax = hasEnvMax ? env.RATE_LIMIT_MAX : isTest ? 100000 : env.RATE_LIMIT_MAX;
   const max = options.max !== undefined ? options.max : defaultMax;
   const windowMs = options.windowMs !== undefined ? options.windowMs : env.RATE_LIMIT_WINDOW_MS;
 

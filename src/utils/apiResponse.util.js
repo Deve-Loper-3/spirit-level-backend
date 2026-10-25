@@ -1,6 +1,7 @@
-const sendSuccess = (res, { statusCode = 200, message, data, pagination }) => {
+const sendSuccess = (res, { statusCode = 200, message, data, pagination, meta }) => {
   const body = { success: true, message, data };
   if (pagination) body.pagination = pagination;
+  if (meta) body.meta = meta;
   return res.status(statusCode).json(body);
 };
 

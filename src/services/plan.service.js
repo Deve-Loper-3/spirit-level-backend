@@ -2,12 +2,21 @@ const { isUniqueConstraintError } = require('../utils/prismaError.util');
 const { createAppError } = require('../errors/AppError');
 const { AppErrors } = require('../constants/errors');
 const { AuditAction } = require('../constants/audit');
-const { PlanStatus, PlanCreditType } = require('../constants/membershipPlan');
+const {
+  PlanStatus,
+  PlanCreditType,
+  PlanSection,
+  PLAN_LIST_ITEM_FIELDS,
+} = require('../constants/membershipPlan');
 const {
   findActiveByName,
   createPlanWithAudit,
+  listPlans: findPlans,
+  countNonArchivedByCreditType,
 } = require('../repositories/membershipPlan.repository');
-const { toMembershipPlanResponse } = require('../repositories/membershipPlan.mapper');
+const { toMembershipPlanResponse, toSection } = require('../repositories/membershipPlan.mapper');
+const { toSkipTake, buildMeta } = require('../utils/pagination.util');
+const { pick } = require('../utils/pick.util');
 
 const isPlanNameUniqueError = (err) => {
   if (!isUniqueConstraintError(err)) return false;
@@ -75,7 +84,35 @@ const createPlan = async ({ actor, payload, meta }) => {
   }
 };
 
+// Both sections are always present, 0 when a section has no plans.
+const toSectionCounts = (groups) => {
+  const counts = { [PlanSection.CLASS_MEMBERSHIP]: 0, [PlanSection.ONLINE_COACHING]: 0 };
+  groups.forEach((group) => {
+    counts[toSection(group.creditType)] += group._count._all;
+  });
+  return counts;
+};
+
+const listPlans = async ({ query }) => {
+  const { page, pageSize, sort, ...filters } = query;
+
+  // The counts query ignores every filter, so it runs next to the list query.
+  const [{ rows, total }, groups] = await Promise.all([
+    findPlans({ filters, sort, ...toSkipTake({ page, limit: pageSize }) }),
+    countNonArchivedByCreditType(),
+  ]);
+
+  return {
+    plans: rows.map((plan) =>
+      pick(toMembershipPlanResponse(plan, { activeClientCount: 0 }), PLAN_LIST_ITEM_FIELDS),
+    ),
+    meta: buildMeta({ page, pageSize, total, counts: toSectionCounts(groups) }),
+  };
+};
+
 module.exports = {
   createPlan,
+  listPlans,
+  toSectionCounts,
   isPlanNameUniqueError,
 };

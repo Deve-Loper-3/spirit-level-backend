@@ -239,5 +239,6 @@ model MembershipPlan {
   @@index([status])
   @@index([kind])
   @@index([creditType])
+  @@index([status, creditType])
   @@map("membership_plans")
 }

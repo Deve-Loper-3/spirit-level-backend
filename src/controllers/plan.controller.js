@@ -1,4 +1,4 @@
-const { createPlan: createNewPlan } = require('../services/plan.service');
+const { createPlan: createNewPlan, listPlans: findPlans } = require('../services/plan.service');
 const { sendSuccess } = require('../utils/apiResponse.util');
 const { getRequestMeta } = require('../utils/requestMeta.util');
 const { Messages } = require('../constants/messages');
@@ -28,6 +28,16 @@ const createPlan = async (req, res, next) => {
   }
 };
 
+const listPlans = async (req, res, next) => {
+  try {
+    const { plans, meta } = await findPlans({ query: req.validatedQuery });
+    return sendSuccess(res, { data: plans, meta });
+  } catch (err) {
+    return next(err);
+  }
+};
+
 module.exports = {
   createPlan,
+  listPlans,
 };

@@ -7,4 +7,7 @@ const buildPagination = ({ page, limit, total }) => ({
   totalPages: Math.ceil(total / limit),
 });
 
-module.exports = { toSkipTake, buildPagination };
+// Page envelope of list endpoints that use `pageSize`; `counts` carries extra tab badges.
+const buildMeta = ({ page, pageSize, total, counts }) => ({ page, pageSize, total, counts });
+
+module.exports = { toSkipTake, buildPagination, buildMeta };

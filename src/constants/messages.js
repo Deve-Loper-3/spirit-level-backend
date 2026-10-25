@@ -134,6 +134,14 @@ const Messages = Object.freeze({
   PLAN_PRICE_REQUIRED: 'Price is required and must be at least 0',
   PLAN_CREDITS_REQUIRED_NON_TIME: 'creditsIncluded must be at least 1 when creditType is not TIME',
   PLAN_CREDITS_TIME_ZERO: 'creditsIncluded must be 0 or omitted for time-based plans',
+  PAGE_SIZE_INVALID: 'Page size must be a whole number between 1 and 100',
+  PLAN_SORT_INVALID: 'Sort must be one of: name, price, createdAt (prefix with - for descending)',
+  PLAN_SECTION_INVALID: 'Section must be one of: class_membership, online_coaching',
+  PLAN_KIND_INVALID: 'Kind must be one of: subscription, credit_pack, single_visit, trial',
+  PLAN_CREDIT_TYPE_INVALID: 'Credit type must be one of: class, appointment, facility, time',
+  PLAN_VISIBILITY_INVALID: 'Visibility must be one of: public, hidden',
+  PLAN_STATUS_INVALID: 'Status must be a comma-separated list of: active, inactive, archived',
+  PLAN_SEARCH_INVALID: 'Search must be text of at most 100 characters',
   PLAN_REFILL_MONTHLY_RESTRICTION: 'creditRefill can only be MONTHLY when billingCycle is MONTH',
 });
 

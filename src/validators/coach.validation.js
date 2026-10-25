@@ -7,7 +7,8 @@ const {
   COACH_MANAGER_ROLES,
   COACH_READER_ROLES,
 } = require('../constants/coach');
-const { DEFAULT_PAGE, DEFAULT_LIMIT, MAX_LIMIT, MAX_PAGE } = require('../constants/pagination');
+const { DEFAULT_LIMIT, MAX_LIMIT } = require('../constants/pagination');
+const { pageField, buildSizeField } = require('./pagination.validation');
 const { pick } = require('../utils/pick.util');
 const { staffUserFields } = require('./staff.validation');
 const { trustedImageUrl } = require('./uploads.validation');
@@ -64,21 +65,15 @@ const buildUpdateCoachSchema = (allowedFields) =>
 
 const coachStatusBodySchema = z.object({ status: coachStatusField }).strict();
 
-// Query values arrive as strings, so numbers are coerced. A blank search means "no search".
+// A blank search means "no search".
 const listQueryFields = {
-  page: z.coerce
-    .number({ error: Messages.PAGE_INVALID })
-    .int(Messages.PAGE_INVALID)
-    .min(1, Messages.PAGE_INVALID)
-    .max(MAX_PAGE, Messages.PAGE_INVALID)
-    .default(DEFAULT_PAGE),
+  page: pageField,
 
-  limit: z.coerce
-    .number({ error: Messages.LIMIT_INVALID })
-    .int(Messages.LIMIT_INVALID)
-    .min(1, Messages.LIMIT_INVALID)
-    .max(MAX_LIMIT, Messages.LIMIT_INVALID)
-    .default(DEFAULT_LIMIT),
+  limit: buildSizeField({
+    message: Messages.LIMIT_INVALID,
+    max: MAX_LIMIT,
+    defaultValue: DEFAULT_LIMIT,
+  }),
 
   search: z
     .string({ error: Messages.COACH_SEARCH_INVALID })

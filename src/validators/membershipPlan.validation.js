@@ -8,6 +8,10 @@ const {
   PlanStartsOn,
   PlanVisibility,
   PlanStatus,
+  PlanSection,
+  PLAN_SORT_FIELDS,
+  PLAN_DEFAULT_SORT,
+  PLAN_SEARCH_MAX_LENGTH,
   PLAN_NAME_MIN_LENGTH,
   PLAN_NAME_MAX_LENGTH,
   PLAN_PRICE_MIN,
@@ -16,6 +20,10 @@ const {
 } = require('../constants/membershipPlan');
 const { Messages } = require('../constants/messages');
 const { AppErrors } = require('../constants/errors');
+const { DEFAULT_PAGE_SIZE, MAX_PAGE_SIZE } = require('../constants/pagination');
+const { parseSort } = require('../utils/sort.util');
+const { sendError } = require('../utils/apiResponse.util');
+const { pageField, buildSizeField } = require('./pagination.validation');
 
 const RECURRING_CYCLES = new Set([
   PlanBillingCycle.MONTH,
@@ -161,6 +169,107 @@ const createPlanSchema = membershipPlanSchema.transform((data) => {
   };
 });
 
+// Blank query values ("?section=") count as "not given", so web forms can send empty filters.
+const blankToUndefined = (value) =>
+  typeof value === 'string' && value.trim() === '' ? undefined : value;
+
+// Query enums are matched case-insensitively. `toCase` gives the form the database uses.
+const queryEnum = (enumObj, message, toCase) =>
+  z
+    .preprocess(
+      (value) => {
+        const given = blankToUndefined(value);
+        return typeof given === 'string' ? given.trim().toLowerCase() : given;
+      },
+      z
+        .enum(
+          Object.values(enumObj).map((v) => v.toLowerCase()),
+          { error: message },
+        )
+        .optional(),
+    )
+    .transform((value) => (value === undefined ? value : toCase(value)));
+
+const toUpper = (value) => value.toUpperCase();
+
+const STATUS_QUERY_VALUES = new Set(Object.values(PlanStatus).map((v) => v.toLowerCase()));
+
+// "active,inactive" (or a repeated param) becomes a de-duplicated list of database values.
+const statusListField = z
+  .preprocess(
+    (value) => {
+      if (blankToUndefined(value) === undefined) return undefined;
+      return [value]
+        .flat()
+        .flatMap((part) => String(part).split(','))
+        .map((part) => part.trim().toLowerCase());
+    },
+    z
+      .array(z.string(), { error: Messages.PLAN_STATUS_INVALID })
+      .min(1, Messages.PLAN_STATUS_INVALID)
+      .refine(
+        (list) => list.every((item) => STATUS_QUERY_VALUES.has(item)),
+        Messages.PLAN_STATUS_INVALID,
+      )
+      .optional(),
+  )
+  .transform((list) => (list === undefined ? list : [...new Set(list.map(toUpper))]));
+
+const sortField = z
+  .string({ error: Messages.PLAN_SORT_INVALID })
+  .trim()
+  .default(PLAN_DEFAULT_SORT)
+  .transform((value, ctx) => {
+    const sort = parseSort(value, PLAN_SORT_FIELDS, PLAN_DEFAULT_SORT);
+    if (!sort) {
+      ctx.addIssue({ code: 'custom', message: Messages.PLAN_SORT_INVALID });
+      return z.NEVER;
+    }
+    return sort;
+  });
+
+// Unknown query params are dropped (not rejected) so web and mobile clients can add params
+// without breaking; a known param with a bad value is still a validation error.
+const listPlansQuerySchema = z.object({
+  section: queryEnum(PlanSection, Messages.PLAN_SECTION_INVALID, (value) => value),
+  kind: queryEnum(PlanKind, Messages.PLAN_KIND_INVALID, toUpper),
+  creditType: queryEnum(PlanCreditType, Messages.PLAN_CREDIT_TYPE_INVALID, toUpper),
+  visibility: queryEnum(PlanVisibility, Messages.PLAN_VISIBILITY_INVALID, toUpper),
+  status: statusListField,
+  q: z
+    .string({ error: Messages.PLAN_SEARCH_INVALID })
+    .trim()
+    .max(PLAN_SEARCH_MAX_LENGTH, Messages.PLAN_SEARCH_INVALID)
+    .transform((value) => value || undefined)
+    .optional(),
+  page: pageField,
+  pageSize: buildSizeField({
+    message: Messages.PAGE_SIZE_INVALID,
+    max: MAX_PAGE_SIZE,
+    defaultValue: DEFAULT_PAGE_SIZE,
+  }),
+  sort: sortField,
+});
+
+// 422 with every failing field, like the create validation.
+const sendValidationFailed = (res, error) =>
+  sendError(res, {
+    statusCode: 422,
+    message: Messages.VALIDATION_FAILED,
+    code: AppErrors.VALIDATION_ERROR.code,
+    errors: error.issues.map((issue) => ({
+      field: issue.path.join('.'),
+      message: issue.message,
+    })),
+  });
+
+const validateListPlansQuery = (req, res, next) => {
+  const result = listPlansQuerySchema.safeParse(req.query);
+  if (!result.success) return sendValidationFailed(res, result.error);
+  req.validatedQuery = result.data;
+  return next();
+};
+
 const validateCreatePlan = (req, res, next) => {
   if (req.body && typeof req.body === 'object') {
     // Strip externalRef silently as per ticket spec
@@ -172,18 +281,7 @@ const validateCreatePlan = (req, res, next) => {
   }
 
   const result = createPlanSchema.safeParse(req.body);
-  if (!result.success) {
-    const errors = result.error.issues.map((e) => ({
-      field: e.path.join('.'),
-      message: e.message,
-    }));
-    return res.status(422).json({
-      success: false,
-      message: Messages.VALIDATION_FAILED,
-      code: AppErrors.VALIDATION_ERROR.code,
-      errors,
-    });
-  }
+  if (!result.success) return sendValidationFailed(res, result.error);
 
   req.body = result.data;
   return next();
@@ -192,5 +290,7 @@ const validateCreatePlan = (req, res, next) => {
 module.exports = {
   membershipPlanSchema,
   createPlanSchema,
+  listPlansQuerySchema,
   validateCreatePlan,
+  validateListPlansQuery,
 };

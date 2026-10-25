@@ -1,6 +1,14 @@
 const crypto = require('crypto');
+const { Prisma } = require('@prisma/client');
 const prisma = require('../config/prisma');
-const { PlanStatus } = require('../constants/membershipPlan');
+const {
+  PlanStatus,
+  PlanCreditType,
+  PlanSection,
+  PLAN_KIND_LABELS,
+  PLAN_LIST_DEFAULT_STATUSES,
+} = require('../constants/membershipPlan');
+const { escapeLikePattern } = require('../utils/like.util');
 const { createAuditLog } = require('./audit-log.repository');
 
 const upsertByExternalRef = async ({ externalRef, data, client = prisma }) => {
@@ -63,6 +71,95 @@ const updatePlan = async (id, data, client = prisma) => {
   });
 };
 
+const SECTION_FILTERS = {
+  [PlanSection.ONLINE_COACHING]: { creditType: PlanCreditType.TIME },
+  [PlanSection.CLASS_MEMBERSHIP]: { creditType: { not: PlanCreditType.TIME } },
+};
+
+// Kinds whose label contains the text, so "trial" also finds kind TRIAL.
+const kindsMatchingLabel = (text) => {
+  const needle = text.toLowerCase();
+  return Object.entries(PLAN_KIND_LABELS)
+    .filter(([, label]) => label.toLowerCase().includes(needle))
+    .map(([kind]) => kind);
+};
+
+const buildSearchFilter = (text) => {
+  const contains = escapeLikePattern(text);
+  const kinds = kindsMatchingLabel(text);
+  return {
+    OR: [
+      { name: { contains, mode: 'insensitive' } },
+      { description: { contains, mode: 'insensitive' } },
+      ...(kinds.length > 0 ? [{ kind: { in: kinds } }] : []),
+    ],
+  };
+};
+
+// The only place list filters are defined; both list paths below use it.
+// Archived plans are returned only when the caller asks for the status.
+const buildListWhere = ({ section, kind, creditType, visibility, status, q }) => {
+  const conditions = [{ status: { in: status ?? PLAN_LIST_DEFAULT_STATUSES } }];
+  if (section) conditions.push(SECTION_FILTERS[section]);
+  if (kind) conditions.push({ kind });
+  if (creditType) conditions.push({ creditType });
+  if (visibility) conditions.push({ visibility });
+  if (q) conditions.push(buildSearchFilter(q));
+  return { AND: conditions };
+};
+
+// The page and the total are read side by side: each database round trip is slow on the remote
+// database, and a transaction would add three more.
+const listByColumn = async ({ where, field, direction, skip, take }) => {
+  const [rows, total] = await Promise.all([
+    prisma.membershipPlan.findMany({
+      where,
+      orderBy: [{ [field]: direction }, { id: 'asc' }],
+      skip,
+      take,
+    }),
+    prisma.membershipPlan.count({ where }),
+  ]);
+  return { rows, total };
+};
+
+// The database collation (C.UTF-8) sorts "STRDY" before "Single", and Prisma cannot order by
+// LOWER(name). So Prisma loads the matching plans (the same `where` as every other path), raw SQL
+// only orders and pages their ids, and the rows are put in that order. The catalogue is small, so
+// loading every match is fine; a LOWER(name) index is the later fix if it grows.
+const listByNameOrder = async ({ where, direction, skip, take }) => {
+  const matches = await prisma.membershipPlan.findMany({ where });
+  const total = matches.length;
+  if (skip >= total) return { rows: [], total };
+
+  const order = direction === 'desc' ? Prisma.sql`DESC` : Prisma.sql`ASC`;
+  const ids = matches.map((match) => match.id);
+  const page = await prisma.$queryRaw`
+    SELECT "id" FROM "membership_plans"
+    WHERE "id" = ANY(${ids}::text[])
+    ORDER BY LOWER("name") ${order}, "id" ASC
+    LIMIT ${take} OFFSET ${skip}`;
+
+  const byId = new Map(matches.map((plan) => [plan.id, plan]));
+  return { rows: page.map((row) => byId.get(row.id)), total };
+};
+
+const listPlans = ({ filters, sort, skip, take }) => {
+  const where = buildListWhere(filters);
+  if (sort.field === 'name') {
+    return listByNameOrder({ where, direction: sort.direction, skip, take });
+  }
+  return listByColumn({ where, field: sort.field, direction: sort.direction, skip, take });
+};
+
+// Non-archived plans per credit type; independent of every list filter so tab badges stay stable.
+const countNonArchivedByCreditType = () =>
+  prisma.membershipPlan.groupBy({
+    by: ['creditType'],
+    where: { status: { not: PlanStatus.ARCHIVED } },
+    _count: { _all: true },
+  });
+
 const createPlanWithAudit = async ({ planData, auditData }, client = prisma) => {
   return client.$transaction(async (tx) => {
     const plan = await tx.membershipPlan.create({
@@ -91,5 +188,8 @@ module.exports = {
   findByName,
   findActiveByName,
   updatePlan,
+  buildListWhere,
+  listPlans,
+  countNonArchivedByCreditType,
   createPlanWithAudit,
 };

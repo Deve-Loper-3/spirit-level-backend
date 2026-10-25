@@ -1,4 +1,5 @@
 const prisma = require('../config/prisma');
+const { escapeLikePattern } = require('../utils/like.util');
 
 // Coach columns plus only the user columns the mappers need (never passwordHash).
 const COACH_WITH_USER_SELECT = {
@@ -40,10 +41,6 @@ const updateCoachStatus = async (id, status, client = prisma) => {
   });
   return count === 1;
 };
-
-// Prisma `contains` does not escape LIKE wildcards, so "%" and "_" typed by a user would
-// otherwise match anything. PostgreSQL's default LIKE escape character is the backslash.
-const escapeLikePattern = (text) => text.replace(/[\\%_]/g, '\\$&');
 
 const DEFAULT_SEARCH_FIELDS = ['fullName', 'email'];
 

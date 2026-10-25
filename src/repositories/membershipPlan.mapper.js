@@ -1,5 +1,10 @@
 const { PlanCreditType, PlanSection, PlanCreditRefill } = require('../constants/membershipPlan');
 
+const toSection = (creditType) =>
+  (creditType || '').toUpperCase() === PlanCreditType.TIME
+    ? PlanSection.ONLINE_COACHING
+    : PlanSection.CLASS_MEMBERSHIP;
+
 const toLower = (val) => (typeof val === 'string' ? val.toLowerCase() : val);
 
 const formatCreditSummary = (plan) => {
@@ -28,8 +33,6 @@ const toMembershipPlanResponse = (plan, { activeClientCount = 0 } = {}) => {
       ? plan.price.toNumber()
       : Number(plan.price);
 
-  const creditTypeUpper = (plan.creditType || '').toUpperCase();
-
   return {
     id: plan.id,
     name: plan.name,
@@ -47,10 +50,7 @@ const toMembershipPlanResponse = (plan, { activeClientCount = 0 } = {}) => {
     status: toLower(plan.status),
     description: plan.description ?? null,
     version: plan.version,
-    section:
-      creditTypeUpper === PlanCreditType.TIME
-        ? PlanSection.ONLINE_COACHING
-        : PlanSection.CLASS_MEMBERSHIP,
+    section: toSection(plan.creditType),
     creditSummary: formatCreditSummary(plan),
     activeClientCount,
     createdAt: plan.createdAt,
@@ -60,5 +60,6 @@ const toMembershipPlanResponse = (plan, { activeClientCount = 0 } = {}) => {
 
 module.exports = {
   formatCreditSummary,
+  toSection,
   toMembershipPlanResponse,
 };

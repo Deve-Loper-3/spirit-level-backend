@@ -52,6 +52,35 @@ const PlanSection = Object.freeze({
   CLASS_MEMBERSHIP: 'class_membership',
 });
 
+const PLAN_SORT_FIELDS = Object.freeze(['name', 'price', 'createdAt']);
+const PLAN_DEFAULT_SORT = 'name';
+
+// Shown to staff and matched by the list search, so "trial" also finds kind TRIAL.
+const PLAN_KIND_LABELS = Object.freeze({
+  [PlanKind.SUBSCRIPTION]: 'Subscription',
+  [PlanKind.CREDIT_PACK]: 'Credit pack',
+  [PlanKind.SINGLE_VISIT]: 'Single visit',
+  [PlanKind.TRIAL]: 'Trial',
+});
+
+// The list hides archived plans unless the caller asks for them.
+const PLAN_LIST_DEFAULT_STATUSES = Object.freeze([PlanStatus.ACTIVE, PlanStatus.INACTIVE]);
+
+// Short form of a plan in the list; the rest comes from the same mapper as the detail view.
+const PLAN_LIST_ITEM_FIELDS = Object.freeze([
+  'id',
+  'name',
+  'section',
+  'kind',
+  'price',
+  'billingCycle',
+  'creditType',
+  'creditSummary',
+  'visibility',
+  'status',
+  'activeClientCount',
+]);
+
 const COMMERCIAL_FIELDS = Object.freeze([
   'price',
   'billingCycle',
@@ -67,6 +96,7 @@ const PLAN_NAME_MAX_LENGTH = 80;
 const PLAN_PRICE_MIN = 0;
 const PLAN_PRICE_MAX = 100000;
 const PLAN_DESCRIPTION_MAX_LENGTH = 500;
+const PLAN_SEARCH_MAX_LENGTH = 100;
 
 module.exports = {
   PlanKind,
@@ -78,10 +108,16 @@ module.exports = {
   PlanVisibility,
   PlanStatus,
   PlanSection,
+  PLAN_SORT_FIELDS,
+  PLAN_DEFAULT_SORT,
+  PLAN_KIND_LABELS,
+  PLAN_LIST_DEFAULT_STATUSES,
+  PLAN_LIST_ITEM_FIELDS,
   COMMERCIAL_FIELDS,
   PLAN_NAME_MIN_LENGTH,
   PLAN_NAME_MAX_LENGTH,
   PLAN_PRICE_MIN,
   PLAN_PRICE_MAX,
   PLAN_DESCRIPTION_MAX_LENGTH,
+  PLAN_SEARCH_MAX_LENGTH,
 };

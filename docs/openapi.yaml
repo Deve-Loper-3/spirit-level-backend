@@ -898,6 +898,128 @@ paths:
           $ref: '#/components/responses/CoachNotFound'
 
   /api/v1/plans:
+    get:
+      tags: [Plans]
+      summary: List and search membership plans
+      description: |
+        OWNER, ADMIN or COACH. A MEMBER receives 403 Forbidden.
+
+        Returns one page of plans in the short list form, plus `meta.counts` for the two
+        section tabs. Every filter is optional and filters combine with AND.
+
+        **Archived plans** are hidden by default (only `active` and `inactive` are returned).
+        They appear only when `status` includes `archived`.
+
+        **Search (`q`)** is case-insensitive and matches the plan name, the description and the
+        kind label (`Subscription`, `Credit pack`, `Single visit`, `Trial`).
+
+        **Sorting** accepts `name` (default, ignores letter case), `price` or `createdAt`;
+        a leading `-` sorts descending (`-price` = most expensive first).
+
+        **`meta.counts`** is the number of non-archived plans per section. It ignores `q`, every
+        filter and `status`, so the tab badges do not change while searching or filtering.
+
+        **Unknown query parameters are ignored**, so web and mobile clients can add parameters
+        without breaking. The trade-off: a misspelled parameter name (for example
+        `sections=online_coaching`) is silently dropped and the filter is not applied. A known
+        parameter with an invalid value returns 422.
+
+        `activeClientCount` is a placeholder and is always `0`.
+      operationId: listPlans
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: section
+          in: query
+          description: Omit to get both sections
+          schema:
+            $ref: '#/components/schemas/PlanSection'
+        - name: kind
+          in: query
+          schema:
+            $ref: '#/components/schemas/PlanKind'
+        - name: creditType
+          in: query
+          schema:
+            $ref: '#/components/schemas/PlanCreditType'
+        - name: visibility
+          in: query
+          schema:
+            $ref: '#/components/schemas/PlanVisibility'
+        - name: status
+          in: query
+          description: |
+            Comma-separated list, for example `active,inactive` or `archived`.
+            Default: `active,inactive`. Archived plans are returned only when `archived` is listed.
+          schema:
+            type: string
+            example: active,inactive
+        - name: q
+          in: query
+          description: Search text, at most 100 characters; blank means no search
+          schema:
+            type: string
+            maxLength: 100
+            example: nutrition
+        - name: page
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100000
+            default: 1
+        - name: pageSize
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 20
+        - name: sort
+          in: query
+          description: '`name`, `price` or `createdAt`; prefix with `-` for descending'
+          schema:
+            type: string
+            enum: [name, -name, price, -price, createdAt, -createdAt]
+            default: name
+      responses:
+        '200':
+          description: One page of plans
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/SuccessEnvelope'
+                  - type: object
+                    properties:
+                      data:
+                        type: array
+                        items:
+                          $ref: '#/components/schemas/PlanListItem'
+                      meta:
+                        $ref: '#/components/schemas/PlanListMeta'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '422':
+          description: A known query parameter has an invalid value (returns all failing fields together)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+              example:
+                success: false
+                message: Validation failed
+                code: VALIDATION_ERROR
+                errors:
+                  - field: section
+                    message: 'Section must be one of: class_membership, online_coaching'
+                  - field: pageSize
+                    message: Page size must be a whole number between 1 and 100
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+
     post:
       tags: [Plans]
       summary: Create a membership plan
@@ -1682,6 +1804,84 @@ components:
           nullable: true
           maxLength: 500
           example: 15 classes a month
+
+    PlanListItem:
+      type: object
+      description: Short form of a plan, built by the same mapper as `PlanDetail`
+      required:
+        - id
+        - name
+        - section
+        - kind
+        - price
+        - billingCycle
+        - creditType
+        - creditSummary
+        - visibility
+        - status
+        - activeClientCount
+      properties:
+        id:
+          type: string
+          format: uuid
+          example: e0f06822-2615-4ba7-a9a3-559d81d4546d
+        name:
+          type: string
+          example: Nutrition Coaching
+        section:
+          $ref: '#/components/schemas/PlanSection'
+          example: online_coaching
+        kind:
+          $ref: '#/components/schemas/PlanKind'
+          example: subscription
+        price:
+          type: number
+          example: 1188
+        billingCycle:
+          $ref: '#/components/schemas/PlanBillingCycle'
+          example: month
+        creditType:
+          $ref: '#/components/schemas/PlanCreditType'
+          example: time
+        creditSummary:
+          type: string
+          example: Time-based access
+        visibility:
+          $ref: '#/components/schemas/PlanVisibility'
+          example: public
+        status:
+          $ref: '#/components/schemas/PlanStatus'
+          example: active
+        activeClientCount:
+          type: integer
+          description: Placeholder, always 0
+          example: 0
+
+    PlanListMeta:
+      type: object
+      required: [page, pageSize, total, counts]
+      properties:
+        page:
+          type: integer
+          example: 1
+        pageSize:
+          type: integer
+          example: 20
+        total:
+          type: integer
+          description: Plans matching the filters, across all pages
+          example: 60
+        counts:
+          type: object
+          description: Non-archived plans per section; ignores `q`, all filters and `status`
+          required: [class_membership, online_coaching]
+          properties:
+            class_membership:
+              type: integer
+              example: 53
+            online_coaching:
+              type: integer
+              example: 7
 
     PlanDetail:
       type: object

@@ -116,6 +116,11 @@ const AppErrors = Object.freeze({
     message: Messages.OTP_ATTEMPTS_EXCEEDED,
     code: 'OTP_ATTEMPTS_EXCEEDED',
   }),
+  PLAN_DUPLICATE_NAME: Object.freeze({
+    statusCode: 409,
+    message: Messages.PLAN_DUPLICATE_NAME,
+    code: 'duplicate_name',
+  }),
 });
 
 module.exports = { AppErrors };

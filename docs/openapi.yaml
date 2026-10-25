@@ -34,6 +34,8 @@ tags:
     description: Staff and coach account provisioning (ADMIN / OWNER)
   - name: Coaches
     description: Coach list, profile, update, and status
+  - name: Plans
+    description: Membership plan management (ADMIN / OWNER)
 
 paths:
   /health:
@@ -895,6 +897,78 @@ paths:
         '404':
           $ref: '#/components/responses/CoachNotFound'
 
+  /api/v1/plans:
+    post:
+      tags: [Plans]
+      summary: Create a membership plan
+      description: |
+        ADMIN or OWNER only. Creates a new active membership plan (version 1).
+        Coach or Member accounts receive 403 Forbidden.
+        Accepts writable fields; status is forced to `active`, externalRef is not accepted.
+        Writes an audit log entry in the same transaction.
+      operationId: createPlan
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreatePlanRequest'
+      responses:
+        '201':
+          description: Plan created successfully
+          headers:
+            Location:
+              description: Relative path to the newly created plan
+              schema:
+                type: string
+                example: /api/v1/plans/e0f06822-2615-4ba7-a9a3-559d81d4546d
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/SuccessEnvelope'
+                  - type: object
+                    properties:
+                      message:
+                        example: Membership plan created successfully
+                      data:
+                        $ref: '#/components/schemas/PlanDetail'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '409':
+          description: A non-archived plan with this name already exists
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+              example:
+                success: false
+                message: A membership plan with this name already exists
+                code: duplicate_name
+        '422':
+          description: Validation failed (returns all failing fields together)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+              example:
+                success: false
+                message: Validation failed
+                code: VALIDATION_ERROR
+                errors:
+                  - field: price
+                    message: Price is required and must be at least 0
+                  - field: billingCycle
+                    message: Only a membership renews monthly.
+                  - field: creditsIncluded
+                    message: creditsIncluded must be 0 when creditType is TIME
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+
 components:
   securitySchemes:
     bearerAuth:
@@ -1509,3 +1583,191 @@ components:
       properties:
         status:
           $ref: '#/components/schemas/CoachStatus'
+
+    PlanKind:
+      type: string
+      enum: [subscription, credit_pack, single_visit, trial]
+
+    PlanBillingCycle:
+      type: string
+      enum: [month, quarter, half_year, year, one_off]
+
+    PlanCreditType:
+      type: string
+      enum: [class, appointment, facility, time]
+
+    PlanCreditRefill:
+      type: string
+      nullable: true
+      enum: [monthly, once]
+
+    PlanValidityUnit:
+      type: string
+      enum: [day, week, month]
+
+    PlanStartsOn:
+      type: string
+      enum: [purchase_date, first_booking]
+
+    PlanVisibility:
+      type: string
+      enum: [public, hidden]
+
+    PlanStatus:
+      type: string
+      enum: [active, inactive, archived]
+
+    PlanSection:
+      type: string
+      enum: [online_coaching, class_membership]
+
+    CreatePlanRequest:
+      type: object
+      required:
+        - name
+        - kind
+        - price
+        - billingCycle
+        - creditType
+        - validityValue
+        - validityUnit
+        - startsOn
+        - visibility
+      properties:
+        name:
+          type: string
+          minLength: 2
+          maxLength: 80
+          example: Standard Membership
+        kind:
+          $ref: '#/components/schemas/PlanKind'
+          example: subscription
+        price:
+          type: number
+          minimum: 0
+          maximum: 100000
+          example: 449.00
+        billingCycle:
+          $ref: '#/components/schemas/PlanBillingCycle'
+          example: month
+        creditType:
+          $ref: '#/components/schemas/PlanCreditType'
+          example: class
+        creditsIncluded:
+          type: integer
+          description: Required and >= 1 for non-time plans; must be 0 or omitted for time plans
+          example: 15
+        creditRefill:
+          $ref: '#/components/schemas/PlanCreditRefill'
+          example: monthly
+        validityValue:
+          type: integer
+          minimum: 1
+          example: 1
+        validityUnit:
+          $ref: '#/components/schemas/PlanValidityUnit'
+          example: month
+        startsOn:
+          $ref: '#/components/schemas/PlanStartsOn'
+          example: purchase_date
+        oneTimePurchasePerClient:
+          type: boolean
+          default: false
+          example: false
+        visibility:
+          $ref: '#/components/schemas/PlanVisibility'
+          example: public
+        description:
+          type: string
+          nullable: true
+          maxLength: 500
+          example: 15 classes a month
+
+    PlanDetail:
+      type: object
+      required:
+        - id
+        - name
+        - kind
+        - price
+        - billingCycle
+        - creditType
+        - creditsIncluded
+        - validityValue
+        - validityUnit
+        - startsOn
+        - oneTimePurchasePerClient
+        - visibility
+        - status
+        - version
+        - section
+        - creditSummary
+        - activeClientCount
+        - createdAt
+        - updatedAt
+      properties:
+        id:
+          type: string
+          format: uuid
+          example: e0f06822-2615-4ba7-a9a3-559d81d4546d
+        name:
+          type: string
+          example: Standard Membership
+        kind:
+          $ref: '#/components/schemas/PlanKind'
+          example: subscription
+        price:
+          type: number
+          example: 449
+        billingCycle:
+          $ref: '#/components/schemas/PlanBillingCycle'
+          example: month
+        creditType:
+          $ref: '#/components/schemas/PlanCreditType'
+          example: class
+        creditsIncluded:
+          type: integer
+          example: 15
+        creditRefill:
+          $ref: '#/components/schemas/PlanCreditRefill'
+          example: monthly
+        validityValue:
+          type: integer
+          example: 1
+        validityUnit:
+          $ref: '#/components/schemas/PlanValidityUnit'
+          example: month
+        startsOn:
+          $ref: '#/components/schemas/PlanStartsOn'
+          example: purchase_date
+        oneTimePurchasePerClient:
+          type: boolean
+          example: false
+        visibility:
+          $ref: '#/components/schemas/PlanVisibility'
+          example: public
+        status:
+          $ref: '#/components/schemas/PlanStatus'
+          example: active
+        description:
+          type: string
+          nullable: true
+          example: 15 classes a month
+        version:
+          type: integer
+          example: 1
+        section:
+          $ref: '#/components/schemas/PlanSection'
+          example: class_membership
+        creditSummary:
+          type: string
+          example: 15 class credits a month
+        activeClientCount:
+          type: integer
+          example: 0
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time

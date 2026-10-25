@@ -1,4 +1,4 @@
-const rateLimit = require('express-rate-limit');
+const { rateLimit, ipKeyGenerator } = require('express-rate-limit');
 const env = require('../config/env');
 const { createAppError } = require('../errors/AppError');
 const { AppErrors } = require('../constants/errors');
@@ -26,7 +26,22 @@ const createAuthLimiter = (options = {}) => {
 
 const authLimiter = createAuthLimiter();
 
+const planKeyGenerator = (req) => {
+  const ipKey = ipKeyGenerator(req.ip);
+  return req.user?.id ? `${req.user.id}_${ipKey}` : ipKey;
+};
+
+const createPlanLimiter = (options = {}) =>
+  createAuthLimiter({
+    keyGenerator: planKeyGenerator,
+    ...options,
+  });
+
+const planLimiter = createPlanLimiter();
+
 module.exports = {
   createAuthLimiter,
   authLimiter,
+  createPlanLimiter,
+  planLimiter,
 };

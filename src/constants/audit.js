@@ -10,6 +10,7 @@ const AuditAction = Object.freeze({
   LOGOUT: 'LOGOUT',
   COACH_UPDATED: 'COACH_UPDATED',
   COACH_STATUS_CHANGED: 'COACH_STATUS_CHANGED',
+  PLAN_CREATED: 'PLAN_CREATED',
 });
 
 const LoginFailureReason = Object.freeze({

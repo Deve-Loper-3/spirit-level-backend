@@ -126,6 +126,15 @@ const Messages = Object.freeze({
   IMAGE_UPLOAD_TOKEN_FAILED: 'Failed to prepare the image upload, please try again later',
   IMAGE_UPLOAD_NOT_CONFIGURED: 'Image upload is not available right now',
   IMAGE_DELETE_FAILED: 'Failed to delete image from storage',
+
+  // Membership plans
+  PLAN_CREATED_SUCCESS: 'Membership plan created successfully',
+  PLAN_DUPLICATE_NAME: 'A membership plan with this name already exists',
+  PLAN_RENEW_SUBSCRIPTION_ONLY: 'Only a membership renews monthly.',
+  PLAN_PRICE_REQUIRED: 'Price is required and must be at least 0',
+  PLAN_CREDITS_REQUIRED_NON_TIME: 'creditsIncluded must be at least 1 when creditType is not TIME',
+  PLAN_CREDITS_TIME_ZERO: 'creditsIncluded must be 0 or omitted for time-based plans',
+  PLAN_REFILL_MONTHLY_RESTRICTION: 'creditRefill can only be MONTHLY when billingCycle is MONTH',
 });
 
 module.exports = { Messages };

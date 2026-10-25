@@ -1,0 +1,2 @@
+-- Note: PostgreSQL does not support dropping a single value from an enum type directly.
+-- To roll back, create a new enum type without 'PLAN_CREATED', alter dependent columns, and drop the old type.

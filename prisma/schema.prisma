@@ -49,6 +49,7 @@ enum AuditAction {
   LOGOUT
   COACH_UPDATED
   COACH_STATUS_CHANGED
+  PLAN_CREATED
 }
 
 enum LoginFailureReason {
@@ -163,4 +164,80 @@ model AuditLog {
   createdAt DateTime    @default(now())
 
   @@index([userId, createdAt])
+}
+
+enum PlanKind {
+  SUBSCRIPTION
+  CREDIT_PACK
+  SINGLE_VISIT
+  TRIAL
+}
+
+enum PlanBillingCycle {
+  MONTH
+  QUARTER
+  HALF_YEAR
+  YEAR
+  ONE_OFF
+}
+
+enum PlanCreditType {
+  CLASS
+  APPOINTMENT
+  FACILITY
+  TIME
+}
+
+enum PlanCreditRefill {
+  MONTHLY
+  ONCE
+}
+
+enum PlanValidityUnit {
+  DAY
+  WEEK
+  MONTH
+}
+
+enum PlanStartsOn {
+  PURCHASE_DATE
+  FIRST_BOOKING
+}
+
+enum PlanVisibility {
+  PUBLIC
+  HIDDEN
+}
+
+enum PlanStatus {
+  ACTIVE
+  INACTIVE
+  ARCHIVED
+}
+
+model MembershipPlan {
+  id                       String            @id
+  name                     String
+  kind                     PlanKind
+  price                    Decimal           @db.Decimal(10, 2)
+  billingCycle             PlanBillingCycle
+  creditType               PlanCreditType
+  creditsIncluded          Int
+  creditRefill             PlanCreditRefill?
+  validityValue            Int
+  validityUnit             PlanValidityUnit
+  startsOn                 PlanStartsOn
+  oneTimePurchasePerClient Boolean           @default(false)
+  visibility               PlanVisibility
+  status                   PlanStatus        @default(ACTIVE)
+  description              String?
+  externalRef              String?           @unique
+  version                  Int               @default(1)
+  createdAt                DateTime          @default(now())
+  updatedAt                DateTime          @updatedAt
+
+  @@index([status])
+  @@index([kind])
+  @@index([creditType])
+  @@map("membership_plans")
 }

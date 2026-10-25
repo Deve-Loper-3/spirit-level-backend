@@ -48,11 +48,13 @@ const findByName = async (name, client = prisma) => {
   });
 };
 
-const findActiveByName = async (name, client = prisma) => {
+// `excludeId` leaves one plan out, so a plan never collides with its own name.
+const findActiveByName = async (name, client = prisma, { excludeId } = {}) => {
   if (!name) return null;
   const trimmed = name.trim();
   return client.membershipPlan.findFirst({
     where: {
+      ...(excludeId ? { id: { not: excludeId } } : {}),
       name: {
         equals: trimmed,
         mode: 'insensitive',
@@ -160,6 +162,43 @@ const countNonArchivedByCreditType = () =>
     _count: { _all: true },
   });
 
+// There is no purchases table yet, so no plan has active clients. The purchase ticket replaces
+// this body; plan_in_use (and later activeClientCount) read from here.
+const countActiveClients = async (_planId, _client = prisma) => 0;
+
+// Updates a plan that is not archived and writes its audit row in the same transaction. The
+// database trigger bumps `version` when a commercial field changes. `auditFor(updated)` builds
+// the audit data once the new row is known. Returns null when the plan was archived meanwhile.
+const updatePlanWithAudit = async ({ id, data, auditFor }, client = prisma) => {
+  return client.$transaction(async (tx) => {
+    const { count } = await tx.membershipPlan.updateMany({
+      where: { id, status: { not: PlanStatus.ARCHIVED } },
+      data,
+    });
+    if (count === 0) return null;
+
+    const plan = await tx.membershipPlan.findUnique({ where: { id } });
+    await createAuditLog(tx, { ...auditFor(plan), reason: `${plan.name} (${plan.id})` });
+    return plan;
+  });
+};
+
+// Moves a plan from `from` to `to` and writes the audit row in the same transaction. Returns
+// null when the status is no longer `from` (someone else changed it first).
+const changePlanStatusWithAudit = async ({ id, from, to, auditFor }, client = prisma) => {
+  return client.$transaction(async (tx) => {
+    const { count } = await tx.membershipPlan.updateMany({
+      where: { id, status: from },
+      data: { status: to },
+    });
+    if (count === 0) return null;
+
+    const plan = await tx.membershipPlan.findUnique({ where: { id } });
+    await createAuditLog(tx, { ...auditFor(plan), reason: `${plan.name} (${plan.id})` });
+    return plan;
+  });
+};
+
 const createPlanWithAudit = async ({ planData, auditData }, client = prisma) => {
   return client.$transaction(async (tx) => {
     const plan = await tx.membershipPlan.create({
@@ -191,5 +230,8 @@ module.exports = {
   buildListWhere,
   listPlans,
   countNonArchivedByCreditType,
+  countActiveClients,
+  updatePlanWithAudit,
+  changePlanStatusWithAudit,
   createPlanWithAudit,
 };

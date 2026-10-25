@@ -1,4 +1,10 @@
-const { PlanCreditType, PlanSection, PlanCreditRefill } = require('../constants/membershipPlan');
+const {
+  PlanCreditType,
+  PlanSection,
+  PlanCreditRefill,
+  PLAN_EDITABLE_FIELDS,
+} = require('../constants/membershipPlan');
+const { pick } = require('../utils/pick.util');
 
 const toSection = (creditType) =>
   (creditType || '').toUpperCase() === PlanCreditType.TIME
@@ -25,6 +31,15 @@ const formatCreditSummary = (plan) => {
   const cadence = refillUpper === PlanCreditRefill.MONTHLY ? ' a month' : '';
   return `${count} ${typeLabel} ${unitLabel}${cadence}`;
 };
+
+// The editable fields of a plan row or of validated input, in one comparable shape (database
+// enum values, price as a number, optional columns as null).
+const toEditableFields = (source) => ({
+  ...pick(source, PLAN_EDITABLE_FIELDS),
+  price: Number(source.price),
+  creditRefill: source.creditRefill ?? null,
+  description: source.description ?? null,
+});
 
 const toMembershipPlanResponse = (plan, { activeClientCount = 0 } = {}) => {
   if (!plan) return null;
@@ -61,5 +76,6 @@ const toMembershipPlanResponse = (plan, { activeClientCount = 0 } = {}) => {
 module.exports = {
   formatCreditSummary,
   toSection,
+  toEditableFields,
   toMembershipPlanResponse,
 };

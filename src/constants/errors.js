@@ -121,6 +121,31 @@ const AppErrors = Object.freeze({
     message: Messages.PLAN_DUPLICATE_NAME,
     code: 'duplicate_name',
   }),
+  PLAN_NOT_FOUND: Object.freeze({
+    statusCode: 404,
+    message: Messages.PLAN_NOT_FOUND,
+    code: 'PLAN_NOT_FOUND',
+  }),
+  PLAN_ARCHIVED: Object.freeze({
+    statusCode: 409,
+    message: Messages.PLAN_ARCHIVED,
+    code: 'plan_archived',
+  }),
+  PLAN_IN_USE: Object.freeze({
+    statusCode: 409,
+    message: Messages.PLAN_IN_USE,
+    code: 'plan_in_use',
+  }),
+  PLAN_INVALID_TRANSITION: Object.freeze({
+    statusCode: 409,
+    message: Messages.PLAN_INVALID_TRANSITION,
+    code: 'invalid_transition',
+  }),
+  METHOD_NOT_ALLOWED: Object.freeze({
+    statusCode: 405,
+    message: Messages.METHOD_NOT_ALLOWED,
+    code: 'METHOD_NOT_ALLOWED',
+  }),
 });
 
 module.exports = { AppErrors };

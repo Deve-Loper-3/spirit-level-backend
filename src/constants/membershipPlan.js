@@ -81,6 +81,42 @@ const PLAN_LIST_ITEM_FIELDS = Object.freeze([
   'activeClientCount',
 ]);
 
+// The only status moves a plan allows; a status missing from a row has no moves. Same-status
+// requests are answered before this map is read.
+const PLAN_STATUS_TRANSITIONS = Object.freeze({
+  [PlanStatus.ACTIVE]: Object.freeze([PlanStatus.INACTIVE, PlanStatus.ARCHIVED]),
+  [PlanStatus.INACTIVE]: Object.freeze([PlanStatus.ACTIVE, PlanStatus.ARCHIVED]),
+  [PlanStatus.ARCHIVED]: Object.freeze([PlanStatus.INACTIVE]),
+});
+
+// What PATCH /plans/:id may change (everything else on a plan is fixed or derived).
+const PLAN_EDITABLE_FIELDS = Object.freeze([
+  'name',
+  'kind',
+  'price',
+  'billingCycle',
+  'creditType',
+  'creditsIncluded',
+  'creditRefill',
+  'validityValue',
+  'validityUnit',
+  'startsOn',
+  'oneTimePurchasePerClient',
+  'visibility',
+  'description',
+]);
+
+// Sent in a PATCH body they are rejected (status has its own endpoint).
+const PLAN_NON_EDITABLE_FIELDS = Object.freeze([
+  'id',
+  'section',
+  'status',
+  'version',
+  'externalRef',
+  'createdAt',
+  'updatedAt',
+]);
+
 const COMMERCIAL_FIELDS = Object.freeze([
   'price',
   'billingCycle',
@@ -97,6 +133,7 @@ const PLAN_PRICE_MIN = 0;
 const PLAN_PRICE_MAX = 100000;
 const PLAN_DESCRIPTION_MAX_LENGTH = 500;
 const PLAN_SEARCH_MAX_LENGTH = 100;
+const PLAN_STATUS_REASON_MAX_LENGTH = 200;
 
 module.exports = {
   PlanKind,
@@ -113,6 +150,9 @@ module.exports = {
   PLAN_KIND_LABELS,
   PLAN_LIST_DEFAULT_STATUSES,
   PLAN_LIST_ITEM_FIELDS,
+  PLAN_STATUS_TRANSITIONS,
+  PLAN_EDITABLE_FIELDS,
+  PLAN_NON_EDITABLE_FIELDS,
   COMMERCIAL_FIELDS,
   PLAN_NAME_MIN_LENGTH,
   PLAN_NAME_MAX_LENGTH,
@@ -120,4 +160,5 @@ module.exports = {
   PLAN_PRICE_MAX,
   PLAN_DESCRIPTION_MAX_LENGTH,
   PLAN_SEARCH_MAX_LENGTH,
+  PLAN_STATUS_REASON_MAX_LENGTH,
 };

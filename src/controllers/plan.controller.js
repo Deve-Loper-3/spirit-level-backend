@@ -1,4 +1,10 @@
-const { createPlan: createNewPlan, listPlans: findPlans } = require('../services/plan.service');
+const {
+  createPlan: createNewPlan,
+  listPlans: findPlans,
+  getPlan: findPlan,
+  updatePlan: editPlan,
+  changePlanStatus: moveToStatus,
+} = require('../services/plan.service');
 const { sendSuccess } = require('../utils/apiResponse.util');
 const { getRequestMeta } = require('../utils/requestMeta.util');
 const { Messages } = require('../constants/messages');
@@ -37,7 +43,50 @@ const listPlans = async (req, res, next) => {
   }
 };
 
+const toActor = (req) => ({ id: req.user.id, role: req.user.role, email: req.user.email });
+
+const getPlan = async (req, res, next) => {
+  try {
+    const plan = await findPlan({ plan: req.plan });
+    return sendSuccess(res, { data: plan });
+  } catch (err) {
+    return next(err);
+  }
+};
+
+const updatePlan = async (req, res, next) => {
+  try {
+    const plan = await editPlan({
+      actor: toActor(req),
+      plan: req.plan,
+      next: req.validatedBody,
+      meta: getRequestMeta(req),
+    });
+    return sendSuccess(res, { message: Messages.PLAN_UPDATED_SUCCESS, data: plan });
+  } catch (err) {
+    return next(err);
+  }
+};
+
+const changePlanStatus = async (req, res, next) => {
+  try {
+    const result = await moveToStatus({
+      actor: toActor(req),
+      plan: req.plan,
+      status: req.validatedBody.status,
+      reason: req.validatedBody.reason,
+      meta: getRequestMeta(req),
+    });
+    return sendSuccess(res, { message: Messages.PLAN_STATUS_UPDATED_SUCCESS, data: result });
+  } catch (err) {
+    return next(err);
+  }
+};
+
 module.exports = {
   createPlan,
   listPlans,
+  getPlan,
+  updatePlan,
+  changePlanStatus,
 };

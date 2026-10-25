@@ -50,6 +50,8 @@ enum AuditAction {
   COACH_UPDATED
   COACH_STATUS_CHANGED
   PLAN_CREATED
+  PLAN_UPDATED
+  PLAN_STATUS_CHANGED
 }
 
 enum LoginFailureReason {
@@ -159,6 +161,7 @@ model AuditLog {
   email     String?
   actorId   String?
   actorRole String?
+  details   Json?
   ipAddress String?
   userAgent String?
   createdAt DateTime    @default(now())

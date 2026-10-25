@@ -3,8 +3,12 @@ const prisma = require('../config/prisma');
 const { AuditAction } = require('../constants/audit');
 
 // `client` is the prisma client or a transaction client, so callers can join their own transaction.
-// meta: { ipAddress?, userAgent? }. Undefined optional fields are stored as NULL.
-const createAuditLog = (client, { userId, action, reason, email, actorId, actorRole, meta = {} }) =>
+// meta: { ipAddress?, userAgent? }. details: optional JSON (for example old and new values).
+// Undefined optional fields are stored as NULL.
+const createAuditLog = (
+  client,
+  { userId, action, reason, email, actorId, actorRole, details, meta = {} },
+) =>
   client.auditLog.create({
     data: {
       id: crypto.randomUUID(),
@@ -14,6 +18,7 @@ const createAuditLog = (client, { userId, action, reason, email, actorId, actorR
       email,
       actorId,
       actorRole,
+      details,
       ipAddress: meta.ipAddress,
       userAgent: meta.userAgent,
     },

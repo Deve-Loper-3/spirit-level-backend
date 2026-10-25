@@ -9,6 +9,9 @@ const {
   PlanVisibility,
   PlanStatus,
   PlanSection,
+  PLAN_EDITABLE_FIELDS,
+  PLAN_NON_EDITABLE_FIELDS,
+  PLAN_STATUS_REASON_MAX_LENGTH,
   PLAN_SORT_FIELDS,
   PLAN_DEFAULT_SORT,
   PLAN_SEARCH_MAX_LENGTH,
@@ -23,6 +26,7 @@ const { AppErrors } = require('../constants/errors');
 const { DEFAULT_PAGE_SIZE, MAX_PAGE_SIZE } = require('../constants/pagination');
 const { parseSort } = require('../utils/sort.util');
 const { sendError } = require('../utils/apiResponse.util');
+const { toEditableFields } = require('../repositories/membershipPlan.mapper');
 const { pageField, buildSizeField } = require('./pagination.validation');
 
 const RECURRING_CYCLES = new Set([
@@ -270,6 +274,67 @@ const validateListPlansQuery = (req, res, next) => {
   return next();
 };
 
+// A key that cannot be edited, or that is not a plan field, is rejected rather than ignored.
+const findBadPatchKeys = (body) => {
+  const keys = Object.keys(body);
+  if (keys.length === 0) return [{ path: [], message: Messages.PLAN_UPDATE_EMPTY }];
+  return keys.flatMap((key) => {
+    if (key === 'status') {
+      return [{ path: [key], message: Messages.PLAN_STATUS_USE_STATUS_ENDPOINT }];
+    }
+    if (PLAN_NON_EDITABLE_FIELDS.includes(key)) {
+      return [{ path: [key], message: Messages.PLAN_FIELD_NOT_EDITABLE }];
+    }
+    if (!PLAN_EDITABLE_FIELDS.includes(key)) {
+      return [{ path: [key], message: Messages.PLAN_FIELD_UNKNOWN }];
+    }
+    return [];
+  });
+};
+
+// Needs req.plan (run `loadPlan` first). The sent fields are laid over the stored plan and the
+// RESULT goes through the same rules as a create, so a partial update cannot leave an invalid
+// plan. req.validatedBody is the full validated set of editable fields.
+const validateUpdatePlanBody = (req, res, next) => {
+  const body = req.body && typeof req.body === 'object' && !Array.isArray(req.body) ? req.body : {};
+
+  const badKeys = findBadPatchKeys(body);
+  if (badKeys.length > 0) return sendValidationFailed(res, { issues: badKeys });
+
+  const result = membershipPlanSchema.safeParse({ ...toEditableFields(req.plan), ...body });
+  if (!result.success) return sendValidationFailed(res, result.error);
+
+  req.validatedBody = toEditableFields(result.data);
+  return next();
+};
+
+const planStatusBodySchema = z
+  .object({
+    status: z
+      .preprocess(
+        (value) => (typeof value === 'string' ? value.trim().toLowerCase() : value),
+        z.enum(
+          Object.values(PlanStatus).map((v) => v.toLowerCase()),
+          { error: Messages.PLAN_STATUS_VALUE_INVALID },
+        ),
+      )
+      .transform(toUpper),
+    reason: z
+      .string({ error: Messages.PLAN_STATUS_REASON_INVALID })
+      .trim()
+      .max(PLAN_STATUS_REASON_MAX_LENGTH, Messages.PLAN_STATUS_REASON_INVALID)
+      .transform((value) => value || undefined)
+      .optional(),
+  })
+  .strict();
+
+const validatePlanStatusBody = (req, res, next) => {
+  const result = planStatusBodySchema.safeParse(req.body ?? {});
+  if (!result.success) return sendValidationFailed(res, result.error);
+  req.validatedBody = result.data;
+  return next();
+};
+
 const validateCreatePlan = (req, res, next) => {
   if (req.body && typeof req.body === 'object') {
     // Strip externalRef silently as per ticket spec
@@ -291,6 +356,9 @@ module.exports = {
   membershipPlanSchema,
   createPlanSchema,
   listPlansQuerySchema,
+  planStatusBodySchema,
   validateCreatePlan,
   validateListPlansQuery,
+  validateUpdatePlanBody,
+  validatePlanStatusBody,
 };

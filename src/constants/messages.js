@@ -142,6 +142,21 @@ const Messages = Object.freeze({
   PLAN_VISIBILITY_INVALID: 'Visibility must be one of: public, hidden',
   PLAN_STATUS_INVALID: 'Status must be a comma-separated list of: active, inactive, archived',
   PLAN_SEARCH_INVALID: 'Search must be text of at most 100 characters',
+  PLAN_UPDATED_SUCCESS: 'Membership plan updated successfully',
+  PLAN_STATUS_UPDATED_SUCCESS: 'Membership plan status updated successfully',
+  PLAN_NOT_FOUND: 'Membership plan not found',
+  PLAN_ARCHIVED: 'An archived membership plan cannot be edited',
+  PLAN_IN_USE:
+    'Time-based and credit-based plans cannot be switched while clients are using the plan',
+  PLAN_INVALID_TRANSITION: 'This status change is not allowed',
+  PLAN_UPDATE_EMPTY: 'Provide at least one field to update',
+  PLAN_FIELD_NOT_EDITABLE: 'This field cannot be edited',
+  PLAN_STATUS_USE_STATUS_ENDPOINT:
+    'Status cannot be edited here, use PATCH /api/v1/plans/:id/status',
+  PLAN_FIELD_UNKNOWN: 'Unknown field',
+  PLAN_STATUS_VALUE_INVALID: 'Status must be one of: active, inactive, archived',
+  PLAN_STATUS_REASON_INVALID: 'Reason must be text of at most 200 characters',
+  METHOD_NOT_ALLOWED: 'Method not allowed for this route',
   PLAN_REFILL_MONTHLY_RESTRICTION: 'creditRefill can only be MONTHLY when billingCycle is MONTH',
 });
 

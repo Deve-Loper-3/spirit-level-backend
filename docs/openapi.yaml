@@ -1091,6 +1091,247 @@ paths:
         '429':
           $ref: '#/components/responses/TooManyRequests'
 
+  /api/v1/plans/{id}:
+    parameters:
+      - $ref: '#/components/parameters/PlanId'
+    get:
+      tags: [Plans]
+      summary: Get one membership plan
+      description: |
+        OWNER, ADMIN or COACH. A MEMBER receives 403 Forbidden.
+
+        Returns the full plan in the same shape as the create response, including archived
+        plans. An unknown or malformed id returns 404.
+
+        `activeClientCount` is a placeholder and is always `0` until purchases exist.
+      operationId: getPlan
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: The plan
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/SuccessEnvelope'
+                  - type: object
+                    properties:
+                      data:
+                        $ref: '#/components/schemas/PlanDetail'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/PlanNotFound'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+    patch:
+      tags: [Plans]
+      summary: Update a membership plan (partial)
+      description: |
+        OWNER or ADMIN only; a COACH or MEMBER receives 403. Send only the fields to change.
+
+        **Check order:** 401/403, 429, 404, 409 `plan_archived`, 422 (fields that cannot be
+        edited), 422 (the merged result), 409 `duplicate_name`, 409 `plan_in_use`, then the
+        update.
+
+        **Validation** runs on the stored plan with the sent fields laid over it, using the same
+        rules as create. So a change that is only valid together with another field (for example
+        switching `creditType` to `time` also needs `creditsIncluded: 0` and `creditRefill: null`)
+        must send both.
+
+        **Not editable (422):** `id`, `section`, `status` (use `PATCH /api/v1/plans/{id}/status`),
+        `version`, `externalRef`, `createdAt`, `updatedAt`. Unknown fields and an empty body are
+        also 422.
+
+        **Versioning:** `version` goes up by 1 when any commercial field changes (`price`,
+        `billingCycle`, `creditType`, `creditsIncluded`, `creditRefill`, `validityValue`,
+        `validityUnit`), however many change in one request. Changing only other fields keeps the
+        version. A purchase keeps the version it was bought on, so a price change applies from
+        the next billing cycle. Sending a field with its current value changes nothing: no
+        version bump, no audit entry, and the current plan is returned.
+
+        **Conflicts (409):** `plan_archived` (archived plans cannot be edited), `duplicate_name`
+        (another non-archived plan has the name, case-insensitive), `plan_in_use` (switching
+        between time-based and credit-based while the plan has active clients).
+
+        The update, the version bump and the audit entry (changed fields with old and new values)
+        happen in one transaction.
+      operationId: updatePlan
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdatePlanRequest'
+      responses:
+        '200':
+          description: The plan after the update
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/SuccessEnvelope'
+                  - type: object
+                    properties:
+                      message:
+                        example: Membership plan updated successfully
+                      data:
+                        $ref: '#/components/schemas/PlanDetail'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/PlanNotFound'
+        '409':
+          description: |
+            `plan_archived`, `duplicate_name` or `plan_in_use`
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+              examples:
+                archived:
+                  value:
+                    success: false
+                    message: An archived membership plan cannot be edited
+                    code: plan_archived
+                duplicateName:
+                  value:
+                    success: false
+                    message: A membership plan with this name already exists
+                    code: duplicate_name
+                inUse:
+                  value:
+                    success: false
+                    message: Time-based and credit-based plans cannot be switched while clients are using the plan
+                    code: plan_in_use
+        '422':
+          description: Validation failed (returns all failing fields together)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+              example:
+                success: false
+                message: Validation failed
+                code: VALIDATION_ERROR
+                errors:
+                  - field: status
+                    message: 'Status cannot be edited here, use PATCH /api/v1/plans/:id/status'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+    delete:
+      tags: [Plans]
+      summary: Not supported (plans are archived, never deleted)
+      description: |
+        Always answers 405 with `Allow: GET, PATCH`, also without a token. Every method other than
+        GET and PATCH answers the same. To retire a plan use `PATCH /api/v1/plans/{id}/status`.
+      operationId: deletePlanNotAllowed
+      responses:
+        '405':
+          $ref: '#/components/responses/MethodNotAllowed'
+
+  /api/v1/plans/{id}/status:
+    parameters:
+      - $ref: '#/components/parameters/PlanId'
+    patch:
+      tags: [Plans]
+      summary: Change the status of a membership plan
+      description: |
+        OWNER or ADMIN only; a COACH or MEMBER receives 403.
+
+        **Check order:** 401/403, 429, 404, 422 (body), then the same-status shortcut, 409
+        `invalid_transition`, 409 `duplicate_name` (restoring only), then the update.
+
+        **Allowed moves:** `active` <-> `inactive`, `active`/`inactive` -> `archived`,
+        `archived` -> `inactive`. Anything else (for example `archived` -> `active`) is
+        409 `invalid_transition`.
+
+        **Same status again** returns 200 with the current values, changes nothing and writes no
+        audit entry.
+
+        **Restoring** an archived plan (`archived` -> `inactive`) returns 409 `duplicate_name`
+        when another non-archived plan has taken the name meanwhile.
+
+        Each real change writes an audit entry with `from`, `to` and `reason`. The version never
+        changes. Existing clients keep their records; the purchase flow reads `status` to block
+        new sales of inactive and archived plans.
+      operationId: changePlanStatus
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PlanStatusRequest'
+      responses:
+        '200':
+          description: The plan's status after the request
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/SuccessEnvelope'
+                  - type: object
+                    properties:
+                      message:
+                        example: Membership plan status updated successfully
+                      data:
+                        $ref: '#/components/schemas/PlanStatusResult'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/PlanNotFound'
+        '409':
+          description: '`invalid_transition`, or `duplicate_name` when restoring'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+              examples:
+                invalidTransition:
+                  value:
+                    success: false
+                    message: This status change is not allowed
+                    code: invalid_transition
+                duplicateName:
+                  value:
+                    success: false
+                    message: A membership plan with this name already exists
+                    code: duplicate_name
+        '422':
+          description: Body failed validation
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+              example:
+                success: false
+                message: Validation failed
+                code: VALIDATION_ERROR
+                errors:
+                  - field: status
+                    message: 'Status must be one of: active, inactive, archived'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+    delete:
+      tags: [Plans]
+      summary: Not supported
+      description: 'Answers 405 with `Allow: PATCH`. Plans have no DELETE route.'
+      operationId: deletePlanStatusNotAllowed
+      responses:
+        '405':
+          $ref: '#/components/responses/MethodNotAllowed'
+
 components:
   securitySchemes:
     bearerAuth:
@@ -1100,6 +1341,14 @@ components:
       description: Access token from login or refresh
 
   parameters:
+    PlanId:
+      name: id
+      in: path
+      required: true
+      schema:
+        type: string
+      description: Plan id (UUID). An unknown or malformed id returns 404.
+
     CoachId:
       name: coachId
       in: path
@@ -1152,6 +1401,34 @@ components:
           example:
             success: false
             message: Coach not found
+
+    PlanNotFound:
+      description: No plan with this id (an id that is not a UUID is also a 404)
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorEnvelope'
+          example:
+            success: false
+            message: Membership plan not found
+            code: PLAN_NOT_FOUND
+
+    MethodNotAllowed:
+      description: The route exists but not for this method
+      headers:
+        Allow:
+          description: Methods the route supports
+          schema:
+            type: string
+            example: GET, PATCH
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorEnvelope'
+          example:
+            success: false
+            message: Method not allowed for this route
+            code: METHOD_NOT_ALLOWED
 
     TooManyRequests:
       description: Rate limit exceeded
@@ -1882,6 +2159,77 @@ components:
             online_coaching:
               type: integer
               example: 7
+
+    UpdatePlanRequest:
+      type: object
+      minProperties: 1
+      description: |
+        Any of the editable fields. Fields not listed here (`id`, `section`, `status`, `version`,
+        `externalRef`, `createdAt`, `updatedAt`) are rejected with 422, as are unknown fields.
+        Enum values are case-insensitive.
+      properties:
+        name:
+          type: string
+          minLength: 2
+          maxLength: 80
+        kind:
+          $ref: '#/components/schemas/PlanKind'
+        price:
+          type: number
+          minimum: 0
+          maximum: 100000
+        billingCycle:
+          $ref: '#/components/schemas/PlanBillingCycle'
+        creditType:
+          $ref: '#/components/schemas/PlanCreditType'
+        creditsIncluded:
+          type: integer
+        creditRefill:
+          $ref: '#/components/schemas/PlanCreditRefill'
+        validityValue:
+          type: integer
+          minimum: 1
+        validityUnit:
+          $ref: '#/components/schemas/PlanValidityUnit'
+        startsOn:
+          $ref: '#/components/schemas/PlanStartsOn'
+        oneTimePurchasePerClient:
+          type: boolean
+        visibility:
+          $ref: '#/components/schemas/PlanVisibility'
+        description:
+          type: string
+          nullable: true
+          maxLength: 500
+      example:
+        price: 480
+        description: New price from the next billing cycle
+
+    PlanStatusRequest:
+      type: object
+      required: [status]
+      additionalProperties: false
+      properties:
+        status:
+          $ref: '#/components/schemas/PlanStatus'
+        reason:
+          type: string
+          maxLength: 200
+          description: Optional; stored in the audit entry. Blank counts as none.
+          example: Replaced by the new membership
+
+    PlanStatusResult:
+      type: object
+      required: [id, status, updatedAt]
+      properties:
+        id:
+          type: string
+          format: uuid
+        status:
+          $ref: '#/components/schemas/PlanStatus'
+        updatedAt:
+          type: string
+          format: date-time
 
     PlanDetail:
       type: object

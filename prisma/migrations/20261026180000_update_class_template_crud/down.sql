@@ -6,18 +6,18 @@ DROP INDEX IF EXISTS "classes_status_idx";
 DROP INDEX IF EXISTS "classes_name_lower_active_idx";
 ALTER TABLE "classes" DROP CONSTRAINT IF EXISTS "classes_classpass_enabled_check";
 
-ALTER TABLE "classes" ADD COLUMN "active" BOOLEAN NOT NULL DEFAULT true;
+ALTER TABLE "classes" ADD COLUMN IF NOT EXISTS "active" BOOLEAN NOT NULL DEFAULT true;
 
 UPDATE "classes" SET "active" = ("status" = 'ACTIVE');
 
-CREATE INDEX "classes_active_idx" ON "classes"("active");
-CREATE UNIQUE INDEX "classes_name_lower_active_idx" ON "classes" (LOWER("name")) WHERE "active";
+CREATE INDEX IF NOT EXISTS "classes_active_idx" ON "classes"("active");
+CREATE UNIQUE INDEX IF NOT EXISTS "classes_name_lower_active_idx" ON "classes" (LOWER("name")) WHERE "active";
 
 ALTER TABLE "classes"
   ALTER COLUMN "intensity" DROP NOT NULL,
-  DROP COLUMN "classPassEnabled",
-  DROP COLUMN "classType",
-  DROP COLUMN "status";
+  DROP COLUMN IF EXISTS "classPassEnabled",
+  DROP COLUMN IF EXISTS "classType",
+  DROP COLUMN IF EXISTS "status";
 
 DROP TYPE IF EXISTS "ClassType";
 DROP TYPE IF EXISTS "ClassStatus";

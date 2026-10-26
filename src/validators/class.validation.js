@@ -1,7 +1,6 @@
 const z = require('zod');
 const {
   ClassVisibility,
-  ClassStatus,
   ClassType,
   INTENSITY_MIN,
   INTENSITY_MAX,
@@ -61,7 +60,9 @@ const createClassSchema = z
       .min(INTENSITY_MIN, Messages.CLASS_INTENSITY_INVALID)
       .max(INTENSITY_MAX, Messages.CLASS_INTENSITY_INVALID),
     visibility: toUpperEnum(ClassVisibility, Messages.CLASS_VISIBILITY_INVALID),
-    classPassEnabled: z.boolean({ error: Messages.CLASS_CLASSPASS_ENABLED_REQUIRED }).default(false),
+    classPassEnabled: z
+      .boolean({ error: Messages.CLASS_CLASSPASS_ENABLED_REQUIRED })
+      .default(false),
     classpassSpots: z
       .preprocess(
         (val) => (val === undefined || val === null ? 0 : val),
@@ -91,9 +92,7 @@ const createClassSchema = z
         .nullable()
         .optional(),
     ),
-    coachIds: z
-      .array(z.string().uuid({ message: Messages.CLASS_COACH_NOT_FOUND }))
-      .optional(),
+    coachIds: z.array(z.string().uuid({ message: Messages.CLASS_COACH_NOT_FOUND })).optional(),
     eligiblePlanIds: z
       .array(z.string().uuid({ message: Messages.CLASS_PLAN_NOT_FOUND }))
       .optional(),
@@ -219,9 +218,7 @@ const patchFieldsSchema = z.object({
       .nullable()
       .optional(),
   ),
-  coachIds: z
-    .array(z.string().uuid({ message: Messages.CLASS_COACH_NOT_FOUND }))
-    .optional(),
+  coachIds: z.array(z.string().uuid({ message: Messages.CLASS_COACH_NOT_FOUND })).optional(),
   version: z.number().int().min(1).optional(),
 });
 
@@ -314,9 +311,11 @@ const listClassesQuerySchema = z.object({
   ),
   status: z.preprocess(
     (v) => (typeof v === 'string' ? v.trim().toLowerCase() : v),
-    z.enum(['active', 'deactivated', 'archived', 'all'], {
-      error: Messages.CLASS_STATUS_INVALID,
-    }).optional(),
+    z
+      .enum(['active', 'deactivated', 'archived', 'all'], {
+        error: Messages.CLASS_STATUS_INVALID,
+      })
+      .optional(),
   ),
   active: z.preprocess(
     (v) => (typeof v === 'string' ? v.trim().toLowerCase() : v),

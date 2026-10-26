@@ -35,7 +35,11 @@ describe('class, slot and session data model', () => {
       ['baseCapacity 0', { baseCapacity: 0 }, 'classes_base_capacity_check'],
       ['durationMin 0', { durationMin: 0 }, 'classes_duration_check'],
       ['durationMin negative', { durationMin: -5 }, 'classes_duration_check'],
-      ['classpassSpots negative', { classPassEnabled: true, classpassSpots: -1 }, 'classes_classpass_enabled_check'],
+      [
+        'classpassSpots negative',
+        { classPassEnabled: true, classpassSpots: -1 },
+        'classes_classpass_enabled_check',
+      ],
       [
         'classpassSpots above baseCapacity',
         { classPassEnabled: true, baseCapacity: 5, classpassSpots: 6 },
@@ -55,14 +59,23 @@ describe('class, slot and session data model', () => {
       ['intensity 1', { intensity: 1 }],
       ['intensity 5', { intensity: 5 }],
       ['colour #0F2269', { colour: '#0F2269' }],
-      ['classpassSpots equal to baseCapacity', { classPassEnabled: true, baseCapacity: 5, classpassSpots: 5 }],
+      [
+        'classpassSpots equal to baseCapacity',
+        { classPassEnabled: true, baseCapacity: 5, classpassSpots: 5 },
+      ],
     ])('accepts %s', async (_label, overrides) => {
       await expect(createTestClass(PREFIX, overrides)).resolves.toMatchObject({ version: 1 });
     });
 
     it('defaults to active, no classpass spots and version 1', async () => {
       const cls = await createTestClass(PREFIX);
-      expect(cls).toMatchObject({ status: 'ACTIVE', classPassEnabled: false, classpassSpots: 0, version: 1, intensity: 3 });
+      expect(cls).toMatchObject({
+        status: 'ACTIVE',
+        classPassEnabled: false,
+        classpassSpots: 0,
+        version: 1,
+        intensity: 3,
+      });
     });
   });
 

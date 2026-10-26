@@ -182,10 +182,7 @@ const listClasses = async ({ where, page = 1, pageSize = 100 }, client = prisma)
   return { classes, total };
 };
 
-const createClassWithPlans = async (
-  { data, planIds = [], coachIds = [] },
-  client = prisma,
-) => {
+const createClassWithPlans = async ({ data, planIds = [], coachIds = [] }, client = prisma) => {
   const id = crypto.randomUUID();
   const dedupedPlanIds = Array.from(new Set(planIds));
   const dedupedCoachIds = Array.from(new Set(coachIds));
@@ -314,7 +311,8 @@ const deactivateClass = async (id, client = prisma) => {
 
 const activateClass = async (id, client = prisma) => {
   return client.$transaction(async (tx) => {
-    const rows = await tx.$queryRaw`SELECT id, name, status FROM classes WHERE id = ${id} FOR UPDATE`;
+    const rows =
+      await tx.$queryRaw`SELECT id, name, status FROM classes WHERE id = ${id} FOR UPDATE`;
     const cls = rows && rows[0];
     if (!cls) return null;
 

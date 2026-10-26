@@ -1,5 +1,5 @@
 const { Role } = require('../constants/roles');
-const { ClassVisibility, ClassStatus } = require('../constants/class');
+const { ClassVisibility } = require('../constants/class');
 const { Messages } = require('../constants/messages');
 const { AppErrors } = require('../constants/errors');
 const { createAppError } = require('../errors/AppError');
@@ -110,8 +110,9 @@ const listClasses = async ({ user, query }) => {
 };
 
 const getClass = async ({ user, classRecord }) => {
-  const isActive =
-    classRecord.status ? classRecord.status === 'ACTIVE' : Boolean(classRecord.active);
+  const isActive = classRecord.status
+    ? classRecord.status === 'ACTIVE'
+    : Boolean(classRecord.active);
 
   if (user.role === Role.MEMBER) {
     if (!isActive || classRecord.visibility !== ClassVisibility.PUBLIC) {

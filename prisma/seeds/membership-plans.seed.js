@@ -16,27 +16,12 @@ const {
   findByExternalRef,
 } = require('../../src/repositories/membershipPlan.repository');
 const prisma = require('../../src/config/prisma');
+const { getCellValue } = require('./xlsx.util');
 
 const GLOFOX_SEED_CONFIG = {
   defaultPath: path.join(__dirname, '../../docs/Spirit_Level_Glofox_Business_Data.xlsx'),
   sheetName: 'Memberships',
   headerRow: 4,
-};
-
-const getCellValue = (cell) => {
-  if (!cell || cell.value === null || cell.value === undefined) return '';
-  const val = cell.value;
-  if (typeof val === 'object') {
-    if (val.result !== null && val.result !== undefined) return String(val.result).trim();
-    if (val.text !== null && val.text !== undefined) return String(val.text).trim();
-    if (Array.isArray(val.richText)) {
-      return val.richText
-        .map((r) => r.text || '')
-        .join('')
-        .trim();
-    }
-  }
-  return String(val).trim();
 };
 
 const parseDuration = (str) => {

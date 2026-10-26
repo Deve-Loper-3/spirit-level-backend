@@ -108,14 +108,17 @@ model EmergencyContact {
 }
 
 model Coach {
-  id        String      @id
-  userId    String      @unique
-  user      User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  id        String              @id
+  userId    String              @unique
+  user      User                @relation(fields: [userId], references: [id], onDelete: Cascade)
   coachType CoachType
   bio       String?
-  status    CoachStatus @default(ACTIVE)
-  createdAt DateTime    @default(now())
-  updatedAt DateTime    @updatedAt
+  status    CoachStatus         @default(ACTIVE)
+  classes   ClassCoach[]
+  slots     ClassSlotCoach[]
+  sessions  ClassSessionCoach[]
+  createdAt DateTime            @default(now())
+  updatedAt DateTime            @updatedAt
 
   @@index([status])
   @@index([coachType])
@@ -219,10 +222,10 @@ enum PlanStatus {
 }
 
 model MembershipPlan {
-  id                       String            @id
+  id                       String              @id
   name                     String
   kind                     PlanKind
-  price                    Decimal           @db.Decimal(10, 2)
+  price                    Decimal             @db.Decimal(10, 2)
   billingCycle             PlanBillingCycle
   creditType               PlanCreditType
   creditsIncluded          Int
@@ -230,18 +233,144 @@ model MembershipPlan {
   validityValue            Int
   validityUnit             PlanValidityUnit
   startsOn                 PlanStartsOn
-  oneTimePurchasePerClient Boolean           @default(false)
+  oneTimePurchasePerClient Boolean             @default(false)
   visibility               PlanVisibility
-  status                   PlanStatus        @default(ACTIVE)
+  status                   PlanStatus          @default(ACTIVE)
   description              String?
-  externalRef              String?           @unique
-  version                  Int               @default(1)
-  createdAt                DateTime          @default(now())
-  updatedAt                DateTime          @updatedAt
+  externalRef              String?             @unique
+  version                  Int                 @default(1)
+  eligibleClasses          ClassEligiblePlan[]
+  createdAt                DateTime            @default(now())
+  updatedAt                DateTime            @updatedAt
 
   @@index([status])
   @@index([kind])
   @@index([creditType])
   @@index([status, creditType])
   @@map("membership_plans")
+}
+
+enum ClassVisibility {
+  PUBLIC
+  PRIVATE
+}
+
+enum SessionState {
+  OPEN
+  FULL
+  CANCELLED
+}
+
+// Template side. Partial unique index on LOWER(name) WHERE active and the CHECK constraints
+// live in the migration SQL (Prisma cannot express them). `version` is bumped by a DB trigger.
+model Class {
+  id             String              @id
+  name           String
+  description    String?
+  durationMin    Int
+  baseCapacity   Int
+  intensity      Int?
+  visibility     ClassVisibility
+  classpassSpots Int                 @default(0)
+  colour         String?
+  photoUrl       String?
+  active         Boolean             @default(true)
+  externalRef    String?             @unique
+  version        Int                 @default(1)
+  coaches        ClassCoach[]
+  eligiblePlans  ClassEligiblePlan[]
+  slots          ClassSlot[]
+  sessions       ClassSession[]
+  createdAt      DateTime            @default(now())
+  updatedAt      DateTime            @updatedAt
+
+  @@index([active])
+  @@map("classes")
+}
+
+model ClassCoach {
+  classId String
+  class   Class  @relation(fields: [classId], references: [id], onDelete: Cascade)
+  coachId String
+  coach   Coach  @relation(fields: [coachId], references: [id], onDelete: Cascade)
+
+  @@id([classId, coachId])
+  @@index([coachId])
+  @@map("class_coaches")
+}
+
+model ClassEligiblePlan {
+  classId String
+  class   Class          @relation(fields: [classId], references: [id], onDelete: Cascade)
+  planId  String
+  plan    MembershipPlan @relation(fields: [planId], references: [id], onDelete: Restrict)
+
+  @@id([classId, planId])
+  @@index([planId])
+  @@map("class_eligible_plans")
+}
+
+// Weekly template. `dayOfWeek` is ISO (Monday = 1), `startTime` is Asia/Dubai wall-clock time,
+// `capacity` null = use Class.baseCapacity. The end time is startTime + Class.durationMin.
+model ClassSlot {
+  id        String           @id
+  classId   String
+  class     Class            @relation(fields: [classId], references: [id], onDelete: Cascade)
+  dayOfWeek Int
+  startTime DateTime         @db.Time(0)
+  capacity  Int?
+  active    Boolean          @default(true)
+  coaches   ClassSlotCoach[]
+  sessions  ClassSession[]
+  createdAt DateTime         @default(now())
+  updatedAt DateTime         @updatedAt
+
+  @@unique([classId, dayOfWeek, startTime])
+  @@map("class_slots")
+}
+
+model ClassSlotCoach {
+  slotId  String
+  slot    ClassSlot @relation(fields: [slotId], references: [id], onDelete: Cascade)
+  coachId String
+  coach   Coach     @relation(fields: [coachId], references: [id], onDelete: Cascade)
+
+  @@id([slotId, coachId])
+  @@index([coachId])
+  @@map("class_slot_coaches")
+}
+
+// Instance side. slotId null = one-off. startAt/endAt/capacity are snapshots taken at creation.
+model ClassSession {
+  id           String              @id
+  classId      String
+  class        Class               @relation(fields: [classId], references: [id], onDelete: Restrict)
+  slotId       String?
+  slot         ClassSlot?          @relation(fields: [slotId], references: [id], onDelete: SetNull)
+  startAt      DateTime
+  endAt        DateTime
+  capacity     Int
+  state        SessionState        @default(OPEN)
+  isPrivate    Boolean             @default(false)
+  cancelReason String?
+  version      Int                 @default(1)
+  coaches      ClassSessionCoach[]
+  createdAt    DateTime            @default(now())
+  updatedAt    DateTime            @updatedAt
+
+  @@unique([classId, startAt])
+  @@index([startAt])
+  @@index([slotId])
+  @@map("class_sessions")
+}
+
+model ClassSessionCoach {
+  sessionId String
+  session   ClassSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  coachId   String
+  coach     Coach        @relation(fields: [coachId], references: [id], onDelete: Restrict)
+
+  @@id([sessionId, coachId])
+  @@index([coachId])
+  @@map("class_session_coaches")
 }

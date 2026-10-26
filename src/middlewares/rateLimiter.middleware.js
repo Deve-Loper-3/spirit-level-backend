@@ -41,10 +41,15 @@ const planLimiter = createPlanLimiter();
 // Reads get their own counter so browsing the list never uses up the create budget.
 const planReadLimiter = createPlanLimiter();
 
+const classLimiter = createPlanLimiter();
+const classReadLimiter = createPlanLimiter();
+
 module.exports = {
   createAuthLimiter,
   authLimiter,
   createPlanLimiter,
   planLimiter,
   planReadLimiter,
+  classLimiter,
+  classReadLimiter,
 };

@@ -1332,7 +1332,508 @@ paths:
         '405':
           $ref: '#/components/responses/MethodNotAllowed'
 
+  /api/v1/classes:
+    get:
+      tags: [Classes]
+      summary: List classes
+      description: |
+        Available to OWNER, ADMIN, COACH, MEMBER.
+        Members only see active public classes.
+        Coaches see active public classes plus classes they are assigned to.
+        Staff (OWNER, ADMIN) default to active classes, and can specify active=false or active=all.
+      operationId: listClasses
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: visibility
+          in: query
+          description: Filter by visibility (public | private)
+          schema:
+            type: string
+            enum: [public, private]
+        - name: active
+          in: query
+          description: Filter by active status (true | false | all). Defaults to true for staff.
+          schema:
+            type: string
+            enum: [true, false, all]
+        - name: page
+          in: query
+          description: Page number, minimum 1
+          schema:
+            type: integer
+            default: 1
+        - name: pageSize
+          in: query
+          description: Items per page, maximum 100
+          schema:
+            type: integer
+            default: 100
+      responses:
+        '200':
+          description: List of classes with pagination metadata
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [success, data, meta]
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/ClassResponse'
+                  meta:
+                    type: object
+                    required: [page, pageSize, total]
+                    properties:
+                      page:
+                        type: integer
+                        example: 1
+                      pageSize:
+                        type: integer
+                        example: 100
+                      total:
+                        type: integer
+                        example: 12
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '422':
+          $ref: '#/components/responses/ValidationFailed'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+    post:
+      tags: [Classes]
+      summary: Create a class
+      description: |
+        Available to OWNER, ADMIN.
+        Public classes require >= 1 eligiblePlanIds. Private classes may have none.
+      operationId: createClass
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateClassRequest'
+      responses:
+        '201':
+          description: Class created successfully
+          headers:
+            Location:
+              description: URI of the newly created class
+              schema:
+                type: string
+                example: /api/v1/classes/62d97cd0-0000-4000-8000-000000000001
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [success, message, data]
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  message:
+                    type: string
+                    example: Class created successfully
+                  data:
+                    $ref: '#/components/schemas/ClassResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '409':
+          description: Class with this name already exists
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                success: false
+                message: A class with this name already exists
+                code: CLASS_DUPLICATE_NAME
+        '422':
+          $ref: '#/components/responses/ValidationFailed'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+
+  /api/v1/classes/{id}:
+    get:
+      tags: [Classes]
+      summary: Get class by ID
+      description: |
+        Available to all authenticated roles.
+        Members only see active public classes.
+        Coaches see active public classes or assigned classes.
+      operationId: getClass
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Class details
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [success, data]
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  data:
+                    $ref: '#/components/schemas/ClassResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          description: Class not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                success: false
+                message: Class not found
+                code: CLASS_NOT_FOUND
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+    patch:
+      tags: [Classes]
+      summary: Update a class
+      description: |
+        Available to OWNER, ADMIN.
+        Supports optimistic locking if version is sent.
+        Rejects active, eligiblePlanIds, externalRef with 422.
+      operationId: updateClass
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateClassRequest'
+      responses:
+        '200':
+          description: Class updated successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [success, message, data]
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  message:
+                    type: string
+                    example: Class updated successfully
+                  data:
+                    $ref: '#/components/schemas/ClassResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          description: Conflict (duplicate name, version mismatch, or inactive class)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '422':
+          $ref: '#/components/responses/ValidationFailed'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+
+  /api/v1/classes/{id}/deactivate:
+    post:
+      tags: [Classes]
+      summary: Deactivate a class
+      description: |
+        Available to OWNER, ADMIN.
+        Deactivates class (active=false). Blocks with 409 if future booked sessions exist.
+      operationId: deactivateClass
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Class deactivated successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [success, message, data]
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  message:
+                    type: string
+                    example: Class deactivated successfully
+                  data:
+                    type: object
+                    required: [id, active]
+                    properties:
+                      id:
+                        type: string
+                        format: uuid
+                      active:
+                        type: boolean
+                        example: false
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          description: Class has future bookings
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [success, message, code, details]
+                properties:
+                  success:
+                    type: boolean
+                    example: false
+                  message:
+                    type: string
+                    example: Class has future sessions with bookings and cannot be deactivated
+                  code:
+                    type: string
+                    example: CLASS_HAS_FUTURE_BOOKINGS
+                  details:
+                    type: object
+                    properties:
+                      sessionCount:
+                        type: integer
+                        example: 3
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+
+  /api/v1/classes/{id}/activate:
+    post:
+      tags: [Classes]
+      summary: Activate a deactivated class
+      description: |
+        Available to OWNER, ADMIN.
+        Restores a deactivated or archived class to ACTIVE. Validates name against active classes (409 CLASS_DUPLICATE_NAME).
+      operationId: activateClass
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Class activated successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [success, message, data]
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  message:
+                    type: string
+                    example: Class activated successfully
+                  data:
+                    type: object
+                    required: [id, status, active]
+                    properties:
+                      id:
+                        type: string
+                        format: uuid
+                      status:
+                        type: string
+                        example: active
+                      active:
+                        type: boolean
+                        example: true
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          description: Active class with this name already exists
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                success: false
+                message: A class with this name already exists
+                code: CLASS_DUPLICATE_NAME
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+
+  /api/v1/classes/{id}/archive:
+    post:
+      tags: [Classes]
+      summary: Archive a class
+      description: |
+        Available to OWNER, ADMIN.
+        Archives a class (status=archived, active=false). Idempotent. Blocks if future booked sessions exist.
+      operationId: archiveClass
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Class archived successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [success, message, data]
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  message:
+                    type: string
+                    example: Class archived successfully
+                  data:
+                    type: object
+                    required: [id, status, active]
+                    properties:
+                      id:
+                        type: string
+                        format: uuid
+                      status:
+                        type: string
+                        example: archived
+                      active:
+                        type: boolean
+                        example: false
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          description: Class has future bookings
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+
+  /api/v1/classes/{id}/eligibility:
+    put:
+      tags: [Classes]
+      summary: Replace eligible plans for a class
+      description: |
+        Available to OWNER, ADMIN.
+        Replaces the whole list of plan IDs atomically.
+      operationId: updateClassEligibility
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [planIds]
+              properties:
+                planIds:
+                  type: array
+                  items:
+                    type: string
+                    format: uuid
+      responses:
+        '200':
+          description: Eligibility updated successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [success, message, data]
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  message:
+                    type: string
+                    example: Class eligibility updated successfully
+                  data:
+                    type: object
+                    required: [classId, planIds]
+                    properties:
+                      classId:
+                        type: string
+                        format: uuid
+                      planIds:
+                        type: array
+                        items:
+                          type: string
+                          format: uuid
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/ValidationFailed'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+
 components:
+
   securitySchemes:
     bearerAuth:
       type: http
@@ -2319,3 +2820,244 @@ components:
         updatedAt:
           type: string
           format: date-time
+
+    ClassCoachItem:
+      type: object
+      required: [id, fullName]
+      properties:
+        id:
+          type: string
+          format: uuid
+        fullName:
+          type: string
+          example: Coach Alex
+        profileImageUrl:
+          type: string
+          nullable: true
+          example: https://cdn.example.com/coach.jpg
+
+    ClassResponse:
+      type: object
+      required:
+        - id
+        - name
+        - durationMin
+        - baseCapacity
+        - intensity
+        - classType
+        - classPassEnabled
+        - visibility
+        - classpassSpots
+        - status
+        - active
+        - version
+        - coaches
+        - eligiblePlanIds
+        - createdAt
+        - updatedAt
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+          example: Hyrox Engine
+        description:
+          type: string
+          nullable: true
+          example: High intensity conditioning engine building.
+        durationMin:
+          type: integer
+          example: 60
+        baseCapacity:
+          type: integer
+          example: 24
+        intensity:
+          type: integer
+          minimum: 1
+          maximum: 5
+          example: 4
+        classType:
+          type: string
+          enum: [onsite, online]
+          example: onsite
+        classPassEnabled:
+          type: boolean
+          example: true
+        visibility:
+          type: string
+          enum: [public, private]
+          example: public
+        classpassSpots:
+          type: integer
+          example: 4
+        colour:
+          type: string
+          nullable: true
+          example: '#FF5733'
+        photoUrl:
+          type: string
+          nullable: true
+          example: https://cdn.example.com/classes/hyrox-engine.png
+        status:
+          type: string
+          enum: [active, deactivated, archived]
+          example: active
+        active:
+          type: boolean
+          description: Backward-compatible boolean flag equal to status === 'active'
+          example: true
+        version:
+          type: integer
+          example: 1
+        coaches:
+          type: array
+          items:
+            $ref: '#/components/schemas/ClassCoachItem'
+        eligiblePlanIds:
+          type: array
+          items:
+            type: string
+            format: uuid
+        scheduleSummary:
+          type: string
+          nullable: true
+          example: Mon, Wed, Fri 06:00
+        recurringSchedule:
+          type: array
+          items:
+            type: object
+        upcomingInstancesSummary:
+          type: string
+          nullable: true
+          example: Next session tomorrow 06:00
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+
+    CreateClassRequest:
+      type: object
+      required:
+        - name
+        - durationMin
+        - baseCapacity
+        - intensity
+        - visibility
+      properties:
+        name:
+          type: string
+          minLength: 2
+          maxLength: 80
+          example: Hyrox Engine
+        description:
+          type: string
+          maxLength: 1000
+          nullable: true
+          example: High intensity conditioning engine building.
+        durationMin:
+          type: integer
+          minimum: 15
+          maximum: 240
+          example: 60
+        baseCapacity:
+          type: integer
+          minimum: 1
+          maximum: 200
+          example: 24
+        intensity:
+          type: integer
+          minimum: 1
+          maximum: 5
+          example: 4
+        classType:
+          type: string
+          enum: [onsite, online]
+          default: onsite
+          example: onsite
+        classPassEnabled:
+          type: boolean
+          default: false
+          example: true
+        visibility:
+          type: string
+          enum: [public, private]
+          example: public
+        classpassSpots:
+          type: integer
+          minimum: 0
+          default: 0
+          example: 4
+        colour:
+          type: string
+          nullable: true
+          pattern: '^#[0-9A-Fa-f]{6}$'
+          example: '#FF5733'
+        photoUrl:
+          type: string
+          nullable: true
+          example: https://cdn.example.com/classes/hyrox-engine.png
+        coachIds:
+          type: array
+          items:
+            type: string
+            format: uuid
+        eligiblePlanIds:
+          type: array
+          items:
+            type: string
+            format: uuid
+
+    UpdateClassRequest:
+      type: object
+      properties:
+        name:
+          type: string
+          minLength: 2
+          maxLength: 80
+        description:
+          type: string
+          maxLength: 1000
+          nullable: true
+        durationMin:
+          type: integer
+          minimum: 15
+          maximum: 240
+        baseCapacity:
+          type: integer
+          minimum: 1
+          maximum: 200
+        intensity:
+          type: integer
+          minimum: 1
+          maximum: 5
+        classType:
+          type: string
+          enum: [onsite, online]
+        classPassEnabled:
+          type: boolean
+        visibility:
+          type: string
+          enum: [public, private]
+        classpassSpots:
+          type: integer
+          minimum: 0
+        colour:
+          type: string
+          nullable: true
+          pattern: '^#[0-9A-Fa-f]{6}$'
+        photoUrl:
+          type: string
+          nullable: true
+        coachIds:
+          type: array
+          items:
+            type: string
+            format: uuid
+        version:
+          type: integer
+          description: Optional optimistic locking check
+
+

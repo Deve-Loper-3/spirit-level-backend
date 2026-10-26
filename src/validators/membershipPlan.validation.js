@@ -22,10 +22,10 @@ const {
   PLAN_DESCRIPTION_MAX_LENGTH,
 } = require('../constants/membershipPlan');
 const { Messages } = require('../constants/messages');
-const { AppErrors } = require('../constants/errors');
 const { DEFAULT_PAGE_SIZE, MAX_PAGE_SIZE } = require('../constants/pagination');
+
 const { parseSort } = require('../utils/sort.util');
-const { sendError } = require('../utils/apiResponse.util');
+const { sendValidationFailed } = require('../utils/validationError.util');
 const { toEditableFields } = require('../repositories/membershipPlan.mapper');
 const { pageField, buildSizeField } = require('./pagination.validation');
 
@@ -254,18 +254,6 @@ const listPlansQuerySchema = z.object({
   }),
   sort: sortField,
 });
-
-// 422 with every failing field, like the create validation.
-const sendValidationFailed = (res, error) =>
-  sendError(res, {
-    statusCode: 422,
-    message: Messages.VALIDATION_FAILED,
-    code: AppErrors.VALIDATION_ERROR.code,
-    errors: error.issues.map((issue) => ({
-      field: issue.path.join('.'),
-      message: issue.message,
-    })),
-  });
 
 const validateListPlansQuery = (req, res, next) => {
   const result = listPlansQuerySchema.safeParse(req.query);

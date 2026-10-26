@@ -12,14 +12,27 @@ const deleteTestClasses = async (prefix, client = prisma) => {
 // A valid public class in the database; `overrides` change any column. The name always starts
 // with `prefix`, so deleteTestClasses removes it.
 const createTestClass = (prefix, overrides = {}, client = prisma) => {
+  const { active, ...restOverrides } = overrides;
+  let status = restOverrides.status || 'ACTIVE';
+  if (active === false && !restOverrides.status) {
+    status = 'DEACTIVATED';
+  } else if (active === true && !restOverrides.status) {
+    status = 'ACTIVE';
+  }
+
   return client.class.create({
     data: {
       id: crypto.randomUUID(),
       name: `${prefix}${crypto.randomUUID()}`,
       durationMin: 60,
       baseCapacity: 12,
+      classType: 'ONSITE',
+      intensity: 3,
+      classPassEnabled: false,
+      classpassSpots: 0,
       visibility: 'PUBLIC',
-      ...overrides,
+      status,
+      ...restOverrides,
     },
   });
 };
@@ -51,4 +64,17 @@ const createTestSession = (classId, overrides = {}, client = prisma) => {
   });
 };
 
-module.exports = { deleteTestClasses, createTestClass, createTestSlot, createTestSession };
+const linkTestClassPlan = (classId, planId, client = prisma) =>
+  client.classEligiblePlan.create({ data: { classId, planId } });
+
+const linkTestClassCoach = (classId, coachId, client = prisma) =>
+  client.classCoach.create({ data: { classId, coachId } });
+
+module.exports = {
+  deleteTestClasses,
+  createTestClass,
+  createTestSlot,
+  createTestSession,
+  linkTestClassPlan,
+  linkTestClassCoach,
+};

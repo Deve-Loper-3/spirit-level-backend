@@ -25,7 +25,11 @@ const classSchema = z.object({
   description: z.string().nullable(),
   durationMin: z.number().int().positive(),
   baseCapacity: z.number().int().min(1),
+  classType: z.enum(['ONSITE', 'ONLINE']).default('ONSITE'),
+  intensity: z.number().int().min(1).max(5).default(3),
   visibility: z.enum([ClassVisibility.PUBLIC, ClassVisibility.PRIVATE]),
+  classPassEnabled: z.boolean().default(false),
+  classpassSpots: z.number().int().min(0).default(0),
   photoUrl: z.string().nullable(),
   externalRef: z.string().min(1),
 });
@@ -254,7 +258,11 @@ const runSeed = async (filePath, options = {}) => {
       description: programme.description || null,
       durationMin: parseDurationMin(programme.duration),
       baseCapacity: programme.capacities.length ? Math.min(...programme.capacities) : null,
+      classType: 'ONSITE',
+      intensity: 3, // Seeded placeholder value; flagged in report and CODEMAP
       visibility: programme.visibility,
+      classPassEnabled: false,
+      classpassSpots: 0,
       photoUrl: programme.photoUrl || null,
       externalRef: programme.programmeIds[0],
     });

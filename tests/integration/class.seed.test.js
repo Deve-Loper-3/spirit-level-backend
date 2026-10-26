@@ -133,14 +133,14 @@ describe('classes.seed runner with a generated workbook', () => {
     ]);
 
     const [closed, endurance, engine] = classes;
-    expect(closed).toMatchObject({ visibility: 'PRIVATE', baseCapacity: 1, intensity: null });
+    expect(closed).toMatchObject({ visibility: 'PRIVATE', baseCapacity: 1, intensity: 3 });
     expect(endurance).toMatchObject({
       durationMin: 90,
       baseCapacity: 24,
       externalRef: `${REF_PREFIX}2`,
       photoUrl: 'https://example.test/a.png',
       classpassSpots: 0,
-      active: true,
+      status: 'ACTIVE',
       version: 1,
     });
     expect(engine.photoUrl).toBeNull();

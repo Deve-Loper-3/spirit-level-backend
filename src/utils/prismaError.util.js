@@ -10,4 +10,11 @@ const isUniqueConstraintError = (err) => hasPrismaCode(err, PRISMA_UNIQUE_VIOLAT
 
 const isRecordNotFoundError = (err) => hasPrismaCode(err, PRISMA_RECORD_NOT_FOUND);
 
-module.exports = { isUniqueConstraintError, isRecordNotFoundError };
+const RESTRICT_SETTING_SUBSTRING = 'violates RESTRICT setting';
+
+const isRestrictViolationError = (err) =>
+  Boolean(
+    err && typeof err.message === 'string' && err.message.includes(RESTRICT_SETTING_SUBSTRING),
+  );
+
+module.exports = { isUniqueConstraintError, isRecordNotFoundError, isRestrictViolationError };

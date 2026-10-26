@@ -158,6 +158,47 @@ const Messages = Object.freeze({
   PLAN_STATUS_REASON_INVALID: 'Reason must be text of at most 200 characters',
   METHOD_NOT_ALLOWED: 'Method not allowed for this route',
   PLAN_REFILL_MONTHLY_RESTRICTION: 'creditRefill can only be MONTHLY when billingCycle is MONTH',
+
+  // Classes
+  CLASS_NOT_FOUND: 'Class not found',
+  CLASS_DUPLICATE_NAME: 'A class with this name already exists',
+  CLASS_VERSION_CONFLICT:
+    'The class has been updated by another user. Please reload and try again.',
+  CLASS_INACTIVE: 'An inactive class cannot be edited',
+  CLASS_HAS_FUTURE_BOOKINGS: 'Class has future sessions with bookings and cannot be deactivated',
+  RESOURCE_IN_USE:
+    'Cannot delete or modify record because it is currently referenced by other resources',
+  CLASS_CREATED_SUCCESS: 'Class created successfully',
+  CLASS_UPDATED_SUCCESS: 'Class updated successfully',
+  CLASS_DEACTIVATED_SUCCESS: 'Class deactivated successfully',
+  CLASS_ACTIVATED_SUCCESS: 'Class activated successfully',
+  CLASS_ARCHIVED_SUCCESS: 'Class archived successfully',
+  CLASS_ELIGIBILITY_UPDATED_SUCCESS: 'Class eligibility updated successfully',
+  CLASS_NAME_REQUIRED: 'Class name is required',
+  CLASS_NAME_INVALID: 'Class name must be between 2 and 80 characters',
+  CLASS_DESCRIPTION_MAX: 'Description must be at most 1000 characters',
+  CLASS_DURATION_INVALID: 'Duration must be an integer between 15 and 240 minutes',
+  CLASS_BASE_CAPACITY_INVALID: 'Base capacity must be an integer between 1 and 200',
+  CLASS_INTENSITY_INVALID: 'Intensity must be an integer between 1 and 5',
+  CLASS_VISIBILITY_INVALID: 'Visibility must be one of: public, private',
+  CLASS_TYPE_INVALID: 'Class type must be one of: onsite, online',
+  CLASS_CLASSPASS_ENABLED_REQUIRED: 'classPassEnabled must be a boolean',
+  CLASS_CLASSPASS_DISABLED_SPOTS_MUST_BE_ZERO:
+    'ClassPass spots must be 0 when ClassPass is disabled',
+  CLASS_CLASSPASS_SPOTS_INVALID: 'Classpass spots must be an integer between 0 and base capacity',
+  CLASS_COLOUR_INVALID: 'Colour must be a valid hex code in the format #RRGGBB',
+  CLASS_PHOTO_URL_INVALID: 'Photo URL must be a valid HTTPS URL up to 2048 characters',
+  CLASS_PUBLIC_REQUIRES_PLANS: 'A public class must have at least one eligible membership plan',
+  CLASS_PLAN_NOT_FOUND: 'One or more plan IDs do not exist',
+  CLASS_PLAN_ARCHIVED: 'Archived plans cannot be assigned to a class',
+  CLASS_COACH_NOT_FOUND: 'One or more coach IDs do not exist or are not active',
+  CLASS_STATUS_INVALID: 'Status must be one of: active, deactivated, archived, all',
+  CLASS_FIELD_NOT_EDITABLE: 'This field cannot be edited',
+  CLASS_ELIGIBILITY_USE_ENDPOINT:
+    'Eligible plans cannot be edited here, use PUT /api/v1/classes/:id/eligibility',
+  CLASS_DEACTIVATE_USE_ENDPOINT:
+    'Active status cannot be edited here, use POST /api/v1/classes/:id/deactivate',
+  CLASS_UPDATE_EMPTY: 'Provide at least one field to update',
 });
 
 module.exports = { Messages };

@@ -59,10 +59,22 @@ const createTestData = (label) => {
 
   const cleanup = async () => {
     await prisma.auditLog.deleteMany({
-      where: { OR: [{ userId: { in: userIds } }, { email: { in: emails } }] },
+      where: {
+        OR: [
+          { userId: { in: userIds } },
+          { email: { in: emails } },
+          { email: { startsWith: `test_${label}_` } },
+        ],
+      },
     });
     await prisma.user.deleteMany({
-      where: { OR: [{ id: { in: userIds } }, { email: { in: emails } }] },
+      where: {
+        OR: [
+          { id: { in: userIds } },
+          { email: { in: emails } },
+          { email: { startsWith: `test_${label}_` } },
+        ],
+      },
     });
   };
 

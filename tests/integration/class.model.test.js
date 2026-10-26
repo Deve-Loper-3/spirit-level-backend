@@ -35,11 +35,16 @@ describe('class, slot and session data model', () => {
       ['baseCapacity 0', { baseCapacity: 0 }, 'classes_base_capacity_check'],
       ['durationMin 0', { durationMin: 0 }, 'classes_duration_check'],
       ['durationMin negative', { durationMin: -5 }, 'classes_duration_check'],
-      ['classpassSpots negative', { classpassSpots: -1 }, 'classes_classpass_spots_check'],
+      ['classpassSpots negative', { classPassEnabled: true, classpassSpots: -1 }, 'classes_classpass_enabled_check'],
       [
         'classpassSpots above baseCapacity',
-        { baseCapacity: 5, classpassSpots: 6 },
-        'classes_classpass_spots_check',
+        { classPassEnabled: true, baseCapacity: 5, classpassSpots: 6 },
+        'classes_classpass_enabled_check',
+      ],
+      [
+        'classpassSpots > 0 when classPassEnabled is false',
+        { classPassEnabled: false, baseCapacity: 10, classpassSpots: 2 },
+        'classes_classpass_enabled_check',
       ],
       ['colour not a hex code', { colour: 'red' }, 'classes_colour_check'],
     ])('rejects %s', async (_label, overrides, constraint) => {
@@ -49,16 +54,15 @@ describe('class, slot and session data model', () => {
     it.each([
       ['intensity 1', { intensity: 1 }],
       ['intensity 5', { intensity: 5 }],
-      ['intensity null', { intensity: null }],
       ['colour #0F2269', { colour: '#0F2269' }],
-      ['classpassSpots equal to baseCapacity', { baseCapacity: 5, classpassSpots: 5 }],
+      ['classpassSpots equal to baseCapacity', { classPassEnabled: true, baseCapacity: 5, classpassSpots: 5 }],
     ])('accepts %s', async (_label, overrides) => {
       await expect(createTestClass(PREFIX, overrides)).resolves.toMatchObject({ version: 1 });
     });
 
     it('defaults to active, no classpass spots and version 1', async () => {
       const cls = await createTestClass(PREFIX);
-      expect(cls).toMatchObject({ active: true, classpassSpots: 0, version: 1, intensity: null });
+      expect(cls).toMatchObject({ status: 'ACTIVE', classPassEnabled: false, classpassSpots: 0, version: 1, intensity: 3 });
     });
   });
 
@@ -71,15 +75,15 @@ describe('class, slot and session data model', () => {
     });
 
     it('allows the same name once the earlier class is inactive', async () => {
-      const first = await createTestClass(PREFIX, { active: false });
+      const first = await createTestClass(PREFIX, { status: 'DEACTIVATED' });
       await expect(createTestClass(PREFIX, { name: first.name })).resolves.toBeDefined();
     });
 
     it('rejects reactivating a class whose name is taken by an active one', async () => {
-      const inactive = await createTestClass(PREFIX, { active: false });
+      const inactive = await createTestClass(PREFIX, { status: 'DEACTIVATED' });
       await createTestClass(PREFIX, { name: inactive.name });
       await expect(
-        prisma.class.update({ where: { id: inactive.id }, data: { active: true } }),
+        prisma.class.update({ where: { id: inactive.id }, data: { status: 'ACTIVE' } }),
       ).rejects.toMatchObject({ code: 'P2002' });
     });
   });

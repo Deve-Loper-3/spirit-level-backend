@@ -255,36 +255,49 @@ enum ClassVisibility {
   PRIVATE
 }
 
+enum ClassStatus {
+  ACTIVE
+  DEACTIVATED
+  ARCHIVED
+}
+
+enum ClassType {
+  ONSITE
+  ONLINE
+}
+
 enum SessionState {
   OPEN
   FULL
   CANCELLED
 }
 
-// Template side. Partial unique index on LOWER(name) WHERE active and the CHECK constraints
+// Template side. Partial unique index on LOWER(name) WHERE status = 'ACTIVE' and the CHECK constraints
 // live in the migration SQL (Prisma cannot express them). `version` is bumped by a DB trigger.
 model Class {
-  id             String              @id
-  name           String
-  description    String?
-  durationMin    Int
-  baseCapacity   Int
-  intensity      Int?
-  visibility     ClassVisibility
-  classpassSpots Int                 @default(0)
-  colour         String?
-  photoUrl       String?
-  active         Boolean             @default(true)
-  externalRef    String?             @unique
-  version        Int                 @default(1)
-  coaches        ClassCoach[]
-  eligiblePlans  ClassEligiblePlan[]
-  slots          ClassSlot[]
-  sessions       ClassSession[]
-  createdAt      DateTime            @default(now())
-  updatedAt      DateTime            @updatedAt
+  id               String              @id
+  name             String
+  description      String?
+  durationMin      Int
+  classType        ClassType           @default(ONSITE)
+  baseCapacity     Int
+  intensity        Int
+  visibility       ClassVisibility
+  classPassEnabled Boolean             @default(false)
+  classpassSpots   Int                 @default(0)
+  colour           String?
+  photoUrl         String?
+  status           ClassStatus         @default(ACTIVE)
+  externalRef      String?             @unique
+  version          Int                 @default(1)
+  coaches          ClassCoach[]
+  eligiblePlans    ClassEligiblePlan[]
+  slots            ClassSlot[]
+  sessions         ClassSession[]
+  createdAt        DateTime            @default(now())
+  updatedAt        DateTime            @updatedAt
 
-  @@index([active])
+  @@index([status])
   @@map("classes")
 }
 
@@ -351,12 +364,13 @@ model ClassSession {
   endAt        DateTime
   capacity     Int
   state        SessionState        @default(OPEN)
-  isPrivate    Boolean             @default(false)
-  cancelReason String?
-  version      Int                 @default(1)
-  coaches      ClassSessionCoach[]
-  createdAt    DateTime            @default(now())
-  updatedAt    DateTime            @updatedAt
+  isPrivate        Boolean             @default(false)
+  cancelReason     String?
+  overriddenFields String[]            @default([])
+  version          Int                 @default(1)
+  coaches          ClassSessionCoach[]
+  createdAt        DateTime            @default(now())
+  updatedAt        DateTime            @updatedAt
 
   @@unique([classId, startAt])
   @@index([startAt])

@@ -146,6 +146,36 @@ const AppErrors = Object.freeze({
     message: Messages.METHOD_NOT_ALLOWED,
     code: 'METHOD_NOT_ALLOWED',
   }),
+  CLASS_NOT_FOUND: Object.freeze({
+    statusCode: 404,
+    message: Messages.CLASS_NOT_FOUND,
+    code: 'CLASS_NOT_FOUND',
+  }),
+  CLASS_DUPLICATE_NAME: Object.freeze({
+    statusCode: 409,
+    message: Messages.CLASS_DUPLICATE_NAME,
+    code: 'CLASS_DUPLICATE_NAME',
+  }),
+  CLASS_VERSION_CONFLICT: Object.freeze({
+    statusCode: 409,
+    message: Messages.CLASS_VERSION_CONFLICT,
+    code: 'CLASS_VERSION_CONFLICT',
+  }),
+  CLASS_INACTIVE: Object.freeze({
+    statusCode: 409,
+    message: Messages.CLASS_INACTIVE,
+    code: 'CLASS_INACTIVE',
+  }),
+  CLASS_HAS_FUTURE_BOOKINGS: Object.freeze({
+    statusCode: 409,
+    message: Messages.CLASS_HAS_FUTURE_BOOKINGS,
+    code: 'CLASS_HAS_FUTURE_BOOKINGS',
+  }),
+  RESOURCE_IN_USE: Object.freeze({
+    statusCode: 409,
+    message: Messages.RESOURCE_IN_USE,
+    code: 'RESOURCE_IN_USE',
+  }),
 });
 
 module.exports = { AppErrors };

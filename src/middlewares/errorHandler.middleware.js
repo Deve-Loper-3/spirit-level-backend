@@ -4,6 +4,7 @@ const logger = require('../config/logger');
 const { sendError } = require('../utils/apiResponse.util');
 const { Messages } = require('../constants/messages');
 const { AppErrors } = require('../constants/errors');
+const { isRestrictViolationError } = require('../utils/prismaError.util');
 
 const PRISMA_UNIQUE_VIOLATION = 'P2002';
 // createAppError(status, message) falls back to this code; it tells the client nothing.
@@ -48,6 +49,15 @@ const errorHandler = (err, req, res, _next) => {
     });
   }
 
+  // Postgres RESTRICT foreign key violation
+  if (isRestrictViolationError(err)) {
+    return sendError(res, {
+      statusCode: 409,
+      message: Messages.RESOURCE_IN_USE,
+      code: AppErrors.RESOURCE_IN_USE.code,
+    });
+  }
+
   const statusCode = err.statusCode || err.status || 500;
   const isOperational = Boolean(err.isOperational || err.expose);
 
@@ -56,11 +66,13 @@ const errorHandler = (err, req, res, _next) => {
   }
 
   if (isOperational) {
-    const errors =
-      err.errors ||
-      (Array.isArray(err.details) ? err.details : err.details ? [err.details] : undefined);
+    const errors = err.errors || (Array.isArray(err.details) ? err.details : undefined);
+    const details =
+      err.details && !Array.isArray(err.details) && typeof err.details === 'object'
+        ? err.details
+        : undefined;
     const code = err.code && err.code !== GENERIC_ERROR_CODE ? err.code : undefined;
-    return sendError(res, { statusCode, message: err.message, code, errors });
+    return sendError(res, { statusCode, message: err.message, code, errors, details });
   }
 
   // Unexpected / programmer error — reveal nothing to client

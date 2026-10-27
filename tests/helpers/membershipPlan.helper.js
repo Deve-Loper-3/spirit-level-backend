@@ -55,9 +55,33 @@ const findPlanAudits = (planId, action, client = prisma) => {
   });
 };
 
+const deleteTestMemberships = async (prefix, client = prisma) => {
+  return client.membership.deleteMany({
+    where: {
+      name: {
+        startsWith: prefix,
+        mode: 'insensitive',
+      },
+    },
+  });
+};
+
+const createTestMembership = (prefix, overrides = {}, client = prisma) => {
+  return client.membership.create({
+    data: {
+      id: crypto.randomUUID(),
+      name: `${prefix}${crypto.randomUUID()}`,
+      description: 'Test membership description',
+      ...overrides,
+    },
+  });
+};
+
 module.exports = {
   deleteTestPlans,
   deleteTestPlanAudits,
   createTestPlan,
   findPlanAudits,
+  deleteTestMemberships,
+  createTestMembership,
 };

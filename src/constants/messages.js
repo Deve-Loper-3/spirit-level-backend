@@ -127,6 +127,14 @@ const Messages = Object.freeze({
   IMAGE_UPLOAD_NOT_CONFIGURED: 'Image upload is not available right now',
   IMAGE_DELETE_FAILED: 'Failed to delete image from storage',
 
+  // Memberships
+  MEMBERSHIP_CREATED_SUCCESS: 'Membership created successfully',
+  MEMBERSHIP_EXISTS: 'A membership with this name already exists',
+  MEMBERSHIP_NOT_FOUND: 'Membership not found',
+  MEMBERSHIP_NAME_REQUIRED: 'Name is required',
+  MEMBERSHIP_NAME_MAX_LENGTH: 'Name must not exceed 80 characters',
+  MEMBERSHIP_DESCRIPTION_MAX_LENGTH: 'Description must not exceed 500 characters',
+
   // Membership plans
   PLAN_CREATED_SUCCESS: 'Membership plan created successfully',
   PLAN_DUPLICATE_NAME: 'A membership plan with this name already exists',

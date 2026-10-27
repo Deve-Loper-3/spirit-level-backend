@@ -7,7 +7,12 @@ const planRoutes = require('../../src/routes/plan.routes');
 const { planReadLimiter } = require('../../src/middlewares/rateLimiter.middleware');
 const { createTestData } = require('../helpers/testData.helper');
 const { bearerFor } = require('../helpers/auth.helper');
-const { deleteTestPlans, createTestPlan } = require('../helpers/membershipPlan.helper');
+const {
+  deleteTestPlans,
+  createTestPlan,
+  createTestMembership,
+  deleteTestMemberships,
+} = require('../helpers/membershipPlan.helper');
 
 jest.setTimeout(60000);
 
@@ -37,6 +42,7 @@ describe('GET /api/v1/plans/:id', () => {
 
   afterAll(async () => {
     await deleteTestPlans(PREFIX);
+    await deleteTestMemberships(PREFIX);
     await testData.cleanup();
     await prisma.$disconnect();
   });
@@ -81,9 +87,46 @@ describe('GET /api/v1/plans/:id', () => {
       version: 1,
       section: 'class_membership',
       creditSummary: '10 class credits a month',
+      creditNote: '10 class credits a month',
       activeClientCount: 0,
+      membershipId: null,
+      membership: null,
+      term: null,
+      recurring: false,
+      periodMonths: null,
+      joiningFee: 0,
       createdAt: plan.createdAt.toISOString(),
       updatedAt: plan.updatedAt.toISOString(),
+    });
+  });
+
+  it('returns full record with membershipId, nested membership, term, recurring, periodMonths, joiningFee', async () => {
+    const mem = await createTestMembership(PREFIX, {
+      name: `${PREFIX}LinkedMem_${Date.now()}`,
+      description: 'Linked Desc',
+    });
+    const linkedPlan = await createTestPlan(PREFIX, {
+      membershipId: mem.id,
+      term: '3 Months',
+      recurring: true,
+      periodMonths: 3,
+      joiningFee: 75,
+    });
+
+    const res = await getAs(users.owner, linkedPlan.id);
+    expect(res.status).toBe(200);
+    expect(res.body.data).toMatchObject({
+      id: linkedPlan.id,
+      membershipId: mem.id,
+      membership: {
+        id: mem.id,
+        name: mem.name,
+        description: 'Linked Desc',
+      },
+      term: '3 Months',
+      recurring: true,
+      periodMonths: 3,
+      joiningFee: 75,
     });
   });
 

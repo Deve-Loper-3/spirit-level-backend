@@ -79,6 +79,8 @@ const PLAN_LIST_ITEM_FIELDS = Object.freeze([
   'visibility',
   'status',
   'activeClientCount',
+  'membershipId',
+  'membership',
 ]);
 
 // The only status moves a plan allows; a status missing from a row has no moves. Same-status
@@ -104,6 +106,10 @@ const PLAN_EDITABLE_FIELDS = Object.freeze([
   'oneTimePurchasePerClient',
   'visibility',
   'description',
+  'membershipId',
+  'term',
+  'recurring',
+  'periodMonths',
 ]);
 
 // Sent in a PATCH body they are rejected (status has its own endpoint).
@@ -113,6 +119,7 @@ const PLAN_NON_EDITABLE_FIELDS = Object.freeze([
   'status',
   'version',
   'externalRef',
+  'joiningFee',
   'createdAt',
   'updatedAt',
 ]);

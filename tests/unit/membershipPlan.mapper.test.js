@@ -69,6 +69,41 @@ describe('membershipPlan.mapper - toMembershipPlanResponse', () => {
     expect(res.price).toBe(449.5);
   });
 
+  it('maps membershipId and nested membership when populated, null when standalone', () => {
+    const standalone = toMembershipPlanResponse(basePlan);
+    expect(standalone.membershipId).toBeNull();
+    expect(standalone.membership).toBeNull();
+
+    const withMem = toMembershipPlanResponse({
+      ...basePlan,
+      membershipId: 'mem-1',
+      membership: { id: 'mem-1', name: 'Gold Club', description: 'VIP' },
+    });
+    expect(withMem.membershipId).toBe('mem-1');
+    expect(withMem.membership).toEqual({
+      id: 'mem-1',
+      name: 'Gold Club',
+      description: 'VIP',
+    });
+  });
+
+  it('maps term, recurring, periodMonths, joiningFee, creditSummary, and creditNote', () => {
+    const fullPlan = {
+      ...basePlan,
+      term: '12 Months',
+      recurring: true,
+      periodMonths: 12,
+      joiningFee: { toNumber: () => 150 },
+    };
+    const res = toMembershipPlanResponse(fullPlan);
+    expect(res.term).toBe('12 Months');
+    expect(res.recurring).toBe(true);
+    expect(res.periodMonths).toBe(12);
+    expect(res.joiningFee).toBe(150);
+    expect(res.creditSummary).toBe('10 class credits');
+    expect(res.creditNote).toBe('10 class credits');
+  });
+
   it('returns null when input is falsy', () => {
     expect(toMembershipPlanResponse(null)).toBeNull();
     expect(toMembershipPlanResponse(undefined)).toBeNull();

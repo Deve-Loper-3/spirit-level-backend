@@ -141,4 +141,50 @@ describe('membershipPlan.validation - membershipPlanSchema', () => {
       expect(result.data.price).toBe(449.5);
     }
   });
+
+  it('validates membershipId (UUID) and rejects invalid format', () => {
+    const validUuid = '123e4567-e89b-12d3-a456-426614174000';
+    const validRes = membershipPlanSchema.safeParse({
+      ...validSubscription,
+      membershipId: validUuid,
+    });
+    expect(validRes.success).toBe(true);
+
+    const invalidRes = membershipPlanSchema.safeParse({
+      ...validSubscription,
+      membershipId: 'not-a-uuid',
+    });
+    expect(invalidRes.success).toBe(false);
+  });
+
+  it('rejects mutual exclusivity violation when both membershipId and membership are provided', () => {
+    const validUuid = '123e4567-e89b-12d3-a456-426614174000';
+    const res = membershipPlanSchema.safeParse({
+      ...validSubscription,
+      membershipId: validUuid,
+      membership: { name: 'New Membership' },
+    });
+    expect(res.success).toBe(false);
+    expect(res.error.issues.some((i) => i.message.includes('mutually exclusive'))).toBe(true);
+  });
+
+  it('validates periodMonths allowed values (1, 3, 6, 12)', () => {
+    for (const val of [1, 3, 6, 12]) {
+      const res = membershipPlanSchema.safeParse({ ...validSubscription, periodMonths: val });
+      expect(res.success).toBe(true);
+    }
+    const invalidRes = membershipPlanSchema.safeParse({ ...validSubscription, periodMonths: 5 });
+    expect(invalidRes.success).toBe(false);
+  });
+
+  it('validates joiningFee defaults to 0 and rejects negative numbers', () => {
+    const res = membershipPlanSchema.safeParse({ ...validSubscription, joiningFee: undefined });
+    expect(res.success).toBe(true);
+    if (res.success) {
+      expect(res.data.joiningFee).toBe(0);
+    }
+
+    const negRes = membershipPlanSchema.safeParse({ ...validSubscription, joiningFee: -10 });
+    expect(negRes.success).toBe(false);
+  });
 });

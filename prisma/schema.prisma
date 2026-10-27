@@ -222,6 +222,16 @@ enum PlanStatus {
   ARCHIVED
 }
 
+model Membership {
+  id          String           @id
+  name        String
+  description String?
+  createdAt   DateTime         @default(now())
+  plans       MembershipPlan[]
+
+  @@map("memberships")
+}
+
 model MembershipPlan {
   id                       String              @id
   name                     String
@@ -240,6 +250,12 @@ model MembershipPlan {
   description              String?
   externalRef              String?             @unique
   version                  Int                 @default(1)
+  membershipId             String?
+  membership               Membership?         @relation(fields: [membershipId], references: [id], onDelete: Restrict)
+  term                     String?
+  recurring                Boolean             @default(false)
+  periodMonths             Int?
+  joiningFee               Decimal             @default(0) @db.Decimal(10, 2)
   eligibleClasses          ClassEligiblePlan[]
   createdAt                DateTime            @default(now())
   updatedAt                DateTime            @updatedAt
@@ -248,6 +264,7 @@ model MembershipPlan {
   @@index([kind])
   @@index([creditType])
   @@index([status, creditType])
+  @@index([membershipId])
   @@map("membership_plans")
 }
 

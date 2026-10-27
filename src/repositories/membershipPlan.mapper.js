@@ -39,6 +39,13 @@ const toEditableFields = (source) => ({
   price: Number(source.price),
   creditRefill: source.creditRefill ?? null,
   description: source.description ?? null,
+  membershipId: source.membershipId ?? null,
+  term: source.term ?? null,
+  recurring: Boolean(source.recurring),
+  periodMonths:
+    source.periodMonths !== null && source.periodMonths !== undefined
+      ? Number(source.periodMonths)
+      : null,
 });
 
 const toMembershipPlanResponse = (plan, { activeClientCount = 0 } = {}) => {
@@ -47,6 +54,23 @@ const toMembershipPlanResponse = (plan, { activeClientCount = 0 } = {}) => {
     plan.price !== null && plan.price !== undefined && typeof plan.price.toNumber === 'function'
       ? plan.price.toNumber()
       : Number(plan.price);
+
+  const joiningFee =
+    plan.joiningFee !== null &&
+    plan.joiningFee !== undefined &&
+    typeof plan.joiningFee.toNumber === 'function'
+      ? plan.joiningFee.toNumber()
+      : Number(plan.joiningFee ?? 0);
+
+  const membership = plan.membership
+    ? {
+        id: plan.membership.id,
+        name: plan.membership.name,
+        description: plan.membership.description ?? null,
+      }
+    : null;
+
+  const creditSummary = formatCreditSummary(plan);
 
   return {
     id: plan.id,
@@ -66,8 +90,18 @@ const toMembershipPlanResponse = (plan, { activeClientCount = 0 } = {}) => {
     description: plan.description ?? null,
     version: plan.version,
     section: toSection(plan.creditType),
-    creditSummary: formatCreditSummary(plan),
+    creditSummary,
+    creditNote: creditSummary,
     activeClientCount,
+    membershipId: plan.membershipId ?? null,
+    membership,
+    term: plan.term ?? null,
+    recurring: Boolean(plan.recurring),
+    periodMonths:
+      plan.periodMonths !== null && plan.periodMonths !== undefined
+        ? Number(plan.periodMonths)
+        : null,
+    joiningFee,
     createdAt: plan.createdAt,
     updatedAt: plan.updatedAt,
   };

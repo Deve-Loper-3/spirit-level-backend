@@ -1,6 +1,7 @@
 const { isUniqueConstraintError } = require('../utils/prismaError.util');
 const { createAppError } = require('../errors/AppError');
 const { AppErrors } = require('../constants/errors');
+const { Messages } = require('../constants/messages');
 const { AuditAction } = require('../constants/audit');
 const {
   PlanStatus,
@@ -19,6 +20,11 @@ const {
   updatePlanWithAudit,
   changePlanStatusWithAudit,
 } = require('../repositories/membershipPlan.repository');
+const {
+  findById: findMembershipById,
+  findByName: findMembershipByName,
+} = require('../repositories/membership.repository');
+const { isMembershipNameUniqueError } = require('./membership.service');
 const {
   toMembershipPlanResponse,
   toSection,
@@ -53,7 +59,36 @@ const createPlan = async ({ actor, payload, meta }) => {
     throw createAppError(AppErrors.PLAN_DUPLICATE_NAME);
   }
 
-  // 2. Normalize and enforce status = ACTIVE, version = 1, strip externalRef
+  // 2. Membership mode resolution (3 modes)
+  let finalMembershipId = null;
+  let newMembershipData = null;
+
+  if (payload.membershipId) {
+    // Mode 1: Existing membership - verify it exists, else 422
+    const mem = await findMembershipById(payload.membershipId);
+    if (!mem) {
+      throw createAppError(422, Messages.VALIDATION_FAILED, AppErrors.VALIDATION_ERROR.code, [
+        { field: 'membershipId', message: Messages.MEMBERSHIP_NOT_FOUND },
+      ]);
+    }
+    finalMembershipId = payload.membershipId;
+  } else if (payload.membership && payload.membership.name && payload.membership.name.trim()) {
+    // Mode 2: New membership
+    const memName = payload.membership.name.trim();
+    const existingMem = await findMembershipByName(memName);
+    if (existingMem) {
+      throw createAppError(AppErrors.MEMBERSHIP_EXISTS);
+    }
+    newMembershipData = {
+      name: memName,
+      description: payload.membership.description ? payload.membership.description.trim() : null,
+    };
+  } else {
+    // Mode 3: Standalone (membershipId null)
+    finalMembershipId = null;
+  }
+
+  // 3. Normalize and enforce status = ACTIVE, version = 1, strip externalRef
   const creditsIncluded = payload.creditType === PlanCreditType.TIME ? 0 : payload.creditsIncluded;
 
   const planData = {
@@ -71,6 +106,15 @@ const createPlan = async ({ actor, payload, meta }) => {
     visibility: payload.visibility,
     status: PlanStatus.ACTIVE,
     description: payload.description ?? null,
+    term: payload.term ?? null,
+    recurring: Boolean(payload.recurring),
+    periodMonths:
+      payload.periodMonths !== null && payload.periodMonths !== undefined
+        ? Number(payload.periodMonths)
+        : null,
+    joiningFee:
+      payload.joiningFee !== null && payload.joiningFee !== undefined ? payload.joiningFee : 0,
+    membershipId: finalMembershipId,
   };
 
   const auditData = {
@@ -83,9 +127,12 @@ const createPlan = async ({ actor, payload, meta }) => {
   };
 
   try {
-    const created = await createPlanWithAudit({ planData, auditData });
+    const created = await createPlanWithAudit({ planData, auditData, newMembershipData });
     return toMembershipPlanResponse(created, { activeClientCount: 0 });
   } catch (err) {
+    if (newMembershipData && isMembershipNameUniqueError(err)) {
+      throw createAppError(AppErrors.MEMBERSHIP_EXISTS);
+    }
     if (isPlanNameUniqueError(err)) {
       throw createAppError(AppErrors.PLAN_DUPLICATE_NAME);
     }
@@ -161,6 +208,18 @@ const updatePlan = async ({ actor, plan, next, meta }) => {
 
   if (fields.includes('name')) await assertNameAvailable(data.name, plan.id);
   if (fields.includes('creditType')) await assertCreditTypeChangeAllowed(plan, next);
+  if (fields.includes('membershipId')) {
+    if (data.membershipId) {
+      const mem = await findMembershipById(data.membershipId);
+      if (!mem) {
+        throw createAppError(422, Messages.VALIDATION_FAILED, AppErrors.VALIDATION_ERROR.code, [
+          { field: 'membershipId', message: Messages.MEMBERSHIP_NOT_FOUND },
+        ]);
+      }
+    } else {
+      data.membershipId = null;
+    }
+  }
 
   const auditFor = (updated) => ({
     action: AuditAction.PLAN_UPDATED,

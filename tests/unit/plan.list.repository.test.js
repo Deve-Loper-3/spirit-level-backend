@@ -83,6 +83,7 @@ describe('listPlans', () => {
       orderBy: [{ price: 'desc' }, { id: 'asc' }],
       skip: 10,
       take: 5,
+      include: { membership: true },
     });
     expect(prisma.membershipPlan.count).toHaveBeenCalledWith({ where });
     expect(prisma.$queryRaw).not.toHaveBeenCalled();
@@ -101,6 +102,7 @@ describe('listPlans', () => {
       expect(prisma.membershipPlan.findMany).toHaveBeenCalledTimes(1);
       expect(prisma.membershipPlan.findMany).toHaveBeenCalledWith({
         where: buildListWhere({ q: 'x' }),
+        include: { membership: true },
       });
       const sql = prisma.$queryRaw.mock.calls[0][0].join('?');
       expect(sql).toContain('"membership_plans"');

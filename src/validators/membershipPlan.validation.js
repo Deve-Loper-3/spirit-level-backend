@@ -104,6 +104,37 @@ const membershipPlanSchema = z
     status: toUpperEnum(PlanStatus).default(PlanStatus.ACTIVE),
     description: z.string().trim().max(PLAN_DESCRIPTION_MAX_LENGTH).nullable().optional(),
     externalRef: z.string().trim().nullable().optional(),
+    term: z.string().trim().max(100).nullable().optional(),
+    recurring: z.boolean().default(false),
+    periodMonths: z
+      .preprocess(
+        (val) => (val === null || val === undefined || val === '' ? null : Number(val)),
+        z
+          .number()
+          .int()
+          .refine((val) => [1, 3, 6, 12].includes(val), {
+            message: 'periodMonths must be 1, 3, 6, or 12',
+          })
+          .nullable()
+          .optional(),
+      ),
+    joiningFee: z
+      .preprocess(
+        (val) => (val === undefined || val === null || val === '' ? 0 : Number(val)),
+        z.number().min(0).default(0),
+      ),
+    membershipId: z
+      .preprocess(
+        (val) => (val === '' ? null : val),
+        z.string().uuid({ message: 'membershipId must be a valid UUID' }).nullable().optional(),
+      ),
+    membership: z
+      .object({
+        name: z.string().trim().min(1, Messages.MEMBERSHIP_NAME_REQUIRED).max(80),
+        description: z.string().trim().max(500).nullable().optional(),
+      })
+      .nullable()
+      .optional(),
   })
   .superRefine((data, ctx) => {
     // 1. Time plans must have 0 credits or omitted (defaults to 0)
@@ -155,6 +186,22 @@ const membershipPlanSchema = z
         code: z.ZodIssueCode.custom,
         message: Messages.PLAN_RENEW_SUBSCRIPTION_ONLY,
         path: ['billingCycle'],
+      });
+    }
+
+    // 5. Mutual exclusivity: membershipId OR membership { name, description }
+    const hasMembershipId = Boolean(data.membershipId);
+    const hasNewMembership = Boolean(
+      data.membership &&
+        typeof data.membership === 'object' &&
+        data.membership.name &&
+        data.membership.name.trim(),
+    );
+    if (hasMembershipId && hasNewMembership) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: 'membershipId and membership are mutually exclusive',
+        path: ['membershipId'],
       });
     }
   });
@@ -329,6 +376,10 @@ const validateCreatePlan = (req, res, next) => {
     if ('externalRef' in req.body) {
       delete req.body.externalRef;
     }
+    // Never persist memMode/newMemName/newMemDesc
+    delete req.body.memMode;
+    delete req.body.newMemName;
+    delete req.body.newMemDesc;
     // Force status to ACTIVE
     req.body.status = PlanStatus.ACTIVE;
   }

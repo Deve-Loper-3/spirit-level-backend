@@ -1,6 +1,11 @@
 const prisma = require('../../src/config/prisma');
 const { COMMERCIAL_FIELDS } = require('../../src/constants/membershipPlan');
-const { deleteTestPlans, createTestPlan } = require('../helpers/membershipPlan.helper');
+const {
+  deleteTestPlans,
+  createTestPlan,
+  createTestMembership,
+  deleteTestMemberships,
+} = require('../helpers/membershipPlan.helper');
 
 jest.setTimeout(60000);
 
@@ -39,12 +44,25 @@ describe('membership_plans version trigger', () => {
     status: 'INACTIVE',
     description: 'a different description',
     externalRef: `${PREFIX}ref`,
+    term: '12 months',
+    recurring: true,
+    periodMonths: 12,
+    joiningFee: 25,
+    membershipId: null,
   };
 
   const update = (id, data) => prisma.membershipPlan.update({ where: { id }, data });
 
+  beforeAll(async () => {
+    await deleteTestPlans(PREFIX);
+    await deleteTestMemberships(PREFIX);
+    const testMembership = await createTestMembership(PREFIX);
+    NON_COMMERCIAL_CHANGES.membershipId = testMembership.id;
+  });
+
   afterAll(async () => {
     await deleteTestPlans(PREFIX);
+    await deleteTestMemberships(PREFIX);
     await prisma.$disconnect();
   });
 

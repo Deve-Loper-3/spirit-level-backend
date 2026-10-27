@@ -142,6 +142,8 @@ describe('GET /api/v1/plans', () => {
           'visibility',
           'status',
           'activeClientCount',
+          'membershipId',
+          'membership',
         ].sort(),
       );
       expect(body.data[0]).toMatchObject({

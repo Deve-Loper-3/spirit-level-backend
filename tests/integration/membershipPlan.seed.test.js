@@ -1,9 +1,10 @@
 const path = require('path');
 const { runSeed } = require('../../prisma/seeds/membership-plans.seed');
-const { deleteTestPlans } = require('../helpers/membershipPlan.helper');
+const { deleteTestPlans, createTestMembership, deleteTestMemberships } = require('../helpers/membershipPlan.helper');
 const { findByExternalRef } = require('../../src/repositories/membershipPlan.repository');
 const { toMembershipPlanResponse } = require('../../src/repositories/membershipPlan.mapper');
 const { PlanCreditType, PlanKind, PlanSection } = require('../../src/constants/membershipPlan');
+const prisma = require('../../src/config/prisma');
 
 jest.setTimeout(30000);
 
@@ -13,6 +14,14 @@ describe('membership-plans.seed runner with fixture', () => {
 
   const cleanup = async () => {
     await deleteTestPlans(TEST_PREFIX);
+    await deleteTestMemberships(TEST_PREFIX);
+    await prisma.membership.deleteMany({
+      where: {
+        name: {
+          startsWith: 'Test Membership',
+        },
+      },
+    });
   };
 
   beforeAll(async () => {
@@ -21,9 +30,10 @@ describe('membership-plans.seed runner with fixture', () => {
 
   afterAll(async () => {
     await cleanup();
+    await prisma.$disconnect();
   });
 
-  it('reads fixture, creates valid plans, skips invalid rows, and is idempotent on rerun', async () => {
+  it('reads fixture, creates valid plans, skips invalid rows, groups memberships, respects null-only, and is idempotent on rerun', async () => {
     // 1. First run
     const result1 = await runSeed(fixturePath);
     expect(result1.stats.totalRead).toBe(4);
@@ -33,14 +43,24 @@ describe('membership-plans.seed runner with fixture', () => {
     expect(result1.skippedList).toHaveLength(1);
     expect(result1.skippedList[0].planCode).toBe('test_code_004');
 
-    // 2. Check stored data
+    // 2. Check stored data & membership linking
     const timePlan = await findByExternalRef('test_code_001');
     expect(timePlan).not.toBeNull();
     expect(timePlan.name).toBe('test_slmp01_time_plan');
     expect(timePlan.creditType).toBe(PlanCreditType.TIME);
     expect(timePlan.creditsIncluded).toBe(0);
+    expect(timePlan.membershipId).toBeTruthy();
+
+    const timeMembership = await prisma.membership.findUnique({
+      where: { id: timePlan.membershipId },
+    });
+    expect(timeMembership).not.toBeNull();
+    expect(timeMembership.name).toBe('Test Membership Time');
+
     const mappedTime = toMembershipPlanResponse(timePlan);
     expect(mappedTime.section).toBe(PlanSection.ONLINE_COACHING);
+    expect(mappedTime.membershipId).toBe(timePlan.membershipId);
+    expect(mappedTime.membership.name).toBe('Test Membership Time');
 
     const packPlan = await findByExternalRef('test_code_002');
     expect(packPlan).not.toBeNull();
@@ -54,11 +74,32 @@ describe('membership-plans.seed runner with fixture', () => {
     expect(trialPlan.kind).toBe(PlanKind.TRIAL);
     expect(trialPlan.oneTimePurchasePerClient).toBe(true);
 
-    // 3. Second run (idempotency)
+    // 3. Manual reassignment: manually reassign timePlan to a custom membership
+    const manualMem = await createTestMembership(TEST_PREFIX, { name: `${TEST_PREFIX}Manual Custom` });
+    await prisma.membershipPlan.update({
+      where: { id: timePlan.id },
+      data: { membershipId: manualMem.id },
+    });
+
+    // 4. Second run (idempotency + does NOT overwrite manual reassignment)
     const result2 = await runSeed(fixturePath);
     expect(result2.stats.totalRead).toBe(4);
     expect(result2.stats.created).toBe(0);
     expect(result2.stats.updated).toBe(3);
     expect(result2.stats.skipped).toBe(1);
+
+    // Verify timePlan's membershipId was NOT overwritten by the seed rerun
+    const reloadedTimePlan = await findByExternalRef('test_code_001');
+    expect(reloadedTimePlan.membershipId).toBe(manualMem.id);
+
+    // 5. Verify null-only backfill: if membershipId is null, seed populates it
+    await prisma.membershipPlan.update({
+      where: { id: timePlan.id },
+      data: { membershipId: null },
+    });
+    const result3 = await runSeed(fixturePath);
+    expect(result3.stats.updated).toBe(3);
+    const backfilledTimePlan = await findByExternalRef('test_code_001');
+    expect(backfilledTimePlan.membershipId).toBe(timeMembership.id);
   });
 });

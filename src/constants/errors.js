@@ -116,6 +116,16 @@ const AppErrors = Object.freeze({
     message: Messages.OTP_ATTEMPTS_EXCEEDED,
     code: 'OTP_ATTEMPTS_EXCEEDED',
   }),
+  MEMBERSHIP_EXISTS: Object.freeze({
+    statusCode: 409,
+    message: Messages.MEMBERSHIP_EXISTS,
+    code: 'MEMBERSHIP_EXISTS',
+  }),
+  MEMBERSHIP_NOT_FOUND: Object.freeze({
+    statusCode: 404,
+    message: Messages.MEMBERSHIP_NOT_FOUND,
+    code: 'MEMBERSHIP_NOT_FOUND',
+  }),
   PLAN_DUPLICATE_NAME: Object.freeze({
     statusCode: 409,
     message: Messages.PLAN_DUPLICATE_NAME,

@@ -1,4 +1,5 @@
 const path = require('path');
+const crypto = require('crypto');
 const ExcelJS = require('exceljs');
 const {
   PlanKind,
@@ -127,6 +128,7 @@ const runSeed = async (filePath, options = {}) => {
   const warnings = [];
 
   const seenNames = new Set();
+  const membershipCache = new Map();
 
   for (let r = GLOFOX_SEED_CONFIG.headerRow + 1; r <= worksheet.rowCount; r += 1) {
     const row = worksheet.getRow(r);
@@ -322,17 +324,54 @@ const runSeed = async (filePath, options = {}) => {
 
     const validData = parsed.data;
 
+    // Read and trim Membership column
+    const rawMembership = getRowVal(row, 'Membership');
+    const trimmedMembership = rawMembership ? String(rawMembership).trim() : '';
+
+    let targetMembershipId = null;
+    if (trimmedMembership) {
+      const memKey = trimmedMembership.toLowerCase();
+      let mem = membershipCache.get(memKey);
+      if (!mem) {
+        mem = await client.membership.findFirst({
+          where: {
+            name: {
+              equals: trimmedMembership,
+              mode: 'insensitive',
+            },
+          },
+        });
+        if (!mem) {
+          mem = await client.membership.create({
+            data: {
+              id: crypto.randomUUID(),
+              name: trimmedMembership,
+            },
+          });
+        }
+        membershipCache.set(memKey, mem);
+      }
+      targetMembershipId = mem.id;
+    }
+
     // Upsert by externalRef
     const existing = await findByExternalRef(validData.externalRef, client);
-    await upsertByExternalRef({
-      externalRef: validData.externalRef,
-      data: validData,
-      client,
-    });
-
     if (existing) {
+      // Set membershipId ONLY if currently null (never overwrite manual reassignment)
+      if (existing.membershipId === null && targetMembershipId !== null) {
+        await client.membershipPlan.update({
+          where: { id: existing.id },
+          data: { membershipId: targetMembershipId },
+        });
+      }
       stats.updated += 1;
     } else {
+      validData.membershipId = targetMembershipId;
+      await upsertByExternalRef({
+        externalRef: validData.externalRef,
+        data: validData,
+        client,
+      });
       stats.created += 1;
     }
   }

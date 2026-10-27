@@ -6,7 +6,11 @@ const { AuditAction } = require('../../src/constants/audit');
 const { createPlanLimiter } = require('../../src/middlewares/rateLimiter.middleware');
 const { createTestData } = require('../helpers/testData.helper');
 const { bearerFor } = require('../helpers/auth.helper');
-const { deleteTestPlans } = require('../helpers/membershipPlan.helper');
+const {
+  deleteTestPlans,
+  deleteTestMemberships,
+  createTestMembership,
+} = require('../helpers/membershipPlan.helper');
 
 jest.setTimeout(35000);
 
@@ -21,6 +25,7 @@ describe('POST /api/v1/plans', () => {
 
   const cleanup = async () => {
     await deleteTestPlans(TEST_PREFIX);
+    await deleteTestMemberships(TEST_PREFIX);
     await prisma.auditLog.deleteMany({
       where: {
         reason: { startsWith: TEST_PREFIX },
@@ -365,7 +370,14 @@ describe('POST /api/v1/plans', () => {
           description: hyroxPayload.description,
           section: 'online_coaching',
           creditSummary: 'Time-based access',
+          creditNote: 'Time-based access',
           activeClientCount: 0,
+          membershipId: null,
+          membership: null,
+          term: null,
+          recurring: false,
+          periodMonths: null,
+          joiningFee: 0,
           createdAt: expect.any(String),
           updatedAt: expect.any(String),
         },
@@ -450,6 +462,198 @@ describe('POST /api/v1/plans', () => {
       expect(res2.status).toBe(429);
       expect(res2.body.success).toBe(false);
       expect(res2.body.code).toBe('TOO_MANY_REQUESTS');
+    });
+  });
+
+  describe('SLAPP 84/106 - Membership modes', () => {
+    it('Mode 1: attaches plan to existing membership and returns nested membership', async () => {
+      const existingMem = await createTestMembership(TEST_PREFIX, {
+        name: `${TEST_PREFIX}ExistingMem_${Date.now()}`,
+        description: 'Existing Description',
+      });
+
+      const payload = validPlanPayload({
+        name: `${TEST_PREFIX}Plan Under Mem_${Date.now()}`,
+        membershipId: existingMem.id,
+        term: '1 Year',
+        recurring: true,
+        periodMonths: 12,
+        joiningFee: 100,
+      });
+
+      const res = await request(app)
+        .post('/api/v1/plans')
+        .set('Authorization', bearerFor(adminUser))
+        .send(payload);
+
+      expect(res.status).toBe(201);
+      expect(res.body.success).toBe(true);
+      expect(res.body.data.membershipId).toBe(existingMem.id);
+      expect(res.body.data.membership).toEqual({
+        id: existingMem.id,
+        name: existingMem.name,
+        description: 'Existing Description',
+      });
+      expect(res.body.data.term).toBe('1 Year');
+      expect(res.body.data.recurring).toBe(true);
+      expect(res.body.data.periodMonths).toBe(12);
+      expect(res.body.data.joiningFee).toBe(100);
+    });
+
+    it('Mode 2: creates new membership + plan + audit row in ONE transaction', async () => {
+      const newMemName = `${TEST_PREFIX}NewMem_${Date.now()}`;
+      const payload = validPlanPayload({
+        name: `${TEST_PREFIX}Plan With New Mem_${Date.now()}`,
+        membership: {
+          name: newMemName,
+          description: 'Brand new membership',
+        },
+      });
+
+      const res = await request(app)
+        .post('/api/v1/plans')
+        .set('Authorization', bearerFor(adminUser))
+        .send(payload);
+
+      expect(res.status).toBe(201);
+      expect(res.body.success).toBe(true);
+      expect(res.body.data.membershipId).toBeDefined();
+      expect(res.body.data.membership).toMatchObject({
+        name: newMemName,
+        description: 'Brand new membership',
+      });
+
+      // Verify membership was created in DB
+      const dbMem = await prisma.membership.findUnique({
+        where: { id: res.body.data.membershipId },
+      });
+      expect(dbMem).not.toBeNull();
+      expect(dbMem.name).toBe(newMemName);
+
+      // Verify audit row was created
+      const audits = await prisma.auditLog.findMany({
+        where: { reason: { contains: res.body.data.id } },
+      });
+      expect(audits).toHaveLength(1);
+      expect(audits[0].action).toBe(AuditAction.PLAN_CREATED);
+    });
+
+    it('Mode 3: creates standalone plan when neither membershipId nor membership is provided', async () => {
+      const payload = validPlanPayload({
+        name: `${TEST_PREFIX}Standalone_${Date.now()}`,
+      });
+
+      const res = await request(app)
+        .post('/api/v1/plans')
+        .set('Authorization', bearerFor(adminUser))
+        .send(payload);
+
+      expect(res.status).toBe(201);
+      expect(res.body.data.membershipId).toBeNull();
+      expect(res.body.data.membership).toBeNull();
+    });
+
+    it('rejects mutual exclusivity violation with 422 when both membershipId and membership are provided', async () => {
+      const payload = validPlanPayload({
+        name: `${TEST_PREFIX}Both_${Date.now()}`,
+        membershipId: '123e4567-e89b-12d3-a456-426614174000',
+        membership: { name: 'Some Name' },
+      });
+
+      const res = await request(app)
+        .post('/api/v1/plans')
+        .set('Authorization', bearerFor(adminUser))
+        .send(payload);
+
+      expect(res.status).toBe(422);
+      expect(res.body.code).toBe('VALIDATION_ERROR');
+    });
+
+    it('rejects non-existent membershipId with 422', async () => {
+      const payload = validPlanPayload({
+        name: `${TEST_PREFIX}UnknownMem_${Date.now()}`,
+        membershipId: '00000000-0000-0000-0000-000000000000',
+      });
+
+      const res = await request(app)
+        .post('/api/v1/plans')
+        .set('Authorization', bearerFor(adminUser))
+        .send(payload);
+
+      expect(res.status).toBe(422);
+      expect(res.body.code).toBe('VALIDATION_ERROR');
+      expect(res.body.errors).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({ field: 'membershipId' }),
+        ]),
+      );
+    });
+
+    it('rejects duplicate membership name in Mode 2 with 409 MEMBERSHIP_EXISTS', async () => {
+      const existingMem = await createTestMembership(TEST_PREFIX, {
+        name: `${TEST_PREFIX}DupNameMem_${Date.now()}`,
+      });
+
+      const payload = validPlanPayload({
+        name: `${TEST_PREFIX}Plan Dup Mem_${Date.now()}`,
+        membership: { name: existingMem.name.toUpperCase() },
+      });
+
+      const res = await request(app)
+        .post('/api/v1/plans')
+        .set('Authorization', bearerFor(adminUser))
+        .send(payload);
+
+      expect(res.status).toBe(409);
+      expect(res.body.code).toBe('MEMBERSHIP_EXISTS');
+    });
+
+    it('rolls back entire transaction if plan creation fails during Mode 2', async () => {
+      const existingPlan = await request(app)
+        .post('/api/v1/plans')
+        .set('Authorization', bearerFor(adminUser))
+        .send(validPlanPayload({ name: `${TEST_PREFIX}CollidePlan_${Date.now()}` }));
+      expect(existingPlan.status).toBe(201);
+
+      const uniqueMemName = `${TEST_PREFIX}RollbackMem_${Date.now()}`;
+      // Send colliding plan name with a new membership
+      const failPayload = validPlanPayload({
+        name: existingPlan.body.data.name,
+        membership: { name: uniqueMemName },
+      });
+
+      const res = await request(app)
+        .post('/api/v1/plans')
+        .set('Authorization', bearerFor(adminUser))
+        .send(failPayload);
+
+      expect(res.status).toBe(409);
+      expect(res.body.code).toBe('duplicate_name');
+
+      // Verify the new membership was NOT created (rolled back!)
+      const dbMem = await prisma.membership.findFirst({
+        where: { name: uniqueMemName },
+      });
+      expect(dbMem).toBeNull();
+    });
+
+    it('strips helper fields memMode, newMemName, newMemDesc and creates plan successfully', async () => {
+      const payload = validPlanPayload({
+        name: `${TEST_PREFIX}HelperFields_${Date.now()}`,
+        memMode: 'new',
+        newMemName: 'Helper Name',
+        newMemDesc: 'Helper Desc',
+      });
+
+      const res = await request(app)
+        .post('/api/v1/plans')
+        .set('Authorization', bearerFor(adminUser))
+        .send(payload);
+
+      expect(res.status).toBe(201);
+      expect(res.body.data.memMode).toBeUndefined();
+      expect(res.body.data.newMemName).toBeUndefined();
+      expect(res.body.data.newMemDesc).toBeUndefined();
     });
   });
 });

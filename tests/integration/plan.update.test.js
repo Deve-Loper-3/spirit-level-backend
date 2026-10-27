@@ -14,6 +14,8 @@ const {
   deleteTestPlanAudits,
   createTestPlan,
   findPlanAudits,
+  createTestMembership,
+  deleteTestMemberships,
 } = require('../helpers/membershipPlan.helper');
 
 jest.setTimeout(60000);
@@ -27,6 +29,7 @@ describe('PATCH /api/v1/plans/:id', () => {
   const cleanup = async () => {
     await deleteTestPlanAudits(PREFIX);
     await deleteTestPlans(PREFIX);
+    await deleteTestMemberships(PREFIX);
   };
 
   const patchAs = (user, id, body) =>
@@ -177,6 +180,7 @@ describe('PATCH /api/v1/plans/:id', () => {
       ['externalRef', 'GLOFOX-1'],
       ['createdAt', '2020-01-01T00:00:00.000Z'],
       ['updatedAt', '2020-01-01T00:00:00.000Z'],
+      ['joiningFee', 50],
     ])('rejects %s', async (field, value) => {
       const plan = await createTestPlan(PREFIX);
 
@@ -206,6 +210,93 @@ describe('PATCH /api/v1/plans/:id', () => {
 
       expect(unknown.status).toBe(422);
       expect(empty.status).toBe(422);
+    });
+
+    it('rejects membership object in body with 422', async () => {
+      const plan = await createTestPlan(PREFIX);
+      const res = await patchAs(users.admin, plan.id, { membership: { name: 'New Membership' } });
+
+      expect(res.status).toBe(422);
+      expect(res.body.code).toBe('VALIDATION_ERROR');
+      expect(res.body.errors[0].field).toBe('membership');
+    });
+  });
+
+  describe('Membership assignment via PATCH', () => {
+    it('reassigns a standalone plan to an existing membership and returns nested membership', async () => {
+      const membership = await createTestMembership(PREFIX, { name: `${PREFIX}Gold Tier` });
+      const plan = await createTestPlan(PREFIX, { description: 'standalone before' });
+
+      const res = await patchAs(users.admin, plan.id, { membershipId: membership.id });
+
+      expect(res.status).toBe(200);
+      expect(res.body.data.membershipId).toBe(membership.id);
+      expect(res.body.data.membership).toMatchObject({
+        id: membership.id,
+        name: membership.name,
+      });
+
+      const row = await reload(plan.id);
+      expect(row.membershipId).toBe(membership.id);
+    });
+
+    it('reassigns a membership plan to standalone with null', async () => {
+      const membership = await createTestMembership(PREFIX, { name: `${PREFIX}Silver Tier` });
+      const plan = await createTestPlan(PREFIX, { membershipId: membership.id });
+
+      const res = await patchAs(users.admin, plan.id, { membershipId: null });
+
+      expect(res.status).toBe(200);
+      expect(res.body.data.membershipId).toBeNull();
+      expect(res.body.data.membership).toBeNull();
+
+      const row = await reload(plan.id);
+      expect(row.membershipId).toBeNull();
+    });
+
+    it('reassigns a plan from one membership to another', async () => {
+      const mem1 = await createTestMembership(PREFIX, { name: `${PREFIX}Mem One` });
+      const mem2 = await createTestMembership(PREFIX, { name: `${PREFIX}Mem Two` });
+      const plan = await createTestPlan(PREFIX, { membershipId: mem1.id });
+
+      const res = await patchAs(users.admin, plan.id, { membershipId: mem2.id });
+
+      expect(res.status).toBe(200);
+      expect(res.body.data.membershipId).toBe(mem2.id);
+      expect(res.body.data.membership.name).toBe(mem2.name);
+    });
+
+    it('rejects a non-existent membershipId with 422', async () => {
+      const plan = await createTestPlan(PREFIX);
+      const fakeId = crypto.randomUUID();
+
+      const res = await patchAs(users.admin, plan.id, { membershipId: fakeId });
+
+      expect(res.status).toBe(422);
+      expect(res.body.code).toBe('VALIDATION_ERROR');
+      expect(res.body.errors[0].field).toBe('membershipId');
+    });
+
+    it('rejects an invalid non-UUID membershipId string with 422', async () => {
+      const plan = await createTestPlan(PREFIX);
+
+      const res = await patchAs(users.admin, plan.id, { membershipId: 'not-a-valid-uuid' });
+
+      expect(res.status).toBe(422);
+      expect(res.body.code).toBe('VALIDATION_ERROR');
+      expect(res.body.errors[0].field).toBe('membershipId');
+    });
+
+    it('records membershipId in the audit log', async () => {
+      const mem = await createTestMembership(PREFIX, { name: `${PREFIX}Audit Tier` });
+      const plan = await createTestPlan(PREFIX);
+
+      await patchAs(users.admin, plan.id, { membershipId: mem.id });
+
+      const audits = await findPlanAudits(plan.id, AuditAction.PLAN_UPDATED);
+      expect(audits).toHaveLength(1);
+      const changes = audits[0].details.changes;
+      expect(changes.membershipId).toEqual({ from: null, to: mem.id });
     });
   });
 

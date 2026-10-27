@@ -26,6 +26,7 @@ const upsertByExternalRef = async ({ externalRef, data, client = prisma }) => {
 const findById = async (id, client = prisma) => {
   return client.membershipPlan.findUnique({
     where: { id },
+    include: { membership: true },
   });
 };
 
@@ -33,6 +34,7 @@ const findByExternalRef = async (externalRef, client = prisma) => {
   if (!externalRef) return null;
   return client.membershipPlan.findUnique({
     where: { externalRef },
+    include: { membership: true },
   });
 };
 
@@ -116,6 +118,7 @@ const listByColumn = async ({ where, field, direction, skip, take }) => {
   const [rows, total] = await Promise.all([
     prisma.membershipPlan.findMany({
       where,
+      include: { membership: true },
       orderBy: [{ [field]: direction }, { id: 'asc' }],
       skip,
       take,
@@ -130,7 +133,10 @@ const listByColumn = async ({ where, field, direction, skip, take }) => {
 // only orders and pages their ids, and the rows are put in that order. The catalogue is small, so
 // loading every match is fine; a LOWER(name) index is the later fix if it grows.
 const listByNameOrder = async ({ where, direction, skip, take }) => {
-  const matches = await prisma.membershipPlan.findMany({ where });
+  const matches = await prisma.membershipPlan.findMany({
+    where,
+    include: { membership: true },
+  });
   const total = matches.length;
   if (skip >= total) return { rows: [], total };
 
@@ -177,7 +183,10 @@ const updatePlanWithAudit = async ({ id, data, auditFor }, client = prisma) => {
     });
     if (count === 0) return null;
 
-    const plan = await tx.membershipPlan.findUnique({ where: { id } });
+    const plan = await tx.membershipPlan.findUnique({
+      where: { id },
+      include: { membership: true },
+    });
     await createAuditLog(tx, { ...auditFor(plan), reason: `${plan.name} (${plan.id})` });
     return plan;
   });
@@ -193,19 +202,42 @@ const changePlanStatusWithAudit = async ({ id, from, to, auditFor }, client = pr
     });
     if (count === 0) return null;
 
-    const plan = await tx.membershipPlan.findUnique({ where: { id } });
+    const plan = await tx.membershipPlan.findUnique({
+      where: { id },
+      include: { membership: true },
+    });
     await createAuditLog(tx, { ...auditFor(plan), reason: `${plan.name} (${plan.id})` });
     return plan;
   });
 };
 
-const createPlanWithAudit = async ({ planData, auditData }, client = prisma) => {
+const createPlanWithAudit = async (
+  { planData, auditData, newMembershipData },
+  client = prisma,
+) => {
   return client.$transaction(async (tx) => {
+    let membershipId = planData.membershipId;
+
+    if (newMembershipData) {
+      const createdMembership = await tx.membership.create({
+        data: {
+          id: crypto.randomUUID(),
+          name: newMembershipData.name.trim(),
+          description: newMembershipData.description ? newMembershipData.description.trim() : null,
+        },
+      });
+      membershipId = createdMembership.id;
+    }
+
     const plan = await tx.membershipPlan.create({
       data: {
         id: crypto.randomUUID(),
         ...planData,
+        membershipId,
         version: 1,
+      },
+      include: {
+        membership: true,
       },
     });
 

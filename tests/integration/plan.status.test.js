@@ -14,6 +14,8 @@ const {
   deleteTestPlanAudits,
   createTestPlan,
   findPlanAudits,
+  createTestMembership,
+  deleteTestMemberships,
 } = require('../helpers/membershipPlan.helper');
 
 jest.setTimeout(60000);
@@ -27,6 +29,7 @@ describe('PATCH /api/v1/plans/:id/status', () => {
   const cleanup = async () => {
     await deleteTestPlanAudits(PREFIX);
     await deleteTestPlans(PREFIX);
+    await deleteTestMemberships(PREFIX);
   };
 
   const setStatusAs = (user, id, body) =>
@@ -260,6 +263,42 @@ describe('PATCH /api/v1/plans/:id/status', () => {
 
       expect(detail.body.data.status).toBe('archived');
       expect(list.body.data).toEqual([]);
+    });
+
+    it('deactivate/reactivate keeps membership and other plan data intact', async () => {
+      const membership = await createTestMembership(PREFIX, { name: `${PREFIX}Status Mem` });
+      const plan = await createTestPlan(PREFIX, {
+        membershipId: membership.id,
+        term: '12 months',
+        recurring: true,
+        periodMonths: 12,
+        joiningFee: 25,
+      });
+
+      // Deactivate
+      const resDeact = await setStatusAs(users.admin, plan.id, { status: 'inactive' });
+      expect(resDeact.status).toBe(200);
+
+      // Reactivate
+      const resReact = await setStatusAs(users.admin, plan.id, { status: 'active' });
+      expect(resReact.status).toBe(200);
+
+      // Verify row
+      const row = await reload(plan.id);
+      expect(row.status).toBe('ACTIVE');
+      expect(row.membershipId).toBe(membership.id);
+      expect(row.term).toBe('12 months');
+      expect(row.recurring).toBe(true);
+      expect(row.periodMonths).toBe(12);
+      expect(row.joiningFee.toNumber()).toBe(25);
+
+      // Verify via GET
+      const detail = await request(app)
+        .get(`/api/v1/plans/${plan.id}`)
+        .set('Authorization', bearerFor(users.admin));
+      expect(detail.status).toBe(200);
+      expect(detail.body.data.membershipId).toBe(membership.id);
+      expect(detail.body.data.membership.name).toBe(membership.name);
     });
   });
 

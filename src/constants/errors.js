@@ -176,6 +176,56 @@ const AppErrors = Object.freeze({
     message: Messages.RESOURCE_IN_USE,
     code: 'RESOURCE_IN_USE',
   }),
+  SLOT_NOT_FOUND: Object.freeze({
+    statusCode: 404,
+    message: Messages.SLOT_NOT_FOUND,
+    code: 'SLOT_NOT_FOUND',
+  }),
+  SESSION_NOT_FOUND: Object.freeze({
+    statusCode: 404,
+    message: Messages.SESSION_NOT_FOUND,
+    code: 'SESSION_NOT_FOUND',
+  }),
+  SLOT_CONFLICT: Object.freeze({
+    statusCode: 409,
+    message: Messages.SLOT_CONFLICT,
+    code: 'SLOT_CONFLICT',
+  }),
+  SESSION_CONFLICT: Object.freeze({
+    statusCode: 409,
+    message: Messages.SESSION_CONFLICT,
+    code: 'SESSION_CONFLICT',
+  }),
+  COACH_CONFLICT: Object.freeze({
+    statusCode: 409,
+    message: Messages.COACH_CONFLICT,
+    code: 'COACH_CONFLICT',
+  }),
+  SESSION_VERSION_CONFLICT: Object.freeze({
+    statusCode: 409,
+    message: Messages.SESSION_VERSION_CONFLICT,
+    code: 'SESSION_VERSION_CONFLICT',
+  }),
+  SESSION_PAST_IMMUTABLE: Object.freeze({
+    statusCode: 409,
+    message: Messages.SESSION_PAST_IMMUTABLE,
+    code: 'SESSION_PAST_IMMUTABLE',
+  }),
+  SESSION_NOT_CANCELLED: Object.freeze({
+    statusCode: 409,
+    message: Messages.SESSION_NOT_CANCELLED,
+    code: 'SESSION_NOT_CANCELLED',
+  }),
+  CAPACITY_BELOW_BOOKED: Object.freeze({
+    statusCode: 422,
+    message: Messages.CAPACITY_BELOW_BOOKED,
+    code: 'CAPACITY_BELOW_BOOKED',
+  }),
+  CANCEL_REASON_REQUIRED: Object.freeze({
+    statusCode: 422,
+    message: Messages.CANCEL_REASON_REQUIRED,
+    code: 'CANCEL_REASON_REQUIRED',
+  }),
 });
 
 module.exports = { AppErrors };

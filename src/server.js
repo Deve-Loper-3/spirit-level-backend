@@ -2,12 +2,15 @@ const env = require('./config/env');
 const logger = require('./config/logger');
 const prisma = require('./config/prisma');
 const { createApp } = require('./app');
+const { startScheduleJob, stopScheduleJob } = require('./services/schedule.job');
 
 const SHUTDOWN_TIMEOUT_MS = 10000;
 
 const start = async () => {
   await prisma.$connect();
   logger.info('Database connected');
+
+  startScheduleJob();
 
   const app = createApp();
   const server = app.listen(env.PORT, () => {
@@ -28,6 +31,7 @@ const start = async () => {
     forceExit.unref();
 
     try {
+      stopScheduleJob();
       await new Promise((resolve, reject) => {
         server.close((err) => (err ? reject(err) : resolve()));
       });

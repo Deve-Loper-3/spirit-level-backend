@@ -1,5 +1,5 @@
 const { Role } = require('../constants/roles');
-const { ClassVisibility, ClassStatus } = require('../constants/class');
+const { ClassVisibility } = require('../constants/class');
 const { Messages } = require('../constants/messages');
 const { AppErrors } = require('../constants/errors');
 const { createAppError } = require('../errors/AppError');

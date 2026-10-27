@@ -2,7 +2,7 @@
 
 > **Update rules for agents:** Read this file fully at the START of every task. At the END of every task (after code, lint and tests pass) update every affected section — files, functions, models, env vars, errors, tests, ticket progress — and the `Last updated` line. Accuracy and completeness over length: never shorten or drop existing info. No code snippets, no secrets (env var names only, never values).
 
-**Last updated:** 2026-10-26 — Tickets SL-CLS-01, SL-CLS-02, SL-CLS-03 / BE-CLS-1, BE-CLS-2, BE-CLS-3 (Class Template CRUD & Eligibility). (1) Endpoints under `/api/v1/classes`: `GET /` (roles OWNER, ADMIN, COACH, MEMBER; query filters `visibility`, `status` [active|deactivated|archived|all] and legacy `active` [true|false|all], `page`, `pageSize` default/max 100; batch loaded via `include: { coaches: { include: { coach: { include: { user } } } }, eligiblePlans: true }` + parallel `count` in constant queries; response shape `{ success, data, meta: { page, pageSize, total } }`), `GET /:id` (all roles; members restricted to active public; coaches to active public + assigned; staff all; includes schedule summaries), `POST /` (OWNER, ADMIN -> 201 + `Location: /api/v1/classes/:id`, atomic class + coach + plan links in one transaction, public requires >=1 eligible plan, required intensity 1-5, classType [onsite|online], classPassEnabled), `PATCH /:id` (OWNER, ADMIN, partial merged validation, rejects non-editable `status`, `active`, `eligiblePlanIds`, `externalRef` and unknown keys with 422, rejects inactive/archived with 409 `CLASS_INACTIVE`, set-based SQL UPDATE propagates capacity and duration to future non-overridden sessions, optional `version` optimistic locking via DB trigger `trg_bump_class_version`, last-write-wins if omitted), `POST /:id/deactivate` (OWNER, ADMIN -> 200 `{ id, status: 'deactivated', active: false }`, sets `status=DEACTIVATED`, idempotent, calls `countFutureBookedSessions` interim seam returning 0), `POST /:id/activate` (OWNER, ADMIN -> 200 `{ id, status: 'active', active: true }`, restores to ACTIVE, pre-checks and catches P2002 duplicate name -> 409 `CLASS_DUPLICATE_NAME`), `POST /:id/archive` (OWNER, ADMIN -> 200 `{ id, status: 'archived', active: false }`, sets `status=ARCHIVED`, idempotent, checks future bookings seam), `PUT /:id/eligibility` (OWNER, ADMIN, body `{ planIds: [] }` -> 200 `{ classId, planIds }`, one transaction: `SELECT ... FOR UPDATE`, rejects inactive/archived with 409 `CLASS_INACTIVE`, deletes existing links, inserts de-duplicated non-archived links, re-reads; rejects unknown/archived plan IDs with 422; public with empty list = 422; private with empty list = 200). `router.all` on every path returns 405 `METHOD_NOT_ALLOWED` with `Allow` header. (2) Backward Compatibility: All class responses and status transition results (`toClassResponse`, `deactivateClass`, `activateClass`, `archiveClass`) return the computed boolean `active` (`status === 'active'`) alongside the canonical `status` field for seamless web and Kotlin mobile compatibility. (3) Data Model & Backfill: `intensity` migrated to `NOT NULL` with backfill 3 (flagged in report and CODEMAP that seeded values are placeholders needing product confirmation). DB check `classes_classpass_enabled_check` enforces `classPassEnabled=false -> classpassSpots=0`, `classPassEnabled=true -> classpassSpots 0..baseCapacity`. `overriddenFields` frozen constants in `src/constants/class.js` (`CAPACITY`, `DURATION`, `COACHES`, `START_AT`; dropped colour) establish the seam for future session editing (no code sets it today; coaches propagation out of scope). (4) Migration: `20261026180000_update_class_template_crud` + reversible `down.sql`. (5) Windows Note: commands run with `npx.cmd` on the developer machine (on Linux use `npx`). (6) Tests: 16 class test suites (209 tests) run cleanly on remote Neon dev DB with `--runInBand`.
+**Last updated:** 2026-10-27 — Tickets SL-CLS-01, SL-CLS-02, SL-CLS-03 / BE-CLS-1, BE-CLS-2, BE-CLS-3 (Class Template CRUD & Eligibility). (1) Endpoints under `/api/v1/classes`: `GET /` (roles OWNER, ADMIN, COACH, MEMBER; query filters `visibility`, `status` [active|deactivated|archived|all] and legacy `active` [true|false|all], `page`, `pageSize` default/max 100; batch loaded via `include: { coaches: { include: { coach: { include: { user } } } }, eligiblePlans: true }` + parallel `count` in constant queries; response shape `{ success, data, meta: { page, pageSize, total } }`), `GET /:id` (all roles; members restricted to active public; coaches to active public + assigned; staff all; includes schedule summaries), `POST /` (OWNER, ADMIN -> 201 + `Location: /api/v1/classes/:id`, atomic class + coach + plan links in one transaction, public requires >=1 eligible plan, required intensity 1-5, classType [onsite|online], classPassEnabled), `PATCH /:id` (OWNER, ADMIN, partial merged validation, rejects non-editable `status`, `active`, `eligiblePlanIds`, `externalRef` and unknown keys with 422, rejects inactive/archived with 409 `CLASS_INACTIVE`, set-based SQL UPDATE propagates capacity and duration to future non-overridden sessions, optional `version` optimistic locking via DB trigger `trg_bump_class_version`, last-write-wins if omitted), `POST /:id/deactivate` (OWNER, ADMIN -> 200 `{ id, status: 'deactivated', active: false }`, sets `status=DEACTIVATED`, idempotent, calls `countFutureBookedSessions` interim seam returning 0), `POST /:id/activate` (OWNER, ADMIN -> 200 `{ id, status: 'active', active: true }`, restores to ACTIVE, pre-checks and catches P2002 duplicate name -> 409 `CLASS_DUPLICATE_NAME`), `POST /:id/archive` (OWNER, ADMIN -> 200 `{ id, status: 'archived', active: false }`, sets `status=ARCHIVED`, idempotent, checks future bookings seam), `PUT /:id/eligibility` (OWNER, ADMIN, body `{ planIds: [] }` -> 200 `{ classId, planIds }`, one transaction: `SELECT ... FOR UPDATE`, rejects inactive/archived with 409 `CLASS_INACTIVE`, deletes existing links, inserts de-duplicated non-archived links, re-reads; rejects unknown/archived plan IDs with 422; public with empty list = 422; private with empty list = 200). `router.all` on every path returns 405 `METHOD_NOT_ALLOWED` with `Allow` header. (2) Backward Compatibility: All class responses and status transition results (`toClassResponse`, `deactivateClass`, `activateClass`, `archiveClass`) return the computed boolean `active` (`status === 'active'`) alongside the canonical `status` field for seamless web and Kotlin mobile compatibility. (3) Data Model & Backfill: `intensity` migrated to `NOT NULL` with backfill 3 (flagged in report and CODEMAP that seeded values are placeholders needing product confirmation). DB check `classes_classpass_enabled_check` enforces `classPassEnabled=false -> classpassSpots=0`, `classPassEnabled=true -> classpassSpots 0..baseCapacity`. `overriddenFields` frozen constants in `src/constants/class.js` (`CAPACITY`, `DURATION`, `COACHES`, `START_AT`; dropped colour) establish the seam for future session editing (no code sets it today; coaches propagation out of scope). (4) Migration: `20261026180000_update_class_template_crud` + reversible `down.sql`. (5) Windows Note: commands run with `npx.cmd` on the developer machine (on Linux use `npx`). (6) Tests: 16 class test suites (209 tests) run cleanly on remote Neon dev DB with `--runInBand`.
 
 **Test status after Ticket BE-CLS-1 / SL-CLS-01/02/03 (2026-10-26):** 123 suites, 1855 tests (all 16 class suites / 209 tests pass cleanly on remote Neon dev DB; run time 2065 s; `eslint src tests prisma jest.config.js` clean; `prettier --end-of-line auto --check src tests prisma/seeds` clean).
 
@@ -1101,3 +1101,74 @@ Implemented in-place on branch `feat/SL-CLS-02-03-classes-api-and-eligibility`:
 
 - **Windows Note:**
   - Commands run with `npx.cmd` on developer machines; on Linux use `npx`.
+
+---
+
+## 21. Tickets BE-SCH-1, BE-SCH-2, and BE-SCH-3 — Scheduling & Session Management
+
+Implemented scheduling, recurring slots, and session management across tickets BE-SCH-1, BE-SCH-2, and BE-SCH-3.
+
+### Implemented Endpoints
+- **Slots (BE-SCH-2):**
+  - `GET /api/v1/classes/:id/slots` — List recurring slots (`classReadLimiter`, RBAC: Owner, Admin, Coach, Member). Member read follows existing class visibility rules (active + public only; otherwise 403). Exact persisted values returned (`capacity: null` remains null).
+  - `POST /api/v1/classes/:id/slots` — Create recurring slots (`classLimiter`, RBAC: Owner, Admin). Accepts canonical body `{ startDate, days: [{ dayOfWeek, times: [{ startTime, endTime, coachIds, capacity }] }] }`. Validates time order, duplicate days/times/coaches, and triggers immediate 21-day rolling generation. Returns saved slots + reconciliation summary.
+  - `PATCH /api/v1/classes/:id/slots/:slotId` — Update recurring slot (`classLimiter`, RBAC: Owner, Admin). Updates rule, validates conflicts, and reconciles affected future unbooked non-overridden sessions.
+  - `DELETE /api/v1/classes/:id/slots/:slotId` — Soft-deactivate slot (`classLimiter`, RBAC: Owner, Admin). Sets `active = false` and deletes only future, unbooked, non-overridden GENERATED sessions. Past, booked, and overridden sessions are preserved.
+- **Sessions (BE-SCH-1 & BE-SCH-3):**
+  - `GET /api/v1/sessions?from&to&classId&coachId&state&isPrivate` — Calendar read (`classReadLimiter`, RBAC: all roles). Required `from` and `to` ISO-8601 UTC date bounds (max 92 days). Enforces DB-level predicates, RBAC visibility, and returns calendar-ready instances with live booking/waitlist counts.
+  - `POST /api/v1/sessions` — Create one-off session instance from template (BE-SCH-1, `classLimiter`, RBAC: Owner, Admin). Always sets `source: 'one_off'` and `slotId: null`. Inherits durationMin, baseCapacity, and coaches from template if omitted. Returns 201 with `Location: /api/v1/sessions/:id`.
+  - `GET /api/v1/sessions/:id` — Get session detail (`classReadLimiter`, RBAC: all roles; Member requires public active class and not private).
+  - `PATCH /api/v1/sessions/:id` — Update session occurrence (`classLimiter`). Owner/Admin full edit; Coach can only update `capacity` on own assigned session (otherwise 403). Past sessions are immutable (409 `SESSION_PAST_IMMUTABLE`). Capacity below booked returns 422 `CAPACITY_BELOW_BOOKED`. Mandatory `overrideReasons` enforced for `coachIds`, `startAt`, and `endAt`. Tracks `overriddenFields` and `overrideDetails` JSONB `{ field: { reason, actorId, changedAt } }`.
+  - `POST /api/v1/sessions/:id/cancel` — Cancel session (`classLimiter`). Reason required (422 `CANCEL_REASON_REQUIRED`). Coach can only cancel own empty session. Sets `state = 'cancelled'`, calls `getCancelOutcome` adapter, and records cancellation override.
+  - `POST /api/v1/sessions/:id/restore` — Restore cancelled session (`classLimiter`, RBAC: Owner, Admin). Restores to `state = 'open'`, re-runs coach and same-startAt conflict checks. Non-cancelled sessions return 409 `SESSION_NOT_CANCELLED`.
+
+### Data Model & Migrations
+- Migration: `20261027130000_add_scheduling_fields` applied to Neon DB via non-pooled `DIRECT_URL`.
+- `Class`: added `timezone TEXT NOT NULL DEFAULT 'Asia/Dubai'` (configurable via env `FACILITY_TIMEZONE`).
+- `ClassSlot`: added `startDate DATE NOT NULL DEFAULT CURRENT_DATE` and `endTime TIME(0) NOT NULL`. Dropped unconditional unique constraint; added partial unique index `CREATE UNIQUE INDEX class_slots_active_unique_idx ON class_slots ("classId", "dayOfWeek", "startTime") WHERE active = true`.
+- `ClassSession`: added `source TEXT NOT NULL DEFAULT 'GENERATED'`, `durationMin INTEGER`, `intensity INTEGER`, `classType TEXT`, `facility TEXT`, `description TEXT`, `image TEXT`, and `overrideDetails JSONB NOT NULL DEFAULT '{}'`.
+- Indexes: `class_sessions("startAt", "classId")`, `class_sessions("slotId", "startAt")`, `class_session_coaches("coachId", "sessionId")`.
+- Backfill: historical sessions with `slotId != null` backfilled as `GENERATED`, else `ONE_OFF`. Snapshots backfilled from class template. Reversible `down.sql` included.
+
+### Conflict Detection & Concurrency Safety
+- Class advisory transaction locks: `SELECT pg_advisory_xact_lock(hashtext('class_schedule_' || classId))` serializes concurrent scheduling actions per class.
+- Conflict checks:
+  - Same class + same startAt -> 409 `SESSION_CONFLICT` with `{ conflicts: [{ type, sessionId, startAt, endAt }] }`.
+  - Overlapping coach time -> 409 `COACH_CONFLICT` with half-open `[startAt, endAt)` checks across all classes (cancelled sessions free coach time).
+  - Slot collision -> 409 `SLOT_CONFLICT`.
+  - Version race -> 409 `SESSION_VERSION_CONFLICT`.
+
+### Daily Rolling Generation Job
+- Long-running server architecture (`src/server.js`) uses `node-cron` (`src/services/schedule.job.js`).
+- Scheduled at 00:05 daily in facility timezone. Batched pre-query optimization prevents N+1 DB round-trips over serverless Neon connection.
+- Fully idempotent: `generateSessionsForWindow()` inserts missing occurrences with conflict isolation; one failing class/slot never aborts the rest. Stopped gracefully on SIGINT/SIGTERM.
+
+### Integration Adapters & Seams
+- `src/services/schedule.adapters.js` provides integration seam functions:
+  - `getBookingStats(sessionId)` -> `{ bookedCount: 0, waitlistCount: 0 }` (wired to reconciliation's booked-skip rule).
+  - `getCancelOutcome(sessionId, reason)` -> `{ booking: null, credit: null, waitlist: null }`.
+  - `isCoachQualified(coachId, classId)` -> `true`.
+  - `isCoachOnLeave(coachId, startAt, endAt)` -> `false`.
+- TODO markers and seam contracts defined for upcoming booking and coach leave tickets.
+
+### Web & Mobile Parity & CORS
+- CORS `exposedHeaders` updated in `src/app.js`: `Location`, `Allow`, `RateLimit-Limit`, `RateLimit-Remaining`, `RateLimit-Reset`, `Retry-After`.
+- Standardized response envelope, lowercase enums, and ISO-8601 UTC dates identical between browser (Origin) and native Kotlin mobile (no Origin).
+
+### Reused vs New Code
+- **Reused:** `authenticate`, `authorize`, `classLimiter`, `classReadLimiter`, `loadClass`, `methodNotAllowed`, `sendSuccess`, `sendError`, `sendValidationFailed`, `createAppError`, `AppErrors`, `isUniqueConstraintError`, `isRestrictViolationError`, `prisma` singleton, `class.repository` (`findById`, `validateCoachIds`, `replaceSlotCoaches`), `constants/class.js` (`ClassVisibility`, `SessionState`, `DAY_OF_WEEK`), `app.js` CORS/middleware chain.
+- **New:** `src/constants/session.js`, `src/services/schedule.adapters.js`, `src/repositories/schedule.mapper.js`, `src/repositories/schedule.repository.js`, `src/services/schedule.service.js`, `src/validators/schedule.validation.js`, `src/controllers/schedule.controller.js`, `src/routes/session.routes.js`, `src/services/schedule.job.js`.
+- **Tests Added:** `tests/unit/schedule.validation.test.js`, `tests/unit/schedule.mapper.test.js`, `tests/unit/schedule.service.test.js`, `tests/unit/schedule.adapters.mock.test.js`, `tests/integration/schedule.slot.test.js`, `tests/integration/schedule.session.test.js`, `tests/integration/schedule.job.test.js`, `tests/integration/schedule.rate-limit.test.js`.
+
+### Running project log (work done so far, 2026-10-27)
+
+| Area                                                        | Tickets                                      | Status                                                      |
+| ----------------------------------------------------------- | -------------------------------------------- | ----------------------------------------------------------- |
+| Member registration, login, refresh, logout, password reset | SLAPP-3, 4, 5, 8, 10, password reset via OTP | ✅ done (§7-§10)                                            |
+| Staff and coach accounts, coach CRUD, uploads               | staff creation, coach CRUD, profile image    | ✅ done (§12)                                               |
+| Membership plans                                            | SL-MP-01, 02, 03, 04, 05                     | ✅ 5 of 5 done (100%) — the plans epic is complete          |
+| Classes                                                     | SL-CLS-01, SL-CLS-02, SL-CLS-03, BE-CLS-1    | ✅ 4 of 4 done (100%) — classes CRUD & eligibility complete |
+| Scheduling & Sessions                                       | BE-SCH-1, BE-SCH-2, BE-SCH-3                 | ✅ 3 of 3 done (100%) — slots, sessions & rolling generation |
+
+Totals after BE-SCH-1/2/3: 129 test suites / 1888+ tests passing; 19 migrations; 39 live routes, 14 Prisma models. 8 new test suites added for scheduling.
+

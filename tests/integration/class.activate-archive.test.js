@@ -7,8 +7,6 @@ const { bearerFor } = require('../helpers/auth.helper');
 const {
   deleteTestClasses,
   createTestClass,
-  createTestSlot,
-  createTestSession,
 } = require('../helpers/class.helper');
 const { createTestPlan, deleteTestPlans } = require('../helpers/membershipPlan.helper');
 
@@ -20,7 +18,6 @@ describe('Class Activate, Archive, and Deactivate State Matrix', () => {
   let app;
   let adminUser;
   let ownerUser;
-  let coachUser;
   let memberUser;
   let plan;
 
@@ -35,7 +32,6 @@ describe('Class Activate, Archive, and Deactivate State Matrix', () => {
     await cleanup();
     adminUser = await testData.createUser({ role: Role.ADMIN });
     ownerUser = await testData.createUser({ role: Role.OWNER });
-    coachUser = await testData.createUser({ role: Role.COACH });
     memberUser = await testData.createUser({ role: Role.MEMBER });
     plan = await createTestPlan(PREFIX);
   });

@@ -43,7 +43,9 @@ const createTestSlot = (classId, overrides = {}, client = prisma) => {
       id: crypto.randomUUID(),
       classId,
       dayOfWeek: 1,
+      startDate: new Date('2026-01-01T00:00:00.000Z'),
       startTime: new Date(Date.UTC(1970, 0, 1, 6, 30)),
+      endTime: new Date(Date.UTC(1970, 0, 1, 7, 30)),
       ...overrides,
     },
   });

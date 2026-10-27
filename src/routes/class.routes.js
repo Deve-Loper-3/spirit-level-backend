@@ -12,6 +12,11 @@ const {
   validateListClassesQuery,
 } = require('../validators/class.validation');
 const {
+  validateListSlotsQuery,
+  validateCreateSlotsBody,
+  validateUpdateSlotBody,
+} = require('../validators/schedule.validation');
+const {
   listClasses,
   getClass,
   createClass,
@@ -21,6 +26,12 @@ const {
   archiveClass,
   updateEligibility,
 } = require('../controllers/class.controller');
+const {
+  listSlots,
+  createSlots,
+  updateSlot,
+  deleteSlot,
+} = require('../controllers/schedule.controller');
 
 const router = Router();
 
@@ -87,7 +98,51 @@ router.put(
   validateClassEligibility,
   updateEligibility,
 );
-router.all('/:id/eligibility', methodNotAllowed(['PUT']));
+// Slot routes (BE-SCH-2)
+// PATCH /api/v1/classes/:id/slots/:slotId - Update slot
+router.patch(
+  '/:id/slots/:slotId',
+  authenticate,
+  authorize(Role.OWNER, Role.ADMIN),
+  classLimiter,
+  loadClass(),
+  validateUpdateSlotBody,
+  updateSlot,
+);
+
+// DELETE /api/v1/classes/:id/slots/:slotId - Soft deactivate slot & prune future unbooked sessions
+router.delete(
+  '/:id/slots/:slotId',
+  authenticate,
+  authorize(Role.OWNER, Role.ADMIN),
+  classLimiter,
+  loadClass(),
+  deleteSlot,
+);
+router.all('/:id/slots/:slotId', methodNotAllowed(['PATCH', 'DELETE']));
+
+// GET /api/v1/classes/:id/slots - List recurring slots
+router.get(
+  '/:id/slots',
+  authenticate,
+  authorize(Role.OWNER, Role.ADMIN, Role.COACH, Role.MEMBER),
+  classReadLimiter,
+  loadClass(),
+  validateListSlotsQuery,
+  listSlots,
+);
+
+// POST /api/v1/classes/:id/slots - Create recurring slots
+router.post(
+  '/:id/slots',
+  authenticate,
+  authorize(Role.OWNER, Role.ADMIN),
+  classLimiter,
+  loadClass(),
+  validateCreateSlotsBody,
+  createSlots,
+);
+router.all('/:id/slots', methodNotAllowed(['GET', 'POST']));
 
 // GET /api/v1/classes/:id - Get class details
 router.get(

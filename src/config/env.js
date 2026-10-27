@@ -33,6 +33,8 @@ const schema = z
       .default('info'),
     CORS_ORIGINS: z.string().default('*'),
     DATABASE_URL: z.string().min(1, 'DATABASE_URL is required'),
+    DIRECT_URL: z.string().optional(),
+    FACILITY_TIMEZONE: z.string().default('Asia/Dubai'),
     BCRYPT_SALT_ROUNDS: z.coerce.number().int().positive().default(12),
     JWT_ACCESS_SECRET: z
       .string()

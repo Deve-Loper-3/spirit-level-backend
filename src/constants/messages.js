@@ -199,6 +199,26 @@ const Messages = Object.freeze({
   CLASS_DEACTIVATE_USE_ENDPOINT:
     'Active status cannot be edited here, use POST /api/v1/classes/:id/deactivate',
   CLASS_UPDATE_EMPTY: 'Provide at least one field to update',
+
+  // Slots & Sessions (BE-SCH-1, BE-SCH-2, BE-SCH-3)
+  SLOT_NOT_FOUND: 'Class slot not found',
+  SESSION_NOT_FOUND: 'Class session not found',
+  SLOT_CONFLICT: 'A slot already exists for this class, day, and time',
+  SESSION_CONFLICT: 'A session already exists at this start time for this class',
+  COACH_CONFLICT: 'One or more coaches have a scheduling conflict',
+  SESSION_VERSION_CONFLICT:
+    'The session has been updated by another user. Please reload and try again.',
+  SESSION_PAST_IMMUTABLE: 'Past sessions cannot be modified, cancelled, or restored',
+  SESSION_NOT_CANCELLED: 'Session is not cancelled and cannot be restored',
+  CAPACITY_BELOW_BOOKED: 'Capacity cannot be less than the number of booked members',
+  CANCEL_REASON_REQUIRED: 'Cancellation reason is required',
+  SLOT_CREATED_SUCCESS: 'Class slots created successfully',
+  SLOT_UPDATED_SUCCESS: 'Class slot updated successfully',
+  SLOT_DELETED_SUCCESS: 'Class slot deactivated successfully',
+  SESSION_CREATED_SUCCESS: 'Class session created successfully',
+  SESSION_UPDATED_SUCCESS: 'Class session updated successfully',
+  SESSION_CANCELLED_SUCCESS: 'Class session cancelled successfully',
+  SESSION_RESTORED_SUCCESS: 'Class session restored successfully',
 });
 
 module.exports = { Messages };

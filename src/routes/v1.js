@@ -5,6 +5,7 @@ const coachRoutes = require('./coach.routes');
 const uploadsRoutes = require('./uploads.routes');
 const planRoutes = require('./plan.routes');
 const classRoutes = require('./class.routes');
+const sessionRoutes = require('./session.routes');
 
 const router = Router();
 
@@ -14,5 +15,6 @@ router.use('/coaches', coachRoutes);
 router.use('/uploads', uploadsRoutes);
 router.use('/plans', planRoutes);
 router.use('/classes', classRoutes);
+router.use('/sessions', sessionRoutes);
 
 module.exports = router;

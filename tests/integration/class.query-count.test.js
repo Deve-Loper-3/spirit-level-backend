@@ -87,7 +87,6 @@ describe('Batch Loading & Constant Query Count (No N+1)', () => {
     expect(res1.classes.length).toBe(1);
     expect(res1.classes[0].coaches.length).toBeGreaterThanOrEqual(1);
     const countForOne = queries.length;
-    const queriesForOne = [...queries];
 
     // 2. Fetch 12 classes (with coaches & slots)
     queries = [];
@@ -111,7 +110,6 @@ describe('Batch Loading & Constant Query Count (No N+1)', () => {
     expect(detail).toBeDefined();
     expect(detail.coaches.length).toBeGreaterThanOrEqual(1);
     const detailQueryCount = queries.length;
-    const queries1 = [...queries];
 
     // Second call on a different class with multiple coaches
     queries = [];
@@ -119,7 +117,6 @@ describe('Batch Loading & Constant Query Count (No N+1)', () => {
     expect(detail2).toBeDefined();
     expect(detail2.coaches.length).toBeGreaterThanOrEqual(2);
     const detail2QueryCount = queries.length;
-    const queries2 = [...queries];
 
     // Both detail lookups issue the exact same deterministic query count (8 queries)
     expect(detailQueryCount).toBe(8);

@@ -3,8 +3,9 @@ generator client {
 }
 
 datasource db {
-  provider = "postgresql"
-  url      = env("DATABASE_URL")
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
 }
 
 enum Role {
@@ -288,6 +289,7 @@ model Class {
   colour           String?
   photoUrl         String?
   status           ClassStatus         @default(ACTIVE)
+  timezone         String              @default("Asia/Dubai")
   externalRef      String?             @unique
   version          Int                 @default(1)
   coaches          ClassCoach[]
@@ -323,14 +325,16 @@ model ClassEligiblePlan {
   @@map("class_eligible_plans")
 }
 
-// Weekly template. `dayOfWeek` is ISO (Monday = 1), `startTime` is Asia/Dubai wall-clock time,
-// `capacity` null = use Class.baseCapacity. The end time is startTime + Class.durationMin.
+// Weekly template. `dayOfWeek` is ISO (Monday = 1), `startTime` and `endTime` are facility wall-clock times,
+// `capacity` null = use Class.baseCapacity.
 model ClassSlot {
   id        String           @id
   classId   String
   class     Class            @relation(fields: [classId], references: [id], onDelete: Cascade)
   dayOfWeek Int
+  startDate DateTime         @db.Date
   startTime DateTime         @db.Time(0)
+  endTime   DateTime         @db.Time(0)
   capacity  Int?
   active    Boolean          @default(true)
   coaches   ClassSlotCoach[]
@@ -338,7 +342,7 @@ model ClassSlot {
   createdAt DateTime         @default(now())
   updatedAt DateTime         @updatedAt
 
-  @@unique([classId, dayOfWeek, startTime])
+  @@index([classId])
   @@map("class_slots")
 }
 
@@ -355,19 +359,27 @@ model ClassSlotCoach {
 
 // Instance side. slotId null = one-off. startAt/endAt/capacity are snapshots taken at creation.
 model ClassSession {
-  id           String              @id
-  classId      String
-  class        Class               @relation(fields: [classId], references: [id], onDelete: Restrict)
-  slotId       String?
-  slot         ClassSlot?          @relation(fields: [slotId], references: [id], onDelete: SetNull)
-  startAt      DateTime
-  endAt        DateTime
-  capacity     Int
-  state        SessionState        @default(OPEN)
+  id               String              @id
+  classId          String
+  class            Class               @relation(fields: [classId], references: [id], onDelete: Restrict)
+  slotId           String?
+  slot             ClassSlot?          @relation(fields: [slotId], references: [id], onDelete: SetNull)
+  startAt          DateTime
+  endAt            DateTime
+  capacity         Int
+  state            SessionState        @default(OPEN)
   isPrivate        Boolean             @default(false)
   cancelReason     String?
   overriddenFields String[]            @default([])
   version          Int                 @default(1)
+  source           String              @default("GENERATED")
+  durationMin      Int?
+  intensity        Int?
+  classType        String?
+  facility         String?
+  description      String?
+  image            String?
+  overrideDetails  Json                @default("{}")
   coaches          ClassSessionCoach[]
   createdAt        DateTime            @default(now())
   updatedAt        DateTime            @updatedAt
@@ -375,6 +387,8 @@ model ClassSession {
   @@unique([classId, startAt])
   @@index([startAt])
   @@index([slotId])
+  @@index([startAt, classId])
+  @@index([slotId, startAt])
   @@map("class_sessions")
 }
 
@@ -386,5 +400,6 @@ model ClassSessionCoach {
 
   @@id([sessionId, coachId])
   @@index([coachId])
+  @@index([coachId, sessionId])
   @@map("class_session_coaches")
 }

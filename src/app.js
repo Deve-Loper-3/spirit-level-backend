@@ -24,6 +24,14 @@ const corsOptions = {
       : (origin, callback) => callback(null, !origin || env.corsOrigins.includes(origin)),
   methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization'],
+  exposedHeaders: [
+    'Location',
+    'Allow',
+    'RateLimit-Limit',
+    'RateLimit-Remaining',
+    'RateLimit-Reset',
+    'Retry-After',
+  ],
   credentials: false,
   maxAge: CORS_MAX_AGE_SECONDS,
 };

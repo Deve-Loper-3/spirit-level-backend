@@ -1,7 +1,6 @@
 const z = require('zod');
 const {
   ClassVisibility,
-  ClassStatus,
   ClassType,
   INTENSITY_MIN,
   INTENSITY_MAX,

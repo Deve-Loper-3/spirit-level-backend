@@ -227,6 +227,43 @@ const Messages = Object.freeze({
   SESSION_UPDATED_SUCCESS: 'Class session updated successfully',
   SESSION_CANCELLED_SUCCESS: 'Class session cancelled successfully',
   SESSION_RESTORED_SUCCESS: 'Class session restored successfully',
+
+  // Cafe Catalogue (Tickets 79 & 80)
+  CATEGORY_NOT_FOUND: 'Category not found',
+  CATEGORY_EXISTS: 'Category already exists',
+  CATEGORY_HAS_ITEMS: 'Cannot delete category with associated items',
+  CATEGORY_NAME_REQUIRED: 'Category name is required',
+  CATEGORY_NAME_INVALID: 'Category name must be between 1 and 80 characters',
+  CATEGORY_DESCRIPTION_MAX: 'Description must be at most 1000 characters',
+  CATEGORY_CREATED_SUCCESS: 'Category created successfully',
+  CATEGORY_UPDATED_SUCCESS: 'Category updated successfully',
+  CATEGORY_DELETED_SUCCESS: 'Category deleted successfully',
+  CATEGORY_UPDATE_EMPTY: 'Provide at least one field to update',
+
+  ITEM_NOT_FOUND: 'Item not found',
+  ITEM_SOLD_OUT_ZERO_STOCK: 'Cannot mark item as available when stock quantity is 0',
+  ITEM_TRACKED_STOCK_REQUIRED: 'Tracked items require stockQuantity and unitCost',
+  ITEM_NAME_REQUIRED: 'Item name is required',
+  ITEM_NAME_INVALID: 'Item name must be between 1 and 120 characters',
+  ITEM_CATEGORY_REQUIRED: 'Category ID is required',
+  ITEM_CATEGORY_INVALID: 'Category ID must be a valid UUID',
+  ITEM_PRICE_REQUIRED: 'Price is required',
+  ITEM_PRICE_INVALID: 'Price must be greater than 0',
+  ITEM_STOCK_INVALID: 'Stock quantity must be a non-negative integer',
+  ITEM_UNIT_COST_INVALID: 'Unit cost must be a non-negative number',
+  ITEM_DESCRIPTION_MAX: 'Description must be at most 1000 characters',
+  ITEM_IMAGE_URL_INVALID: 'Image URL must be a valid URL',
+  ITEM_VISIBILITY_INVALID: 'Visibility must be one of: public, staff_only',
+  ITEM_AVAILABILITY_INVALID: 'Availability must be one of: available, sold_out',
+  ITEM_SEARCH_MAX: 'Search query must be at most 100 characters',
+  ITEM_UPDATE_EMPTY: 'Provide at least one field to update',
+  ITEM_FIELD_NOT_EDITABLE_HERE:
+    'Availability and visibility cannot be updated on this endpoint, use dedicated endpoints',
+  ITEM_CREATED_SUCCESS: 'Cafe item created successfully',
+  ITEM_UPDATED_SUCCESS: 'Cafe item updated successfully',
+  ITEM_AVAILABILITY_UPDATED_SUCCESS: 'Cafe item availability updated successfully',
+  ITEM_VISIBILITY_UPDATED_SUCCESS: 'Cafe item visibility updated successfully',
+  CAFE_IMAGE_UPLOADED_SUCCESS: 'Image uploaded successfully',
 });
 
 module.exports = { Messages };

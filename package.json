@@ -17,7 +17,8 @@
     "prisma:migrate": "prisma migrate dev",
     "prisma:seed": "node prisma/seed.js",
     "seed:membership-plans": "node prisma/seeds/membership-plans.seed.js",
-    "seed:classes": "node prisma/seeds/classes.seed.js"
+    "seed:classes": "node prisma/seeds/classes.seed.js",
+    "seed:cafe": "node prisma/seeds/cafe.seed.js"
   },
   "repository": {
     "type": "git",

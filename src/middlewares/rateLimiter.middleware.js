@@ -44,6 +44,9 @@ const planReadLimiter = createPlanLimiter();
 const classLimiter = createPlanLimiter();
 const classReadLimiter = createPlanLimiter();
 
+const cafeLimiter = createPlanLimiter();
+const cafeReadLimiter = createPlanLimiter();
+
 module.exports = {
   createAuthLimiter,
   authLimiter,
@@ -52,4 +55,6 @@ module.exports = {
   planReadLimiter,
   classLimiter,
   classReadLimiter,
+  cafeLimiter,
+  cafeReadLimiter,
 };

@@ -420,3 +420,49 @@ model ClassSessionCoach {
   @@index([coachId, sessionId])
   @@map("class_session_coaches")
 }
+
+enum CafeItemAvailability {
+  AVAILABLE
+  SOLD_OUT
+}
+
+enum CafeItemVisibility {
+  PUBLIC
+  STAFF_ONLY
+}
+
+model CafeCategory {
+  id          String     @id
+  name        String
+  description String?
+  items       CafeItem[]
+  createdAt   DateTime   @default(now())
+  updatedAt   DateTime   @updatedAt
+
+  @@map("cafe_categories")
+}
+
+model CafeItem {
+  id            String               @id
+  name          String
+  categoryId    String
+  category      CafeCategory         @relation(fields: [categoryId], references: [id], onDelete: Restrict)
+  description   String?
+  nutrition     Json?
+  priceAed      Decimal              @db.Decimal(10, 2)
+  imageUrl      String?
+  availability  CafeItemAvailability @default(AVAILABLE)
+  visibility    CafeItemVisibility   @default(PUBLIC)
+  isTracked     Boolean              @default(true)
+  stockQuantity Int?
+  unitCost      Decimal?             @db.Decimal(10, 2)
+  externalRef   String?              @unique
+  createdAt     DateTime             @default(now())
+  updatedAt     DateTime             @updatedAt
+
+  @@index([categoryId])
+  @@index([visibility])
+  @@index([availability])
+  @@index([visibility, availability])
+  @@map("cafe_items")
+}

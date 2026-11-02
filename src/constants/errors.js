@@ -236,6 +236,58 @@ const AppErrors = Object.freeze({
     message: Messages.CANCEL_REASON_REQUIRED,
     code: 'CANCEL_REASON_REQUIRED',
   }),
+
+  // Cafe Catalogue (Tickets 79 & 80)
+  CATEGORY_NOT_FOUND: Object.freeze({
+    statusCode: 404,
+    message: Messages.CATEGORY_NOT_FOUND,
+    code: 'CATEGORY_NOT_FOUND',
+  }),
+  CATEGORY_NOT_FOUND_BODY: Object.freeze({
+    statusCode: 422,
+    message: Messages.CATEGORY_NOT_FOUND,
+    code: 'CATEGORY_NOT_FOUND',
+  }),
+  CATEGORY_EXISTS: Object.freeze({
+    statusCode: 409,
+    message: Messages.CATEGORY_EXISTS,
+    code: 'CATEGORY_EXISTS',
+  }),
+  CATEGORY_HAS_ITEMS: Object.freeze({
+    statusCode: 409,
+    message: Messages.CATEGORY_HAS_ITEMS,
+    code: 'CATEGORY_HAS_ITEMS',
+  }),
+  ITEM_NOT_FOUND: Object.freeze({
+    statusCode: 404,
+    message: Messages.ITEM_NOT_FOUND,
+    code: 'ITEM_NOT_FOUND',
+  }),
+  ITEM_SOLD_OUT_ZERO_STOCK: Object.freeze({
+    statusCode: 400,
+    message: Messages.ITEM_SOLD_OUT_ZERO_STOCK,
+    code: 'ITEM_SOLD_OUT_ZERO_STOCK',
+  }),
+  ITEM_TRACKED_STOCK_REQUIRED: Object.freeze({
+    statusCode: 400,
+    message: Messages.ITEM_TRACKED_STOCK_REQUIRED,
+    code: 'ITEM_TRACKED_STOCK_REQUIRED',
+  }),
+  IMAGE_TYPE_NOT_ALLOWED: Object.freeze({
+    statusCode: 400,
+    message: Messages.IMAGE_TYPE_NOT_ALLOWED,
+    code: 'IMAGE_TYPE_NOT_ALLOWED',
+  }),
+  IMAGE_UPLOAD_NOT_CONFIGURED: Object.freeze({
+    statusCode: 503,
+    message: Messages.IMAGE_UPLOAD_NOT_CONFIGURED,
+    code: 'IMAGE_UPLOAD_NOT_CONFIGURED',
+  }),
+  IMAGE_UPLOAD_FAILED: Object.freeze({
+    statusCode: 502,
+    message: Messages.IMAGE_UPLOAD_TOKEN_FAILED,
+    code: 'IMAGE_UPLOAD_FAILED',
+  }),
 });
 
 module.exports = { AppErrors };

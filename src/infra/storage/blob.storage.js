@@ -21,18 +21,29 @@ const getStoreId = (token) => token?.split('_')[3];
 
 // The server picks the pathname, so the client can never choose the folder or file name.
 // Returns everything a mobile client needs to PUT the file straight to Vercel Blob.
-const createImageUploadToken = async (contentType) => {
+const createImageUploadToken = async (
+  contentType,
+  folder = PROFILE_IMAGE_FOLDER,
+) => {
   const token = env.BLOB_READ_WRITE_TOKEN;
   if (!token) {
-    throw createAppError(503, Messages.IMAGE_UPLOAD_NOT_CONFIGURED, 'IMAGE_UPLOAD_NOT_CONFIGURED');
+    throw createAppError(
+      503,
+      Messages.IMAGE_UPLOAD_NOT_CONFIGURED,
+      'IMAGE_UPLOAD_NOT_CONFIGURED',
+    );
   }
 
   const extension = IMAGE_EXTENSION_BY_MIME_TYPE[contentType];
   if (!extension) {
-    throw createAppError(400, Messages.IMAGE_TYPE_NOT_ALLOWED, 'IMAGE_TYPE_NOT_ALLOWED');
+    throw createAppError(
+      400,
+      Messages.IMAGE_TYPE_NOT_ALLOWED,
+      'IMAGE_TYPE_NOT_ALLOWED',
+    );
   }
 
-  const pathname = `${PROFILE_IMAGE_FOLDER}/${crypto.randomUUID()}.${extension}`;
+  const pathname = `${folder}/${crypto.randomUUID()}.${extension}`;
   const validUntil = Date.now() + UPLOAD_TOKEN_TTL_MS;
 
   let clientToken;

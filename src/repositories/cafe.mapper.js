@@ -44,7 +44,35 @@ const toCafeItemResponse = (item) => {
   };
 };
 
+const toCafeInventoryItemResponse = (item, stockStatus) => {
+  if (!item) return null;
+
+  const unitCost = decimalToNumber(item.unitCost);
+
+  return {
+    id: item.id,
+    name: item.name,
+    categoryId: item.categoryId,
+    category: item.category ? { id: item.category.id, name: item.category.name } : undefined,
+    quantity: item.stockQuantity ?? null,
+    unitCost: unitCost === 0 ? null : unitCost,
+    stockStatus,
+  };
+};
+
+const toCafeStockUpdateResponse = (item, stockStatus) => {
+  if (!item) return null;
+
+  return {
+    ...toCafeInventoryItemResponse(item, stockStatus),
+    availability: DB_TO_API_AVAILABILITY[item.availability],
+    updatedAt: item.updatedAt,
+  };
+};
+
 module.exports = {
   decimalToNumber,
   toCafeItemResponse,
+  toCafeInventoryItemResponse,
+  toCafeStockUpdateResponse,
 };

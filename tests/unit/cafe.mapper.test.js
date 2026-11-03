@@ -1,5 +1,9 @@
 const { Prisma } = require('@prisma/client');
-const { toCafeItemResponse } = require('../../src/repositories/cafe.mapper');
+const {
+  toCafeItemResponse,
+  toCafeInventoryItemResponse,
+  toCafeStockUpdateResponse,
+} = require('../../src/repositories/cafe.mapper');
 
 describe('Cafe Mapper (toCafeItemResponse)', () => {
   it('converts uppercase DB enums to lowercase API values and Decimals to numbers', () => {
@@ -99,5 +103,77 @@ describe('Cafe Mapper (toCafeItemResponse)', () => {
   it('returns null if input item is null or undefined', () => {
     expect(toCafeItemResponse(null)).toBeNull();
     expect(toCafeItemResponse(undefined)).toBeNull();
+  });
+});
+
+describe('Cafe inventory mappers', () => {
+  const item = {
+    id: 'inventory-1',
+    name: 'Protein Bar',
+    categoryId: 'category-1',
+    category: { id: 'category-1', name: 'Snacks', description: 'Internal description' },
+    isTracked: true,
+    stockQuantity: 15,
+    unitCost: new Prisma.Decimal('1.25'),
+    availability: 'AVAILABLE',
+    visibility: 'STAFF_ONLY',
+    externalRef: 'private-ref',
+    priceAed: new Prisma.Decimal('3.50'),
+    updatedAt: new Date('2026-11-03T00:00:00Z'),
+  };
+
+  it('maps only inventory fields with numeric cost and the service-derived status', () => {
+    expect(toCafeInventoryItemResponse(item, 'IN_STOCK')).toEqual({
+      id: 'inventory-1',
+      name: 'Protein Bar',
+      categoryId: 'category-1',
+      category: { id: 'category-1', name: 'Snacks' },
+      quantity: 15,
+      unitCost: 1.25,
+      stockStatus: 'IN_STOCK',
+    });
+    expect(item.unitCost).toBeInstanceOf(Prisma.Decimal);
+    expect(item.stockQuantity).toBe(15);
+  });
+
+  it.each([new Prisma.Decimal('0.00'), 0, '0.00'])(
+    'maps zero cost %s to null without changing catalogue mapping',
+    (unitCost) => {
+      const row = { ...item, unitCost };
+
+      expect(toCafeInventoryItemResponse(row, 'IN_STOCK').unitCost).toBeNull();
+      expect(toCafeStockUpdateResponse(row, 'IN_STOCK').unitCost).toBeNull();
+      expect(toCafeItemResponse(row).unitCost).toBe(0);
+      expect(row.unitCost).toBe(unitCost);
+    },
+  );
+
+  it.each([null, undefined])('preserves an absent cost (%s) as null', (unitCost) => {
+    expect(toCafeInventoryItemResponse({ ...item, unitCost }, 'IN_STOCK').unitCost).toBeNull();
+  });
+
+  it.each([
+    ['AVAILABLE', 'available'],
+    ['SOLD_OUT', 'sold_out'],
+  ])('maps persisted availability %s in stock update responses', (availability, expected) => {
+    const row = { ...item, stockQuantity: 0, availability };
+
+    expect(toCafeStockUpdateResponse(row, 'OUT_OF_STOCK')).toEqual({
+      ...toCafeInventoryItemResponse(row, 'OUT_OF_STOCK'),
+      quantity: 0,
+      availability: expected,
+      updatedAt: item.updatedAt,
+    });
+  });
+
+  it.each([null, undefined])('returns null for absent inventory/stock records (%s)', (row) => {
+    expect(toCafeInventoryItemResponse(row, 'IN_STOCK')).toBeNull();
+    expect(toCafeStockUpdateResponse(row, 'IN_STOCK')).toBeNull();
+  });
+
+  it('omits category when the relation was not loaded', () => {
+    expect(
+      toCafeInventoryItemResponse({ ...item, category: undefined }, 'IN_STOCK').category,
+    ).toBeUndefined();
   });
 });

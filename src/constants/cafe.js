@@ -8,6 +8,14 @@ const CafeItemVisibility = Object.freeze({
   STAFF_ONLY: 'staff_only',
 });
 
+const CafeStockStatus = Object.freeze({
+  OUT_OF_STOCK: 'OUT_OF_STOCK',
+  LOW_STOCK: 'LOW_STOCK',
+  IN_STOCK: 'IN_STOCK',
+});
+
+const LOW_STOCK_THRESHOLD = 15;
+
 const DbCafeItemAvailability = Object.freeze({
   AVAILABLE: 'AVAILABLE',
   SOLD_OUT: 'SOLD_OUT',
@@ -62,6 +70,8 @@ const CAFE_IMAGE_FOLDER = 'cafe-items';
 module.exports = Object.freeze({
   CafeItemAvailability,
   CafeItemVisibility,
+  CafeStockStatus,
+  LOW_STOCK_THRESHOLD,
   DbCafeItemAvailability,
   DbCafeItemVisibility,
   API_TO_DB_AVAILABILITY,
@@ -84,4 +94,3 @@ module.exports = Object.freeze({
   DEFAULT_LIMIT,
   MAX_LIMIT,
 });
-

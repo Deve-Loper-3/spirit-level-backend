@@ -14,6 +14,7 @@ const {
   ITEM_STOCK_MAX,
   CafeItemAvailability,
   CafeItemVisibility,
+  CafeStockStatus,
   DEFAULT_PAGE,
   DEFAULT_LIMIT,
   MAX_LIMIT,
@@ -90,6 +91,19 @@ const listItemsQuerySchema = z.object({
     max: MAX_LIMIT,
     defaultValue: DEFAULT_LIMIT,
   }),
+});
+
+const listInventoryQuerySchema = listItemsQuerySchema.extend({
+  status: z
+    .enum(Object.values(CafeStockStatus), { error: Messages.ITEM_STOCK_STATUS_INVALID })
+    .optional(),
+});
+
+const updateItemStockSchema = z.object({
+  quantity: z
+    .number({ error: Messages.ITEM_STOCK_INVALID })
+    .int(Messages.ITEM_STOCK_INVALID)
+    .min(ITEM_STOCK_MIN, Messages.ITEM_STOCK_INVALID),
 });
 
 const createItemSchema = z.object({
@@ -271,6 +285,20 @@ const validateListItemsQuery = (req, res, next) => {
   return next();
 };
 
+const validateListInventoryQuery = (req, res, next) => {
+  const result = listInventoryQuerySchema.safeParse(req.query ?? {});
+  if (!result.success) return sendValidationFailed(res, result.error);
+  req.validatedQuery = result.data;
+  return next();
+};
+
+const validateUpdateItemStock = (req, res, next) => {
+  const result = updateItemStockSchema.safeParse(req.body ?? {});
+  if (!result.success) return sendValidationFailed(res, result.error);
+  req.validatedBody = result.data;
+  return next();
+};
+
 const validateCreateItem = (req, res, next) => {
   const result = createItemSchema.safeParse(req.body ?? {});
   if (!result.success) return sendValidationFailed(res, result.error);
@@ -340,6 +368,8 @@ module.exports = {
   createCategorySchema,
   updateCategorySchema,
   listItemsQuerySchema,
+  listInventoryQuerySchema,
+  updateItemStockSchema,
   createItemSchema,
   updateItemSchema,
   updateItemAvailabilitySchema,
@@ -350,6 +380,8 @@ module.exports = {
   validateCreateCategory,
   validateUpdateCategory,
   validateListItemsQuery,
+  validateListInventoryQuery,
+  validateUpdateItemStock,
   validateCreateItem,
   validateUpdateItem,
   validateUpdateItemAvailability,

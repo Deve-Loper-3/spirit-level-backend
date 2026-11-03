@@ -241,6 +241,7 @@ const Messages = Object.freeze({
   CATEGORY_UPDATE_EMPTY: 'Provide at least one field to update',
 
   ITEM_NOT_FOUND: 'Item not found',
+  ITEM_NOT_TRACKED: 'Stock can only be updated for tracked items',
   ITEM_SOLD_OUT_ZERO_STOCK: 'Cannot mark item as available when stock quantity is 0',
   ITEM_TRACKED_STOCK_REQUIRED: 'Tracked items require stockQuantity and unitCost',
   ITEM_NAME_REQUIRED: 'Item name is required',
@@ -250,6 +251,7 @@ const Messages = Object.freeze({
   ITEM_PRICE_REQUIRED: 'Price is required',
   ITEM_PRICE_INVALID: 'Price must be greater than 0',
   ITEM_STOCK_INVALID: 'Stock quantity must be a non-negative integer',
+  ITEM_STOCK_STATUS_INVALID: 'Stock status must be one of: OUT_OF_STOCK, LOW_STOCK, IN_STOCK',
   ITEM_UNIT_COST_INVALID: 'Unit cost must be a non-negative number',
   ITEM_DESCRIPTION_MAX: 'Description must be at most 1000 characters',
   ITEM_IMAGE_URL_INVALID: 'Image URL must be a valid URL',
@@ -261,6 +263,7 @@ const Messages = Object.freeze({
     'Availability and visibility cannot be updated on this endpoint, use dedicated endpoints',
   ITEM_CREATED_SUCCESS: 'Cafe item created successfully',
   ITEM_UPDATED_SUCCESS: 'Cafe item updated successfully',
+  ITEM_STOCK_UPDATED_SUCCESS: 'Cafe item stock updated successfully',
   ITEM_AVAILABILITY_UPDATED_SUCCESS: 'Cafe item availability updated successfully',
   ITEM_VISIBILITY_UPDATED_SUCCESS: 'Cafe item visibility updated successfully',
   CAFE_IMAGE_UPLOADED_SUCCESS: 'Image uploaded successfully',

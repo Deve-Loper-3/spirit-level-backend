@@ -36,6 +36,8 @@ tags:
     description: Coach list, profile, update, and status
   - name: Plans
     description: Membership plan management (ADMIN / OWNER)
+  - name: Cafe
+    description: Cafe / Refuel Bar catalogue - categories, items and item image upload (reads for all roles, writes for ADMIN / OWNER)
 
 paths:
   /health:
@@ -1832,6 +1834,622 @@ paths:
         '429':
           $ref: '#/components/responses/TooManyRequests'
 
+  /api/v1/cafe/categories:
+    get:
+      tags: [Cafe]
+      summary: List cafe categories
+      description: |
+        OWNER, ADMIN, COACH or MEMBER. Returns every category (no pagination), ordered by name.
+
+        `itemCount` is the number of items in the category. For a MEMBER it counts **public**
+        items only; staff (OWNER, ADMIN, COACH) get the count of all items.
+      operationId: listCafeCategories
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: All categories
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/SuccessEnvelope'
+                  - type: object
+                    properties:
+                      data:
+                        type: array
+                        items:
+                          $ref: '#/components/schemas/CafeCategory'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+    post:
+      tags: [Cafe]
+      summary: Create a cafe category
+      description: |
+        OWNER or ADMIN only; a COACH or MEMBER receives 403. The name is trimmed and must be
+        unique, case-insensitive (409 `CATEGORY_EXISTS`). A blank `description` is stored as `null`.
+      operationId: createCafeCategory
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateCafeCategoryRequest'
+            example:
+              name: Drinks
+              description: Cold and hot drinks
+      responses:
+        '201':
+          description: Category created
+          headers:
+            Location:
+              $ref: '#/components/headers/CafeCategoryLocation'
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/SuccessEnvelope'
+                  - type: object
+                    properties:
+                      message:
+                        example: Category created successfully
+                      data:
+                        $ref: '#/components/schemas/CafeCategory'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '409':
+          $ref: '#/components/responses/CafeCategoryExists'
+        '422':
+          $ref: '#/components/responses/ValidationFailed'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+    put:
+      tags: [Cafe]
+      summary: Not supported
+      description: |
+        Every method other than GET and POST answers 405 with `Allow: GET, POST`, also without
+        a token. Documented once here under PUT; PATCH and DELETE behave the same.
+      operationId: cafeCategoriesMethodNotAllowed
+      responses:
+        '405':
+          $ref: '#/components/responses/CafeMethodNotAllowedCollection'
+
+  /api/v1/cafe/categories/{categoryId}:
+    parameters:
+      - $ref: '#/components/parameters/CafeCategoryId'
+    patch:
+      tags: [Cafe]
+      summary: Update a cafe category (partial)
+      description: |
+        OWNER or ADMIN only. Send `name` and/or `description`; an empty body is 422. Sending
+        `description: null` or a blank string clears it.
+
+        **Check order:** 401/403, 429, 422 (id or body), 404, 409.
+      operationId: updateCafeCategory
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateCafeCategoryRequest'
+            example:
+              name: Cold Drinks
+      responses:
+        '200':
+          description: The category after the update
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/SuccessEnvelope'
+                  - type: object
+                    properties:
+                      message:
+                        example: Category updated successfully
+                      data:
+                        $ref: '#/components/schemas/CafeCategory'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/CafeCategoryNotFound'
+        '409':
+          $ref: '#/components/responses/CafeCategoryExists'
+        '422':
+          $ref: '#/components/responses/ValidationFailed'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+    delete:
+      tags: [Cafe]
+      summary: Delete a cafe category
+      description: |
+        OWNER or ADMIN only. A category that still has items (of any visibility) cannot be
+        deleted: 409 `CATEGORY_HAS_ITEMS`. Move or retire the items first. Returns `data: null`.
+      operationId: deleteCafeCategory
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Category deleted
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/SuccessEnvelope'
+                  - type: object
+                    properties:
+                      message:
+                        example: Category deleted successfully
+                      data:
+                        nullable: true
+                        example: null
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/CafeCategoryNotFound'
+        '409':
+          description: The category still has items
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+              example:
+                success: false
+                message: Cannot delete category with associated items
+                code: CATEGORY_HAS_ITEMS
+        '422':
+          $ref: '#/components/responses/ValidationFailed'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+    put:
+      tags: [Cafe]
+      summary: Not supported
+      description: 'Every method other than PATCH and DELETE (including GET) answers 405 with `Allow: PATCH, DELETE`.'
+      operationId: cafeCategoryMethodNotAllowed
+      responses:
+        '405':
+          $ref: '#/components/responses/CafeMethodNotAllowedCategory'
+
+  /api/v1/cafe/items:
+    get:
+      tags: [Cafe]
+      summary: List cafe items
+      description: |
+        OWNER, ADMIN, COACH or MEMBER. Paginated, ordered by name.
+
+        **Members only see `public` items.** Staff see `public` and `staff_only`. Sold-out items
+        stay in the list for everyone, so members can see what is temporarily out of stock.
+
+        `search` matches the name or description, case-insensitive, with `%` and `_` treated
+        as plain characters.
+      operationId: listCafeItems
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: search
+          in: query
+          schema:
+            type: string
+            maxLength: 100
+        - name: categoryId
+          in: query
+          schema:
+            type: string
+            format: uuid
+        - name: page
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            default: 1
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 20
+      responses:
+        '200':
+          description: A page of items
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/SuccessEnvelope'
+                  - type: object
+                    properties:
+                      data:
+                        type: array
+                        items:
+                          $ref: '#/components/schemas/CafeItem'
+                      pagination:
+                        $ref: '#/components/schemas/Pagination'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '422':
+          $ref: '#/components/responses/ValidationFailed'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+    post:
+      tags: [Cafe]
+      summary: Create a cafe item
+      description: |
+        OWNER or ADMIN only.
+
+        **Tracked items** (`isTracked: true`, the default) require `stockQuantity` and `unitCost`
+        (400 `ITEM_TRACKED_STOCK_REQUIRED`). With `stockQuantity: 0` the item is created
+        `sold_out`; asking for `availability: available` with zero stock is 400
+        `ITEM_SOLD_OUT_ZERO_STOCK`.
+
+        **Untracked items** (`isTracked: false`, made to order) ignore `stockQuantity` and
+        `unitCost`; both are stored as `null`.
+
+        `availability` defaults to `available`, `visibility` to `public`. `imageUrl` must be an
+        `https://` URL (use the upload token endpoint for a hosted image) or `null`.
+
+        **Check order:** 401/403, 429, 422 (body), 422 `CATEGORY_NOT_FOUND` (the `categoryId` in
+        the body), 400.
+      operationId: createCafeItem
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateCafeItemRequest'
+            example:
+              name: Protein Bar - Caramel
+              categoryId: 7b0c3a5e-2f0d-4f65-9a7f-1d3a9a0f2c11
+              priceAed: 18.5
+              isTracked: true
+              stockQuantity: 24
+              unitCost: 9.25
+              visibility: public
+      responses:
+        '201':
+          description: Item created
+          headers:
+            Location:
+              $ref: '#/components/headers/CafeItemLocation'
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/SuccessEnvelope'
+                  - type: object
+                    properties:
+                      message:
+                        example: Cafe item created successfully
+                      data:
+                        $ref: '#/components/schemas/CafeItem'
+        '400':
+          $ref: '#/components/responses/CafeStockRuleViolation'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '422':
+          $ref: '#/components/responses/CafeItemValidationFailed'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+    put:
+      tags: [Cafe]
+      summary: Not supported
+      description: |
+        Every method other than GET and POST (including DELETE) answers 405 with
+        `Allow: GET, POST`. Items are never deleted through the API.
+      operationId: cafeItemsMethodNotAllowed
+      responses:
+        '405':
+          $ref: '#/components/responses/CafeMethodNotAllowedCollection'
+
+  /api/v1/cafe/items/{itemId}:
+    parameters:
+      - $ref: '#/components/parameters/CafeItemId'
+    get:
+      tags: [Cafe]
+      summary: Get one cafe item
+      description: |
+        OWNER, ADMIN, COACH or MEMBER. A MEMBER asking for a `staff_only` item receives 404
+        `ITEM_NOT_FOUND`, the same as for an unknown id.
+      operationId: getCafeItem
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: The item
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/SuccessEnvelope'
+                  - type: object
+                    properties:
+                      data:
+                        $ref: '#/components/schemas/CafeItem'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/CafeItemNotFound'
+        '422':
+          $ref: '#/components/responses/ValidationFailed'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+    patch:
+      tags: [Cafe]
+      summary: Update a cafe item's core fields (partial)
+      description: |
+        OWNER or ADMIN only. Send only the fields to change; an empty body is 422.
+
+        `availability` and `visibility` are **not** editable here: sending either is 422 with
+        the message "Availability and visibility cannot be updated on this endpoint, use
+        dedicated endpoints" on that field (`ITEM_FIELD_NOT_EDITABLE_HERE`; this is a
+        field-level message in `errors[]`, the envelope `code` is `VALIDATION_ERROR`). Use
+        `PATCH /api/v1/cafe/items/{itemId}/availability` and `.../visibility`.
+
+        **Stock:** setting a tracked item's `stockQuantity` to 0 sets it to `sold_out`
+        automatically. **Restock = `PATCH` the stock here, then `PATCH` the availability to
+        `available`.** There is no automatic switch back to `available`.
+
+        Switching `isTracked` from `false` to `true` needs `stockQuantity` and `unitCost` in the
+        same request (400 `ITEM_TRACKED_STOCK_REQUIRED`). A tracked item cannot have its stock or
+        cost set to `null` (same 400). Switching to `isTracked: false` stores both as `null`.
+
+        **Check order:** 401/403, 429, 422 (id or body), 404 `ITEM_NOT_FOUND`, 422
+        `CATEGORY_NOT_FOUND` (the `categoryId` in the body), 400.
+      operationId: updateCafeItem
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateCafeItemRequest'
+            example:
+              stockQuantity: 12
+              priceAed: 19
+      responses:
+        '200':
+          description: The item after the update
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/SuccessEnvelope'
+                  - type: object
+                    properties:
+                      message:
+                        example: Cafe item updated successfully
+                      data:
+                        $ref: '#/components/schemas/CafeItem'
+        '400':
+          $ref: '#/components/responses/CafeStockRuleViolation'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/CafeItemNotFound'
+        '422':
+          $ref: '#/components/responses/CafeItemValidationFailed'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+    delete:
+      tags: [Cafe]
+      summary: Not supported (items are never deleted)
+      description: |
+        Always answers 405 with `Allow: GET, PATCH`, also without a token. Retire an item with
+        `PATCH .../availability` (`sold_out`) or `PATCH .../visibility` (`staff_only`).
+      operationId: deleteCafeItemNotAllowed
+      responses:
+        '405':
+          $ref: '#/components/responses/CafeMethodNotAllowedItem'
+
+  /api/v1/cafe/items/{itemId}/availability:
+    parameters:
+      - $ref: '#/components/parameters/CafeItemId'
+    patch:
+      tags: [Cafe]
+      summary: Set a cafe item's availability
+      description: |
+        OWNER or ADMIN only. Setting `available` on a tracked item whose `stockQuantity` is 0
+        is 400 `ITEM_SOLD_OUT_ZERO_STOCK`. Untracked items can be set freely. Setting the value
+        the item already has returns 200 with the current item.
+
+        Restocking never flips an item back to `available` by itself: PATCH the stock on
+        `/api/v1/cafe/items/{itemId}`, then PATCH the availability here.
+      operationId: updateCafeItemAvailability
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CafeItemAvailabilityRequest'
+            example:
+              availability: available
+      responses:
+        '200':
+          description: The item after the update
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/SuccessEnvelope'
+                  - type: object
+                    properties:
+                      message:
+                        example: Cafe item availability updated successfully
+                      data:
+                        $ref: '#/components/schemas/CafeItem'
+        '400':
+          description: Tracked item with zero stock cannot be set to `available`
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+              example:
+                success: false
+                message: Cannot mark item as available when stock quantity is 0
+                code: ITEM_SOLD_OUT_ZERO_STOCK
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/CafeItemNotFound'
+        '422':
+          $ref: '#/components/responses/ValidationFailed'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+    put:
+      tags: [Cafe]
+      summary: Not supported
+      description: 'Every method other than PATCH answers 405 with `Allow: PATCH`.'
+      operationId: cafeItemAvailabilityMethodNotAllowed
+      responses:
+        '405':
+          $ref: '#/components/responses/CafeMethodNotAllowedPatchOnly'
+
+  /api/v1/cafe/items/{itemId}/visibility:
+    parameters:
+      - $ref: '#/components/parameters/CafeItemId'
+    patch:
+      tags: [Cafe]
+      summary: Set a cafe item's visibility
+      description: |
+        OWNER or ADMIN only. `public` items are visible to everyone; `staff_only` items are
+        hidden from members (members get 404 `ITEM_NOT_FOUND` on the item and do not see it in
+        lists or in their `itemCount`). Availability is not changed.
+      operationId: updateCafeItemVisibility
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CafeItemVisibilityRequest'
+            example:
+              visibility: staff_only
+      responses:
+        '200':
+          description: The item after the update
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/SuccessEnvelope'
+                  - type: object
+                    properties:
+                      message:
+                        example: Cafe item visibility updated successfully
+                      data:
+                        $ref: '#/components/schemas/CafeItem'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/CafeItemNotFound'
+        '422':
+          $ref: '#/components/responses/ValidationFailed'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+    put:
+      tags: [Cafe]
+      summary: Not supported
+      description: 'Every method other than PATCH answers 405 with `Allow: PATCH`.'
+      operationId: cafeItemVisibilityMethodNotAllowed
+      responses:
+        '405':
+          $ref: '#/components/responses/CafeMethodNotAllowedPatchOnly'
+
+  /api/v1/cafe/uploads/image/token:
+    post:
+      tags: [Cafe]
+      summary: Issue a client upload token for a cafe item image
+      description: |
+        OWNER or ADMIN only. Same request and response format as
+        `POST /api/v1/uploads/profile-image/token`, but the blob is stored under the
+        `cafe-items/` folder. Max size 4 MB; allowed types `image/jpeg`, `image/png`,
+        `image/webp`. PUT the bytes to `data.upload.url`, then send the resulting `https://`
+        URL as `imageUrl` when creating or updating an item.
+      operationId: issueCafeImageToken
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ProfileImageTokenRequest'
+            example:
+              contentType: image/jpeg
+      responses:
+        '200':
+          description: Upload token issued
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/SuccessEnvelope'
+                  - type: object
+                    properties:
+                      message:
+                        example: Image upload token issued successfully
+                      data:
+                        $ref: '#/components/schemas/ProfileImageUploadToken'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '422':
+          $ref: '#/components/responses/ValidationFailed'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+        '502':
+          description: Failed to prepare upload with storage provider
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '503':
+          description: Blob storage not configured
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+    put:
+      tags: [Cafe]
+      summary: Not supported
+      description: 'Every method other than POST answers 405 with `Allow: POST`.'
+      operationId: cafeImageTokenMethodNotAllowed
+      responses:
+        '405':
+          $ref: '#/components/responses/CafeMethodNotAllowedPostOnly'
+
 components:
 
   securitySchemes:
@@ -1858,6 +2476,37 @@ components:
         type: string
         format: uuid
       description: Coach profile id (not the user id)
+
+    CafeCategoryId:
+      name: categoryId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+      description: Cafe category id. A value that is not a UUID is 422 `VALIDATION_ERROR`; an unknown UUID is 404 `CATEGORY_NOT_FOUND`.
+
+    CafeItemId:
+      name: itemId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+      description: Cafe item id. A value that is not a UUID is 422 `VALIDATION_ERROR`; an unknown UUID is 404 `ITEM_NOT_FOUND`.
+
+  headers:
+    CafeCategoryLocation:
+      description: Path of the created category
+      schema:
+        type: string
+        example: /api/v1/cafe/categories/7b0c3a5e-2f0d-4f65-9a7f-1d3a9a0f2c11
+
+    CafeItemLocation:
+      description: Path of the created item
+      schema:
+        type: string
+        example: /api/v1/cafe/items/7b0c3a5e-2f0d-4f65-9a7f-1d3a9a0f2c11
 
   responses:
     ValidationError:
@@ -1940,6 +2589,192 @@ components:
           example:
             success: false
             message: Too many requests, please try again later
+
+    ValidationFailed:
+      description: Validation failed (returns all failing fields together)
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorEnvelope'
+          example:
+            success: false
+            message: Validation failed
+            code: VALIDATION_ERROR
+            errors:
+              - field: name
+                message: Category name is required
+
+    CafeCategoryNotFound:
+      description: No category with this id
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorEnvelope'
+          example:
+            success: false
+            message: Category not found
+            code: CATEGORY_NOT_FOUND
+
+    CafeCategoryExists:
+      description: Another category already has this name (case-insensitive)
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorEnvelope'
+          example:
+            success: false
+            message: Category already exists
+            code: CATEGORY_EXISTS
+
+    CafeItemNotFound:
+      description: No item with this id, or a staff_only item requested by a MEMBER
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorEnvelope'
+          example:
+            success: false
+            message: Item not found
+            code: ITEM_NOT_FOUND
+
+    CafeStockRuleViolation:
+      description: |
+        A stock rule was broken: `ITEM_TRACKED_STOCK_REQUIRED` (tracked item without
+        `stockQuantity` and `unitCost`, or either set to `null`) or
+        `ITEM_SOLD_OUT_ZERO_STOCK` (`available` requested with zero stock, create only)
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorEnvelope'
+          examples:
+            trackedStockRequired:
+              value:
+                success: false
+                message: Tracked items require stockQuantity and unitCost
+                code: ITEM_TRACKED_STOCK_REQUIRED
+            soldOutZeroStock:
+              value:
+                success: false
+                message: Cannot mark item as available when stock quantity is 0
+                code: ITEM_SOLD_OUT_ZERO_STOCK
+
+    CafeItemValidationFailed:
+      description: |
+        Validation failed (all failing fields together), or the `categoryId` in the body does
+        not exist. The latter is 422 with code `CATEGORY_NOT_FOUND` (the same code as the 404
+        on the category routes, which address the category by path).
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorEnvelope'
+          examples:
+            validation:
+              value:
+                success: false
+                message: Validation failed
+                code: VALIDATION_ERROR
+                errors:
+                  - field: priceAed
+                    message: Price must be greater than 0
+            fieldNotEditableHere:
+              summary: PATCH /items/{itemId} with availability or visibility
+              value:
+                success: false
+                message: Validation failed
+                code: VALIDATION_ERROR
+                errors:
+                  - field: availability
+                    message: Availability and visibility cannot be updated on this endpoint, use dedicated endpoints
+            categoryNotFoundInBody:
+              value:
+                success: false
+                message: Category not found
+                code: CATEGORY_NOT_FOUND
+
+    CafeMethodNotAllowedCollection:
+      description: 'Route exists but not for this method (`Allow: GET, POST`)'
+      headers:
+        Allow:
+          description: Methods the route supports
+          schema:
+            type: string
+            example: GET, POST
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorEnvelope'
+          example:
+            success: false
+            message: Method not allowed for this route
+            code: METHOD_NOT_ALLOWED
+
+    CafeMethodNotAllowedCategory:
+      description: 'Route exists but not for this method (`Allow: PATCH, DELETE`)'
+      headers:
+        Allow:
+          description: Methods the route supports
+          schema:
+            type: string
+            example: PATCH, DELETE
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorEnvelope'
+          example:
+            success: false
+            message: Method not allowed for this route
+            code: METHOD_NOT_ALLOWED
+
+    CafeMethodNotAllowedItem:
+      description: 'Route exists but not for this method (`Allow: GET, PATCH`)'
+      headers:
+        Allow:
+          description: Methods the route supports
+          schema:
+            type: string
+            example: GET, PATCH
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorEnvelope'
+          example:
+            success: false
+            message: Method not allowed for this route
+            code: METHOD_NOT_ALLOWED
+
+    CafeMethodNotAllowedPatchOnly:
+      description: 'Route exists but not for this method (`Allow: PATCH`)'
+      headers:
+        Allow:
+          description: Methods the route supports
+          schema:
+            type: string
+            example: PATCH
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorEnvelope'
+          example:
+            success: false
+            message: Method not allowed for this route
+            code: METHOD_NOT_ALLOWED
+
+    CafeMethodNotAllowedPostOnly:
+      description: 'Route exists but not for this method (`Allow: POST`)'
+      headers:
+        Allow:
+          description: Methods the route supports
+          schema:
+            type: string
+            example: POST
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorEnvelope'
+          example:
+            success: false
+            message: Method not allowed for this route
+            code: METHOD_NOT_ALLOWED
 
   schemas:
     SuccessEnvelope:
@@ -3060,4 +3895,244 @@ components:
           type: integer
           description: Optional optimistic locking check
 
+    CafeItemAvailability:
+      type: string
+      enum: [available, sold_out]
 
+    CafeItemVisibility:
+      type: string
+      enum: [public, staff_only]
+
+    CafeCategory:
+      type: object
+      required: [id, name, description, itemCount, createdAt, updatedAt]
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+          maxLength: 80
+        description:
+          type: string
+          nullable: true
+          maxLength: 1000
+        itemCount:
+          type: integer
+          description: Items in the category. Public items only when the caller is a MEMBER.
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+
+    CreateCafeCategoryRequest:
+      type: object
+      required: [name]
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 80
+          description: Trimmed; unique case-insensitively
+        description:
+          type: string
+          nullable: true
+          maxLength: 1000
+
+    UpdateCafeCategoryRequest:
+      type: object
+      minProperties: 1
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 80
+        description:
+          type: string
+          nullable: true
+          maxLength: 1000
+
+    CafeItemCategory:
+      type: object
+      required: [id, name, description]
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        description:
+          type: string
+          nullable: true
+
+    CafeItem:
+      type: object
+      required:
+        - id
+        - name
+        - categoryId
+        - description
+        - nutrition
+        - priceAed
+        - imageUrl
+        - availability
+        - visibility
+        - isTracked
+        - stockQuantity
+        - unitCost
+        - createdAt
+        - updatedAt
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        categoryId:
+          type: string
+          format: uuid
+        category:
+          $ref: '#/components/schemas/CafeItemCategory'
+        description:
+          type: string
+          nullable: true
+        nutrition:
+          type: object
+          additionalProperties: true
+          nullable: true
+        priceAed:
+          type: number
+          example: 18.5
+        imageUrl:
+          type: string
+          format: uri
+          nullable: true
+          description: '`https://` URL or `null`'
+        availability:
+          $ref: '#/components/schemas/CafeItemAvailability'
+        visibility:
+          $ref: '#/components/schemas/CafeItemVisibility'
+        isTracked:
+          type: boolean
+        stockQuantity:
+          type: integer
+          nullable: true
+          description: '`null` for untracked items'
+        unitCost:
+          type: number
+          nullable: true
+          description: '`null` for untracked items'
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+
+    CreateCafeItemRequest:
+      type: object
+      required: [name, categoryId, priceAed]
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 120
+        categoryId:
+          type: string
+          format: uuid
+        description:
+          type: string
+          nullable: true
+          maxLength: 1000
+        nutrition:
+          type: object
+          additionalProperties: true
+          nullable: true
+        priceAed:
+          type: number
+          minimum: 0.01
+          maximum: 100000
+        imageUrl:
+          type: string
+          format: uri
+          nullable: true
+          description: '`https://` URL only'
+        visibility:
+          $ref: '#/components/schemas/CafeItemVisibility'
+        isTracked:
+          type: boolean
+          default: true
+        stockQuantity:
+          type: integer
+          minimum: 0
+          maximum: 100000
+          nullable: true
+          description: Required when `isTracked` is true; ignored (stored as `null`) when false
+        unitCost:
+          type: number
+          minimum: 0
+          maximum: 100000
+          nullable: true
+          description: Required when `isTracked` is true; ignored (stored as `null`) when false
+        availability:
+          $ref: '#/components/schemas/CafeItemAvailability'
+
+    UpdateCafeItemRequest:
+      type: object
+      minProperties: 1
+      description: |
+        Partial update. `availability` and `visibility` are rejected here (422); use the
+        dedicated endpoints.
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 120
+        categoryId:
+          type: string
+          format: uuid
+        description:
+          type: string
+          nullable: true
+          maxLength: 1000
+        nutrition:
+          type: object
+          additionalProperties: true
+          nullable: true
+        priceAed:
+          type: number
+          minimum: 0.01
+          maximum: 100000
+        imageUrl:
+          type: string
+          format: uri
+          nullable: true
+          description: '`https://` URL only; `null` or blank clears the image'
+        isTracked:
+          type: boolean
+        stockQuantity:
+          type: integer
+          minimum: 0
+          maximum: 100000
+          nullable: true
+        unitCost:
+          type: number
+          minimum: 0
+          maximum: 100000
+          nullable: true
+
+    CafeItemAvailabilityRequest:
+      type: object
+      required: [availability]
+      properties:
+        availability:
+          $ref: '#/components/schemas/CafeItemAvailability'
+
+    CafeItemVisibilityRequest:
+      type: object
+      required: [visibility]
+      properties:
+        visibility:
+          $ref: '#/components/schemas/CafeItemVisibility'

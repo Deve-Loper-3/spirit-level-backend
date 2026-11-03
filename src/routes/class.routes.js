@@ -98,6 +98,7 @@ router.put(
   validateClassEligibility,
   updateEligibility,
 );
+router.all('/:id/eligibility', methodNotAllowed(['PUT']));
 // Slot routes (BE-SCH-2)
 // PATCH /api/v1/classes/:id/slots/:slotId - Update slot
 router.patch(

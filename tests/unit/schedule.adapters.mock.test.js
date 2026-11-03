@@ -18,6 +18,9 @@ const {
 
 const mockTx = { tx: true };
 
+// A date safely after "today" in any facility timezone, so the past-date check never trips.
+const futureStartDate = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
+
 jest.mock('../../src/config/prisma', () => ({
   $transaction: jest.fn((cb) => cb(mockTx)),
   classSession: {
@@ -190,7 +193,7 @@ describe('Schedule Service - Adapter Seams & Stubs Unit Tests', () => {
         createSlots({
           classId,
           payload: {
-            startDate: '2026-11-01',
+            startDate: futureStartDate,
             days: [
               {
                 dayOfWeek: 1,
@@ -264,7 +267,7 @@ describe('Schedule Service - Adapter Seams & Stubs Unit Tests', () => {
         createSlots({
           classId,
           payload: {
-            startDate: '2026-11-01',
+            startDate: futureStartDate,
             days: [
               {
                 dayOfWeek: 1,

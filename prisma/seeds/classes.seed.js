@@ -178,7 +178,13 @@ const saveProgramme = async ({ data, coachIds, slotResults, stats, client }) => 
         const capacity =
           slot.capacity && slot.capacity !== data.baseCapacity ? slot.capacity : null;
         const result = await repository.upsertSlot(
-          { classId: saved.id, dayOfWeek: slot.dayOfWeek, startTime: slot.startTime, capacity },
+          {
+            classId: saved.id,
+            dayOfWeek: slot.dayOfWeek,
+            startTime: slot.startTime,
+            durationMin: data.durationMin,
+            capacity,
+          },
           tx,
         );
         await repository.replaceSlotCoaches(result.slot.id, slotCoachIds, tx);

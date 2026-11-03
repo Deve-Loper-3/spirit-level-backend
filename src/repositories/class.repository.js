@@ -1,5 +1,6 @@
 const crypto = require('crypto');
 const prisma = require('../config/prisma');
+const env = require('../config/env');
 const { createAppError, AppErrors } = require('../errors/AppError');
 const { Messages } = require('../constants/messages');
 
@@ -16,16 +17,43 @@ const upsertByExternalRef = async ({ externalRef, data, client = prisma }) => {
   });
 };
 
-// class_slots.startTime is a Postgres TIME; Prisma reads and writes it as a UTC Date on 1970-01-01.
-const upsertSlot = async ({ classId, dayOfWeek, startTime, capacity }, client = prisma) => {
-  const where = { classId_dayOfWeek_startTime: { classId, dayOfWeek, startTime } };
-  const existing = await client.classSlot.findUnique({ where });
+const MS_PER_MINUTE = 60 * 1000;
+
+// class_slots.startDate is a Postgres DATE; "today" is the calendar day at the facility.
+const facilityToday = () => {
+  const dateStr = new Intl.DateTimeFormat('en-CA', {
+    timeZone: env.FACILITY_TIMEZONE,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).format(new Date());
+  return new Date(`${dateStr}T00:00:00.000Z`);
+};
+
+// class_slots.startTime/endTime are Postgres TIME; Prisma reads and writes them as a UTC Date on
+// 1970-01-01. Slots are unique per (class, day, start time) only while active, so look up the
+// active one instead of using a compound key.
+const upsertSlot = async (
+  { classId, dayOfWeek, startTime, durationMin, capacity },
+  client = prisma,
+) => {
+  const existing = await client.classSlot.findFirst({
+    where: { classId, dayOfWeek, startTime, active: true },
+  });
   if (existing) {
-    const slot = await client.classSlot.update({ where, data: { capacity } });
+    const slot = await client.classSlot.update({ where: { id: existing.id }, data: { capacity } });
     return { slot, created: false };
   }
   const slot = await client.classSlot.create({
-    data: { id: crypto.randomUUID(), classId, dayOfWeek, startTime, capacity },
+    data: {
+      id: crypto.randomUUID(),
+      classId,
+      dayOfWeek,
+      startDate: facilityToday(),
+      startTime,
+      endTime: new Date(startTime.getTime() + durationMin * MS_PER_MINUTE),
+      capacity,
+    },
   });
   return { slot, created: true };
 };

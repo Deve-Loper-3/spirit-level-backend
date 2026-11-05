@@ -15,6 +15,7 @@ const {
   validateUpdateItemVisibility,
   validateCafeImageToken,
   validateItemIdParam,
+  validateUpdateItemStock,
 } = require('../validators/cafe.validation');
 const {
   listCategories,
@@ -31,6 +32,7 @@ const {
   patchItemVisibility,
   issueCafeImageToken,
 } = require('../controllers/cafeItem.controller');
+const { patchItemStock } = require('../controllers/cafeInventory.controller');
 
 const router = Router();
 
@@ -95,6 +97,19 @@ router.post(
 );
 
 router.all('/items', methodNotAllowed(['GET', 'POST']));
+
+// Inventory stock (SLAPP-79/81): registered before /items/:itemId.
+router.patch(
+  '/items/:itemId/stock',
+  authenticate,
+  authorize(Role.OWNER, Role.ADMIN),
+  cafeLimiter,
+  validateItemIdParam,
+  validateUpdateItemStock,
+  patchItemStock,
+);
+
+router.all('/items/:itemId/stock', methodNotAllowed(['PATCH']));
 
 router.get(
   '/items/:itemId',

@@ -2386,6 +2386,67 @@ paths:
         '405':
           $ref: '#/components/responses/CafeMethodNotAllowedPatchOnly'
 
+  /api/v1/cafe/items/{itemId}/stock:
+    parameters:
+      - $ref: '#/components/parameters/CafeItemId'
+    patch:
+      tags: [Cafe]
+      summary: Set a tracked cafe item's stock quantity
+      description: |
+        OWNER or ADMIN only (SLAPP-79/81). Replaces `stockQuantity` with `quantity` (a direct
+        overwrite, not an increment). Only tracked items (`isTracked: true`) have stock;
+        untracked (made-to-order) items are 409 `ITEM_NOT_TRACKED`.
+
+        Setting `quantity` to 0 also sets `availability` to `sold_out` in the same write.
+        Restocking never flips an item back to `available`: PATCH
+        `/api/v1/cafe/items/{itemId}/availability` afterwards. `stockStatus` is derived from
+        the persisted quantity: 0 `OUT_OF_STOCK`, 1-14 `LOW_STOCK`, 15 or more `IN_STOCK`.
+      operationId: updateCafeItemStock
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateCafeItemStockRequest'
+            example:
+              quantity: 24
+      responses:
+        '200':
+          description: The item's stock view after the update
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/SuccessEnvelope'
+                  - type: object
+                    properties:
+                      message:
+                        example: Cafe item stock updated successfully
+                      data:
+                        $ref: '#/components/schemas/CafeItemStockUpdate'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/CafeItemNotFound'
+        '409':
+          $ref: '#/components/responses/CafeItemNotTracked'
+        '422':
+          $ref: '#/components/responses/ValidationFailed'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+    put:
+      tags: [Cafe]
+      summary: Not supported
+      description: 'Every method other than PATCH answers 405 with `Allow: PATCH`.'
+      operationId: cafeItemStockMethodNotAllowed
+      responses:
+        '405':
+          $ref: '#/components/responses/CafeMethodNotAllowedPatchOnly'
+
   /api/v1/cafe/uploads/image/token:
     post:
       tags: [Cafe]
@@ -2636,6 +2697,17 @@ components:
             success: false
             message: Item not found
             code: ITEM_NOT_FOUND
+
+    CafeItemNotTracked:
+      description: The item exists but is untracked (`isTracked` false), so it has no stock
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorEnvelope'
+          example:
+            success: false
+            message: Stock can only be updated for tracked items
+            code: ITEM_NOT_TRACKED
 
     CafeStockRuleViolation:
       description: |
@@ -4136,3 +4208,52 @@ components:
       properties:
         visibility:
           $ref: '#/components/schemas/CafeItemVisibility'
+
+    CafeStockStatus:
+      type: string
+      description: Derived from quantity (0 OUT_OF_STOCK, 1-14 LOW_STOCK, 15 or more IN_STOCK)
+      enum: [OUT_OF_STOCK, LOW_STOCK, IN_STOCK]
+
+    UpdateCafeItemStockRequest:
+      type: object
+      required: [quantity]
+      properties:
+        quantity:
+          type: integer
+          minimum: 0
+          description: New absolute stock quantity (replaces the current value; strings are rejected)
+
+    CafeItemStockUpdate:
+      type: object
+      required: [id, name, categoryId, quantity, unitCost, stockStatus, availability, updatedAt]
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        categoryId:
+          type: string
+          format: uuid
+        category:
+          type: object
+          properties:
+            id:
+              type: string
+              format: uuid
+            name:
+              type: string
+        quantity:
+          type: integer
+          minimum: 0
+        unitCost:
+          type: number
+          nullable: true
+          description: AED; `null` when the stored cost is 0 (cost not set)
+        stockStatus:
+          $ref: '#/components/schemas/CafeStockStatus'
+        availability:
+          $ref: '#/components/schemas/CafeItemAvailability'
+        updatedAt:
+          type: string
+          format: date-time

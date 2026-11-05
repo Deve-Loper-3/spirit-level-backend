@@ -38,7 +38,7 @@ describe('Cafe Web & Mobile Parity and Route Rate Limiter Coverage', () => {
     it('verifies every registered endpoint under /api/v1/cafe has a limiter in its middleware chain', () => {
       const routeLayers = cafeRouter.stack.filter((layer) => layer.route);
 
-      // We expect 11 endpoints + 405 handlers
+      // We expect 12 endpoints (11 catalogue + SLAPP-79/81 stock) + 405 handlers
       const auditedEndpoints = [];
 
       for (const layer of routeLayers) {
@@ -62,7 +62,7 @@ describe('Cafe Web & Mobile Parity and Route Rate Limiter Coverage', () => {
         });
       }
 
-      expect(auditedEndpoints.length).toBe(11);
+      expect(auditedEndpoints.length).toBe(12);
       for (const endpoint of auditedEndpoints) {
         expect(endpoint.hasLimiter).toBe(true);
       }

@@ -37,7 +37,7 @@ tags:
   - name: Plans
     description: Membership plan management (ADMIN / OWNER)
   - name: Cafe
-    description: Cafe / Refuel Bar catalogue - categories, items and item image upload (reads for all roles, writes for ADMIN / OWNER)
+    description: Cafe / Refuel Bar catalogue - categories, items and item image upload (reads for all roles, writes for ADMIN / OWNER) - plus inventory stock, list and summary (ADMIN / OWNER only)
 
 paths:
   /health:
@@ -2447,6 +2447,133 @@ paths:
         '405':
           $ref: '#/components/responses/CafeMethodNotAllowedPatchOnly'
 
+  /api/v1/cafe/inventory:
+    get:
+      tags: [Cafe]
+      summary: List tracked cafe items with stock status
+      description: |
+        OWNER or ADMIN only (SLAPP-79/81). Lists tracked items only (`isTracked: true`), both
+        `public` and `staff_only`; untracked made-to-order items never appear. Paginated,
+        ordered by name ascending.
+
+        `stockStatus` is derived from the quantity: 0 `OUT_OF_STOCK`, 1-14 `LOW_STOCK`,
+        15 or more `IN_STOCK`. The `status` filter is applied before pagination, so `total`
+        and `totalPages` count only matching items. A stored `unitCost` of 0 is returned as
+        `null` here (the catalogue endpoints still return 0).
+
+        `search` matches the name or description, case-insensitive, with `%` and `_` treated
+        as plain characters.
+      operationId: listCafeInventory
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: search
+          in: query
+          schema:
+            type: string
+            maxLength: 100
+        - name: categoryId
+          in: query
+          schema:
+            type: string
+            format: uuid
+        - name: status
+          in: query
+          description: Uppercase only; lowercase values are 422
+          schema:
+            $ref: '#/components/schemas/CafeStockStatus'
+        - name: page
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            default: 1
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 20
+      responses:
+        '200':
+          description: A page of tracked items
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/SuccessEnvelope'
+                  - type: object
+                    properties:
+                      data:
+                        type: array
+                        items:
+                          $ref: '#/components/schemas/CafeInventoryItem'
+                      pagination:
+                        $ref: '#/components/schemas/Pagination'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '422':
+          $ref: '#/components/responses/ValidationFailed'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+    put:
+      tags: [Cafe]
+      summary: Not supported
+      description: 'Every method other than GET answers 405 with `Allow: GET`.'
+      operationId: cafeInventoryMethodNotAllowed
+      responses:
+        '405':
+          $ref: '#/components/responses/CafeMethodNotAllowedGetOnly'
+
+  /api/v1/cafe/inventory/summary:
+    get:
+      tags: [Cafe]
+      summary: Inventory summary cards
+      description: |
+        OWNER or ADMIN only (SLAPP-79/81). Aggregates over tracked items only
+        (`isTracked: true`, `public` and `staff_only`); untracked made-to-order items are not
+        counted. Takes no query parameters.
+
+        `lowStock` counts quantity below 15 **including** zero; `outOfStock` counts quantity 0.
+        `stockValueAed` is the sum of quantity x unitCost over items with a positive unitCost,
+        summed in integer fils and returned as AED with 2 decimals. Items with unitCost 0 add
+        nothing to the value and are counted in `itemsMissingCost`.
+
+        There is no sales data yet: `itemsSold`, `revenueFromItemsAed` and `bestSeller` are
+        always `null` and `salesDataAvailable` is `false`.
+      operationId: getCafeInventorySummary
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: The summary cards
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/SuccessEnvelope'
+                  - type: object
+                    properties:
+                      data:
+                        $ref: '#/components/schemas/CafeInventorySummary'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+    put:
+      tags: [Cafe]
+      summary: Not supported
+      description: 'Every method other than GET answers 405 with `Allow: GET`.'
+      operationId: cafeInventorySummaryMethodNotAllowed
+      responses:
+        '405':
+          $ref: '#/components/responses/CafeMethodNotAllowedGetOnly'
+
   /api/v1/cafe/uploads/image/token:
     post:
       tags: [Cafe]
@@ -2512,7 +2639,6 @@ paths:
           $ref: '#/components/responses/CafeMethodNotAllowedPostOnly'
 
 components:
-
   securitySchemes:
     bearerAuth:
       type: http
@@ -2839,6 +2965,23 @@ components:
           schema:
             type: string
             example: POST
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorEnvelope'
+          example:
+            success: false
+            message: Method not allowed for this route
+            code: METHOD_NOT_ALLOWED
+
+    CafeMethodNotAllowedGetOnly:
+      description: 'Route exists but not for this method (`Allow: GET`)'
+      headers:
+        Allow:
+          description: Methods the route supports
+          schema:
+            type: string
+            example: GET
       content:
         application/json:
           schema:
@@ -4213,6 +4356,87 @@ components:
       type: string
       description: Derived from quantity (0 OUT_OF_STOCK, 1-14 LOW_STOCK, 15 or more IN_STOCK)
       enum: [OUT_OF_STOCK, LOW_STOCK, IN_STOCK]
+
+    CafeInventoryItem:
+      type: object
+      required: [id, name, categoryId, quantity, unitCost, stockStatus]
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        categoryId:
+          type: string
+          format: uuid
+        category:
+          type: object
+          properties:
+            id:
+              type: string
+              format: uuid
+            name:
+              type: string
+        quantity:
+          type: integer
+          minimum: 0
+        unitCost:
+          type: number
+          nullable: true
+          description: AED; `null` when the stored cost is 0 (cost not set)
+        stockStatus:
+          $ref: '#/components/schemas/CafeStockStatus'
+
+    CafeInventorySummary:
+      type: object
+      required:
+        [
+          trackedItems,
+          lowStock,
+          outOfStock,
+          stockValueAed,
+          itemsMissingCost,
+          itemsSold,
+          revenueFromItemsAed,
+          bestSeller,
+          salesDataAvailable,
+        ]
+      properties:
+        trackedItems:
+          type: integer
+          minimum: 0
+        lowStock:
+          type: integer
+          minimum: 0
+          description: Tracked items with quantity below 15, including zero
+        outOfStock:
+          type: integer
+          minimum: 0
+          description: Tracked items with quantity 0
+        stockValueAed:
+          type: number
+          minimum: 0
+          description: Sum of quantity x unitCost (AED, 2 decimals) over items with unitCost > 0
+          example: 17.55
+        itemsMissingCost:
+          type: integer
+          minimum: 0
+          description: Tracked items whose unitCost is 0
+        itemsSold:
+          type: integer
+          nullable: true
+          description: Always null until sales data exists
+        revenueFromItemsAed:
+          type: number
+          nullable: true
+          description: Always null until sales data exists
+        bestSeller:
+          type: object
+          nullable: true
+          description: Always null until sales data exists
+        salesDataAvailable:
+          type: boolean
+          description: Always false until sales data exists
 
     UpdateCafeItemStockRequest:
       type: object

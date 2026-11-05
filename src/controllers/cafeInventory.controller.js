@@ -1,6 +1,33 @@
-const { updateStock } = require('../services/cafeInventory.service');
+const {
+  updateStock,
+  listInventory: getInventoryList,
+  getSummary,
+} = require('../services/cafeInventory.service');
 const { sendSuccess } = require('../utils/apiResponse.util');
 const { Messages } = require('../constants/messages');
+
+const listInventory = async (req, res, next) => {
+  try {
+    const result = await getInventoryList({ query: req.validatedQuery || req.query });
+
+    return sendSuccess(res, {
+      data: result.data,
+      pagination: result.pagination,
+    });
+  } catch (err) {
+    return next(err);
+  }
+};
+
+const getInventorySummary = async (req, res, next) => {
+  try {
+    const summary = await getSummary();
+
+    return sendSuccess(res, { data: summary });
+  } catch (err) {
+    return next(err);
+  }
+};
 
 // The service already returns the toCafeStockUpdateResponse view of the persisted row.
 const patchItemStock = async (req, res, next) => {
@@ -21,5 +48,7 @@ const patchItemStock = async (req, res, next) => {
 };
 
 module.exports = {
+  listInventory,
+  getInventorySummary,
   patchItemStock,
 };

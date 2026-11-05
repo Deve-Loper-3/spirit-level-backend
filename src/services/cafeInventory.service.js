@@ -100,7 +100,7 @@ const getSummary = async () => {
     trackedItems: items.length,
     lowStock,
     outOfStock,
-    stockValue: decimalToNumber(
+    stockValueAed: decimalToNumber(
       new Prisma.Decimal(stockValueMinor.toString()).div(MINOR_UNITS_PER_AED),
     ),
     itemsMissingCost,

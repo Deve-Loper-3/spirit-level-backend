@@ -260,7 +260,7 @@ describe('Cafe inventory service', () => {
         trackedItems: 5,
         lowStock: 3,
         outOfStock: 1,
-        stockValue: 20.15,
+        stockValueAed: 20.15,
         itemsMissingCost: 2,
         itemsSold: null,
         revenueFromItemsAed: null,
@@ -280,7 +280,7 @@ describe('Cafe inventory service', () => {
 
       const result = await getSummary();
 
-      expect(result.stockValue).toBe(2.36);
+      expect(result.stockValueAed).toBe(2.36);
       expect(result.itemsMissingCost).toBe(0);
     });
 
@@ -294,7 +294,7 @@ describe('Cafe inventory service', () => {
         trackedItems: 2,
         lowStock: 1,
         outOfStock: 1,
-        stockValue: 0,
+        stockValueAed: 0,
         itemsMissingCost: 2,
       });
     });
@@ -306,7 +306,7 @@ describe('Cafe inventory service', () => {
         trackedItems: 0,
         lowStock: 0,
         outOfStock: 0,
-        stockValue: 0,
+        stockValueAed: 0,
         itemsMissingCost: 0,
         itemsSold: null,
         revenueFromItemsAed: null,

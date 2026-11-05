@@ -16,6 +16,7 @@ const {
   validateCafeImageToken,
   validateItemIdParam,
   validateUpdateItemStock,
+  validateListInventoryQuery,
 } = require('../validators/cafe.validation');
 const {
   listCategories,
@@ -32,7 +33,11 @@ const {
   patchItemVisibility,
   issueCafeImageToken,
 } = require('../controllers/cafeItem.controller');
-const { patchItemStock } = require('../controllers/cafeInventory.controller');
+const {
+  listInventory,
+  getInventorySummary,
+  patchItemStock,
+} = require('../controllers/cafeInventory.controller');
 
 const router = Router();
 
@@ -155,6 +160,29 @@ router.patch(
 );
 
 router.all('/items/:itemId/visibility', methodNotAllowed(['PATCH']));
+
+// Inventory (SLAPP-79/81). Express matches paths exactly, so '/inventory' and
+// '/inventory/summary' (and their 405 handlers) do not conflict.
+router.get(
+  '/inventory',
+  authenticate,
+  authorize(Role.OWNER, Role.ADMIN),
+  cafeReadLimiter,
+  validateListInventoryQuery,
+  listInventory,
+);
+
+router.all('/inventory', methodNotAllowed(['GET']));
+
+router.get(
+  '/inventory/summary',
+  authenticate,
+  authorize(Role.OWNER, Role.ADMIN),
+  cafeReadLimiter,
+  getInventorySummary,
+);
+
+router.all('/inventory/summary', methodNotAllowed(['GET']));
 
 // Uploads
 router.post(

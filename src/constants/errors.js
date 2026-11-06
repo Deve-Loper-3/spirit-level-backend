@@ -263,6 +263,16 @@ const AppErrors = Object.freeze({
     message: Messages.ITEM_NOT_FOUND,
     code: 'ITEM_NOT_FOUND',
   }),
+  ORDER_NOT_FOUND: Object.freeze({
+    statusCode: 404,
+    message: Messages.ORDER_NOT_FOUND,
+    code: 'ORDER_NOT_FOUND',
+  }),
+  INVALID_ORDER_STATUS_TRANSITION: Object.freeze({
+    statusCode: 409,
+    message: Messages.ORDER_STATUS_TRANSITION_INVALID,
+    code: 'INVALID_ORDER_STATUS_TRANSITION',
+  }),
   ITEM_NOT_TRACKED: Object.freeze({
     statusCode: 409,
     message: Messages.ITEM_NOT_TRACKED,

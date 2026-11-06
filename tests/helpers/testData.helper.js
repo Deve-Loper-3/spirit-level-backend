@@ -58,6 +58,18 @@ const createTestData = (label) => {
   };
 
   const cleanup = async () => {
+    // Cafe orders RESTRICT user deletion; remove the test users' orders (items cascade) first.
+    await prisma.cafeOrder.deleteMany({
+      where: {
+        createdBy: {
+          OR: [
+            { id: { in: userIds } },
+            { email: { in: emails } },
+            { email: { startsWith: `test_${label}_` } },
+          ],
+        },
+      },
+    });
     await prisma.auditLog.deleteMany({
       where: {
         OR: [

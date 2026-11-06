@@ -38,6 +38,20 @@ const {
   getInventorySummary,
   patchItemStock,
 } = require('../controllers/cafeInventory.controller');
+const {
+  validateListOrdersQuery,
+  validateOrderSummaryQuery,
+  validateOrderIdParam,
+  validateOrderDetailQuery,
+  validateUpdateOrderStatusBody,
+} = require('../validators/cafeOrder.validation');
+const {
+  listCafeOrders,
+  getCafeOrder,
+  getCafeOrderSummary,
+  patchCafeOrderStatus,
+} = require('../controllers/cafeOrder.controller');
+const { ORDER_READ_ROLES, ORDER_ADMIN_ROLES } = require('../constants/cafeOrder');
 
 const router = Router();
 
@@ -183,6 +197,57 @@ router.get(
 );
 
 router.all('/inventory/summary', methodNotAllowed(['GET']));
+
+// Orders (SLAPP-79/82), read-only. Role gate here; per-order visibility (admins see all, other
+// staff see only their own) is enforced in the service. '/orders/summary' precedes '/:orderId'.
+router.get(
+  '/orders',
+  authenticate,
+  authorize(...ORDER_READ_ROLES),
+  cafeReadLimiter,
+  validateListOrdersQuery,
+  listCafeOrders,
+);
+
+router.all('/orders', methodNotAllowed(['GET']));
+
+router.get(
+  '/orders/summary',
+  authenticate,
+  authorize(...ORDER_READ_ROLES),
+  cafeReadLimiter,
+  validateOrderSummaryQuery,
+  getCafeOrderSummary,
+);
+
+router.all('/orders/summary', methodNotAllowed(['GET']));
+
+router.get(
+  '/orders/:orderId',
+  authenticate,
+  authorize(...ORDER_READ_ROLES),
+  cafeReadLimiter,
+  validateOrderIdParam,
+  validateOrderDetailQuery,
+  getCafeOrder,
+);
+
+router.all('/orders/:orderId', methodNotAllowed(['GET']));
+
+// SLAPP-79/82 phase 2: one-step status change, OWNER/ADMIN only, cafe write limiter.
+// The detail query validator is reused so this route also rejects any query parameter.
+router.patch(
+  '/orders/:orderId/status',
+  authenticate,
+  authorize(...ORDER_ADMIN_ROLES),
+  cafeLimiter,
+  validateOrderIdParam,
+  validateOrderDetailQuery,
+  validateUpdateOrderStatusBody,
+  patchCafeOrderStatus,
+);
+
+router.all('/orders/:orderId/status', methodNotAllowed(['PATCH']));
 
 // Uploads
 router.post(

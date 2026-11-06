@@ -13,6 +13,7 @@ const AuditAction = Object.freeze({
   PLAN_CREATED: 'PLAN_CREATED',
   PLAN_UPDATED: 'PLAN_UPDATED',
   PLAN_STATUS_CHANGED: 'PLAN_STATUS_CHANGED',
+  CAFE_ORDER_STATUS_CHANGED: 'CAFE_ORDER_STATUS_CHANGED',
 });
 
 const LoginFailureReason = Object.freeze({

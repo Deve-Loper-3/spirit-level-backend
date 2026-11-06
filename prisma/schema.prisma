@@ -53,6 +53,7 @@ enum AuditAction {
   PLAN_CREATED
   PLAN_UPDATED
   PLAN_STATUS_CHANGED
+  CAFE_ORDER_STATUS_CHANGED
 }
 
 enum LoginFailureReason {
@@ -93,6 +94,7 @@ model User {
   refreshSessions         RefreshSession[]
   auditLogs               AuditLog[]
   passwordResetOtps       PasswordResetOtp[]
+  cafeOrders              CafeOrder[]
   createdAt               DateTime           @default(now())
   updatedAt               DateTime           @updatedAt
 }
@@ -465,4 +467,51 @@ model CafeItem {
   @@index([availability])
   @@index([visibility, availability])
   @@map("cafe_items")
+}
+
+// SLAPP-79/82: cafe order queue. Orders are created by a later ticket; this schema is read by
+// the order list, detail and summary endpoints.
+enum CafeOrderStatus {
+  PREPARING
+  READY
+  SERVED
+}
+
+// Payments are not tracked. A single value means "paid" cannot be stored at all.
+enum CafeOrderPaymentStatus {
+  NOT_TRACKED
+}
+
+model CafeOrder {
+  id            String                 @id
+  orderNumber   String                 @unique
+  status        CafeOrderStatus        @default(PREPARING)
+  createdById   String
+  createdBy     User                   @relation(fields: [createdById], references: [id], onDelete: Restrict)
+  customerName  String?
+  totalAed      Decimal                @db.Decimal(10, 2)
+  paymentStatus CafeOrderPaymentStatus @default(NOT_TRACKED)
+  items         CafeOrderItem[]
+  createdAt     DateTime               @default(now())
+  updatedAt     DateTime               @updatedAt
+
+  @@index([createdAt, id])
+  @@index([createdById, createdAt])
+  @@index([status])
+  @@map("cafe_orders")
+}
+
+// Line items are snapshots: no FK to cafe_items, so catalogue renames, price changes and deletes
+// never alter history. A DB trigger rejects updates to the snapshot columns.
+model CafeOrderItem {
+  id           String    @id
+  orderId      String
+  order        CafeOrder @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  itemName     String
+  unitPriceAed Decimal   @db.Decimal(10, 2)
+  quantity     Int
+
+  @@index([orderId])
+  @@index([itemName])
+  @@map("cafe_order_items")
 }

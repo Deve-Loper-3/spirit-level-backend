@@ -37,7 +37,7 @@ tags:
   - name: Plans
     description: Membership plan management (ADMIN / OWNER)
   - name: Cafe
-    description: Cafe / Refuel Bar catalogue - categories, items and item image upload (reads for all roles, writes for ADMIN / OWNER) - plus inventory stock, list and summary (ADMIN / OWNER only)
+    description: Cafe / Refuel Bar catalogue - categories, items and item image upload (reads for all roles, writes for ADMIN / OWNER) - plus inventory stock, list and summary (ADMIN / OWNER only) - plus the order queue, order detail and order summary (ADMIN / OWNER see all orders, COACH only their own) and the one-step order status change (ADMIN / OWNER only)
 
 paths:
   /health:
@@ -2574,6 +2574,303 @@ paths:
         '405':
           $ref: '#/components/responses/CafeMethodNotAllowedGetOnly'
 
+  /api/v1/cafe/orders:
+    get:
+      tags: [Cafe]
+      summary: List cafe orders (order queue)
+      description: |
+        SLAPP-79/82. OWNER or ADMIN see every order. COACH sees **only orders they created**
+        (`createdBy` = the authenticated user, taken from the token, never from the request).
+        MEMBER gets 403. Orders are created by a later ticket (no create endpoint); OWNER /
+        ADMIN change the status with `PATCH /api/v1/cafe/orders/{orderId}/status`.
+
+        `from` / `to` are calendar dates in the facility time zone (Asia/Dubai), both inclusive.
+        `search` matches order number, customer name or any line item name (case-insensitive,
+        `%` and `_` are literal). Sorted newest first.
+
+        **Strict query parameters.** Allowed: `from`, `to`, `status`, `search`, `page`, `limit`.
+        Any other query parameter (for example `source`, `userId`, `createdBy`, `sort`) is
+        rejected with 422 `VALIDATION_ERROR`, one `errors[]` entry per unknown key
+        (`{ field: <key>, message: "Unknown query parameter" }`). There is no source filter, and
+        no parameter can change whose orders are returned. A repeated parameter
+        (`?status=a&status=b`) is also 422. Unlike the older cafe catalogue and inventory
+        endpoints, which ignore unknown keys.
+
+        `paymentStatus` is always `not_tracked`: payments are not recorded and an order is never
+        marked paid. `totalAed` is the placed order total, not paid revenue.
+      operationId: listCafeOrders
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: from
+          in: query
+          schema: { type: string, format: date, example: '2026-11-01' }
+        - name: to
+          in: query
+          description: Must be on or after `from`
+          schema: { type: string, format: date, example: '2026-11-06' }
+        - name: status
+          in: query
+          schema:
+            $ref: '#/components/schemas/CafeOrderStatus'
+        - name: search
+          in: query
+          schema: { type: string, maxLength: 100 }
+        - name: page
+          in: query
+          schema: { type: integer, minimum: 1, default: 1 }
+        - name: limit
+          in: query
+          schema: { type: integer, minimum: 1, maximum: 100, default: 20 }
+      responses:
+        '200':
+          description: A page of orders visible to the caller
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/SuccessEnvelope'
+                  - type: object
+                    properties:
+                      data:
+                        type: array
+                        items:
+                          $ref: '#/components/schemas/CafeOrderListItem'
+                      pagination:
+                        $ref: '#/components/schemas/Pagination'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '422':
+          $ref: '#/components/responses/ValidationFailed'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+    post:
+      tags: [Cafe]
+      summary: Not supported
+      description: 'Every method other than GET answers 405 with `Allow: GET`. Order creation is not available yet.'
+      operationId: cafeOrdersMethodNotAllowed
+      responses:
+        '405':
+          $ref: '#/components/responses/CafeMethodNotAllowedGetOnly'
+
+  /api/v1/cafe/orders/summary:
+    get:
+      tags: [Cafe]
+      summary: Cafe order summary cards
+      description: |
+        SLAPP-79/82. Same visibility rule as the list: OWNER / ADMIN aggregate every order,
+        COACH only their own, MEMBER 403.
+
+        `from` / `to` are facility-local dates (inclusive). With neither, the range is today;
+        with only one, the other defaults to today (or to the same day if that would invert
+        the range). `orderCount` counts orders placed in range; `preparingCount` counts only
+        `preparing` orders; `itemSalesHistory` is the quantity sold per item name (from the
+        order line snapshots), highest first with ties alphabetical; `topSeller` is its first
+        row or `null`. There is deliberately no revenue figure.
+
+        **Strict query parameters.** Allowed: `from`, `to` only. Any other query parameter
+        (including the list's `status`, `search`, `page`, `limit`, and `source` / `userId`) is
+        rejected with 422 `VALIDATION_ERROR`, one `errors[]` entry per unknown key
+        (`{ field: <key>, message: "Unknown query parameter" }`).
+      operationId: getCafeOrderSummary
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: from
+          in: query
+          schema: { type: string, format: date }
+        - name: to
+          in: query
+          schema: { type: string, format: date }
+      responses:
+        '200':
+          description: The summary for the range
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/SuccessEnvelope'
+                  - type: object
+                    properties:
+                      data:
+                        $ref: '#/components/schemas/CafeOrderSummary'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '422':
+          $ref: '#/components/responses/ValidationFailed'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+    put:
+      tags: [Cafe]
+      summary: Not supported
+      description: 'Every method other than GET answers 405 with `Allow: GET`.'
+      operationId: cafeOrderSummaryMethodNotAllowed
+      responses:
+        '405':
+          $ref: '#/components/responses/CafeMethodNotAllowedGetOnly'
+
+  /api/v1/cafe/orders/{orderId}:
+    get:
+      tags: [Cafe]
+      summary: Get one cafe order with its line items
+      description: |
+        SLAPP-79/82. OWNER / ADMIN can read any order; COACH only orders they created. An order
+        outside the caller's scope returns the same 404 `ORDER_NOT_FOUND` as a missing one.
+        Line items are snapshots taken when the order was placed: later catalogue renames,
+        price changes or deletions never change them.
+
+        **Strict query parameters.** Allowed: none. Any query parameter (for example `userId`
+        or `include`) is rejected with 422 `VALIDATION_ERROR`, one `errors[]` entry per unknown
+        key (`{ field: <key>, message: "Unknown query parameter" }`). A non-UUID `orderId` is
+        also 422 (`field: orderId`). Validation runs before the lookup, so a 422 never reveals
+        whether the order exists.
+      operationId: getCafeOrder
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: orderId
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '200':
+          description: The order
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/SuccessEnvelope'
+                  - type: object
+                    properties:
+                      data:
+                        $ref: '#/components/schemas/CafeOrderDetail'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/CafeOrderNotFound'
+        '422':
+          $ref: '#/components/responses/ValidationFailed'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+    patch:
+      tags: [Cafe]
+      summary: Not supported
+      description: 'Every method other than GET answers 405 with `Allow: GET`.'
+      operationId: cafeOrderMethodNotAllowed
+      responses:
+        '405':
+          $ref: '#/components/responses/CafeMethodNotAllowedGetOnly'
+
+  /api/v1/cafe/orders/{orderId}/status:
+    patch:
+      tags: [Cafe]
+      summary: Move a cafe order one step forward (preparing -> ready -> served)
+      description: |
+        SLAPP-79/82 phase 2. **OWNER or ADMIN only**; COACH and MEMBER get 403 (a coach cannot
+        change the status even of an order they created). Bearer token only, no cookies; same
+        JSON envelope for web and mobile.
+
+        Allowed transitions: `preparing` -> `ready` and `ready` -> `served`, one step at a
+        time. Skipping (`preparing` -> `served`), going back, repeating the current status and
+        anything after `served` are 409 `INVALID_ORDER_STATUS_TRANSITION` with
+        `details: { from, to, allowed }` (`allowed` is the list of statuses the order can move
+        to now; empty after `served`). There is no cancel.
+
+        The change is one conditional write (`WHERE id = :orderId AND status = <status read>`),
+        so of two concurrent requests for the same step exactly one returns 200 and the other
+        409 (its `details.from` is the status the winner set). A `CAFE_ORDER_STATUS_CHANGED`
+        audit row (actor id and role, order id and number, from, to) is written in the same
+        transaction.
+
+        Only `status` and `updatedAt` change. `paymentStatus` stays `not_tracked`; totals and
+        line items are never touched. The body must be exactly `{ "status": ... }`: any other
+        key (for example `paymentStatus`, `totalAed`, `items`) is 422, one `errors[]` entry per
+        key (`{ field: <key>, message: "Unknown field" }`). Query parameters are not accepted
+        (422 `Unknown query parameter`).
+
+        The 200 response has the same `data` shape as `GET /api/v1/cafe/orders/{orderId}`.
+      operationId: updateCafeOrderStatus
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: orderId
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CafeOrderStatusUpdateRequest'
+            example:
+              status: ready
+      responses:
+        '200':
+          description: Status changed; the updated order detail
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/SuccessEnvelope'
+                  - type: object
+                    properties:
+                      data:
+                        $ref: '#/components/schemas/CafeOrderDetail'
+              example:
+                success: true
+                message: Order status updated successfully
+                data:
+                  id: 6b0f3c52-6f8e-4a51-9b7e-2f1d8c9a4e10
+                  orderNumber: CO-000123
+                  status: ready
+                  customerName: null
+                  totalAed: 42
+                  paymentStatus: not_tracked
+                  createdBy:
+                    id: 0c7d1e2f-3a4b-4c5d-8e9f-a0b1c2d3e4f5
+                    fullName: Sara Coach
+                  itemCount: 2
+                  createdAt: '2026-11-06T08:15:00.000Z'
+                  updatedAt: '2026-11-06T08:21:43.120Z'
+                  items:
+                    - id: 1a2b3c4d-5e6f-4a7b-8c9d-0e1f2a3b4c5d
+                      itemName: Cortado
+                      unitPriceAed: 16.5
+                      quantity: 2
+                      lineTotalAed: 33
+                    - id: 2b3c4d5e-6f7a-4b8c-9d0e-1f2a3b4c5d6e
+                      itemName: Date Bar
+                      unitPriceAed: 9
+                      quantity: 1
+                      lineTotalAed: 9
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/CafeOrderNotFound'
+        '409':
+          $ref: '#/components/responses/CafeOrderInvalidStatusTransition'
+        '422':
+          $ref: '#/components/responses/ValidationFailed'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+    get:
+      tags: [Cafe]
+      summary: Not supported
+      description: 'Every method other than PATCH answers 405 with `Allow: PATCH`.'
+      operationId: cafeOrderStatusMethodNotAllowed
+      responses:
+        '405':
+          $ref: '#/components/responses/CafeMethodNotAllowedPatchOnly'
+
   /api/v1/cafe/uploads/image/token:
     post:
       tags: [Cafe]
@@ -2973,6 +3270,57 @@ components:
             success: false
             message: Method not allowed for this route
             code: METHOD_NOT_ALLOWED
+
+    CafeOrderInvalidStatusTransition:
+      description: |
+        The requested status is not the one allowed next step from the order's current status
+        (skip, backward, same status, anything after `served`), or another request changed the
+        status first. `details.allowed` lists what the order can move to now.
+      content:
+        application/json:
+          schema:
+            allOf:
+              - $ref: '#/components/schemas/ErrorEnvelope'
+              - type: object
+                properties:
+                  details:
+                    type: object
+                    required: [from, to, allowed]
+                    properties:
+                      from:
+                        $ref: '#/components/schemas/CafeOrderStatus'
+                      to:
+                        $ref: '#/components/schemas/CafeOrderStatus'
+                      allowed:
+                        type: array
+                        items:
+                          $ref: '#/components/schemas/CafeOrderStatus'
+          examples:
+            skipStep:
+              summary: preparing -> served
+              value:
+                success: false
+                message: Order status cannot change from the current status to the requested one
+                code: INVALID_ORDER_STATUS_TRANSITION
+                details: { from: preparing, to: served, allowed: [ready] }
+            afterServed:
+              summary: served -> ready
+              value:
+                success: false
+                message: Order status cannot change from the current status to the requested one
+                code: INVALID_ORDER_STATUS_TRANSITION
+                details: { from: served, to: ready, allowed: [] }
+
+    CafeOrderNotFound:
+      description: No such order, or the order is not visible to the caller
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorEnvelope'
+          example:
+            success: false
+            message: Order not found
+            code: ORDER_NOT_FOUND
 
     CafeMethodNotAllowedGetOnly:
       description: 'Route exists but not for this method (`Allow: GET`)'
@@ -4387,6 +4735,99 @@ components:
         stockStatus:
           $ref: '#/components/schemas/CafeStockStatus'
 
+    CafeOrderStatus:
+      type: string
+      enum: [preparing, ready, served]
+    CafeOrderStatusUpdateRequest:
+      type: object
+      additionalProperties: false
+      required: [status]
+      properties:
+        status:
+          $ref: '#/components/schemas/CafeOrderStatus'
+    CafeOrderListItem:
+      type: object
+      required:
+        [
+          id,
+          orderNumber,
+          status,
+          customerName,
+          totalAed,
+          paymentStatus,
+          createdBy,
+          itemCount,
+          createdAt,
+          updatedAt,
+        ]
+      properties:
+        id: { type: string, format: uuid }
+        orderNumber: { type: string }
+        status:
+          $ref: '#/components/schemas/CafeOrderStatus'
+        customerName: { type: string, nullable: true }
+        totalAed:
+          type: number
+          description: Placed order total in AED. Not paid revenue.
+        paymentStatus:
+          type: string
+          enum: [not_tracked]
+          description: Payments are not tracked; always `not_tracked`.
+        createdBy:
+          type: object
+          required: [id, fullName]
+          properties:
+            id: { type: string, format: uuid }
+            fullName: { type: string }
+        itemCount: { type: integer, description: Number of line items }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+    CafeOrderLineItem:
+      type: object
+      required: [id, itemName, unitPriceAed, quantity, lineTotalAed]
+      properties:
+        id: { type: string, format: uuid }
+        itemName: { type: string, description: Snapshot of the item name when ordered }
+        unitPriceAed: { type: number, description: Snapshot of the unit price when ordered }
+        quantity: { type: integer, minimum: 1 }
+        lineTotalAed: { type: number }
+    CafeOrderDetail:
+      allOf:
+        - $ref: '#/components/schemas/CafeOrderListItem'
+        - type: object
+          required: [items]
+          properties:
+            items:
+              type: array
+              items:
+                $ref: '#/components/schemas/CafeOrderLineItem'
+    CafeOrderItemSales:
+      type: object
+      required: [itemName, quantity]
+      properties:
+        itemName: { type: string }
+        quantity: { type: integer }
+    CafeOrderSummary:
+      type: object
+      required: [range, orderCount, preparingCount, topSeller, itemSalesHistory]
+      properties:
+        range:
+          type: object
+          required: [from, to, timezone]
+          properties:
+            from: { type: string, format: date }
+            to: { type: string, format: date }
+            timezone: { type: string, example: Asia/Dubai }
+        orderCount: { type: integer }
+        preparingCount: { type: integer }
+        topSeller:
+          nullable: true
+          allOf:
+            - $ref: '#/components/schemas/CafeOrderItemSales'
+        itemSalesHistory:
+          type: array
+          items:
+            $ref: '#/components/schemas/CafeOrderItemSales'
     CafeInventorySummary:
       type: object
       required:

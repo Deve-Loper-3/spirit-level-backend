@@ -267,6 +267,18 @@ const Messages = Object.freeze({
   ITEM_AVAILABILITY_UPDATED_SUCCESS: 'Cafe item availability updated successfully',
   ITEM_VISIBILITY_UPDATED_SUCCESS: 'Cafe item visibility updated successfully',
   CAFE_IMAGE_UPLOADED_SUCCESS: 'Image uploaded successfully',
+  ORDER_NOT_FOUND: 'Order not found',
+  ORDER_ID_INVALID: 'Order id must be a valid UUID',
+  ORDER_STATUS_INVALID: 'Status must be one of: preparing, ready, served',
+  ORDER_DATE_INVALID: 'Date must be a valid calendar date in YYYY-MM-DD format',
+  ORDER_DATE_RANGE_INVALID: '`from` must be on or before `to`',
+  ORDER_SEARCH_INVALID: 'Search must be text of at most 100 characters',
+  ORDER_LIMIT_INVALID: 'Limit must be an integer between 1 and 100',
+  ORDER_QUERY_UNKNOWN_FIELD: 'Unknown query parameter',
+  ORDER_BODY_UNKNOWN_FIELD: 'Unknown field',
+  ORDER_STATUS_TRANSITION_INVALID:
+    'Order status cannot change from the current status to the requested one',
+  ORDER_STATUS_UPDATED_SUCCESS: 'Order status updated successfully',
 });
 
 module.exports = { Messages };

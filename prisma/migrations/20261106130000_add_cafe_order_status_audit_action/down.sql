@@ -1,0 +1,5 @@
+-- Rollback for 20261106130000_add_cafe_order_status_audit_action
+-- The enum value CAFE_ORDER_STATUS_CHANGED cannot be dropped with ALTER TYPE.
+-- To remove it: delete AuditLog rows that use it, create a new enum type without it,
+-- alter "AuditLog"."action" to it, drop the old type, then delete this migration's row from
+-- "_prisma_migrations".

@@ -1,6 +1,10 @@
 jest.mock('../../src/repositories/cafeOrder.repository');
+jest.mock('../../src/repositories/user.repository', () => ({
+  findAuthWithEmailById: jest.fn(),
+}));
 
 const repo = require('../../src/repositories/cafeOrder.repository');
+const userRepository = require('../../src/repositories/user.repository');
 const { Role } = require('../../src/constants/roles');
 const { AppErrors } = require('../../src/constants/errors');
 const { AuditAction } = require('../../src/constants/audit');
@@ -16,6 +20,15 @@ const admin = { id: 'admin-1', role: Role.ADMIN };
 const ORDER_ID = '3f1c2b9e-8a4d-4f6b-9c2e-1a2b3c4d5e6f';
 
 describe('cafe order status transitions', () => {
+  beforeEach(() => {
+    userRepository.findAuthWithEmailById.mockResolvedValue({
+      id: admin.id,
+      email: 'admin@test.invalid',
+      role: Role.ADMIN,
+      status: 'ACTIVE',
+    });
+  });
+
   describe('transition map', () => {
     it('is exactly preparing -> ready -> served, with nothing after served', () => {
       expect(ORDER_STATUS_TRANSITIONS).toEqual({
@@ -101,6 +114,7 @@ describe('cafe order status transitions', () => {
         meta: { ipAddress: '1.2.3.4' },
       });
 
+      expect(userRepository.findAuthWithEmailById).toHaveBeenCalledWith('admin-1');
       expect(repo.updateOrderStatusWithAudit).toHaveBeenCalledWith({
         orderId: ORDER_ID,
         from: 'PREPARING',
@@ -110,6 +124,7 @@ describe('cafe order status transitions', () => {
           userId: null,
           actorId: 'admin-1',
           actorRole: Role.ADMIN,
+          email: 'admin@test.invalid',
           reason: `CO-1 (${ORDER_ID})`,
           details: { orderId: ORDER_ID, orderNumber: 'CO-1', from: 'preparing', to: 'ready' },
           meta: { ipAddress: '1.2.3.4' },

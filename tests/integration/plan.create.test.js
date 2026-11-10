@@ -274,6 +274,7 @@ describe('POST /api/v1/plans', () => {
       expect(auditLog).toBeDefined();
       expect(auditLog.actorId).toBe(adminUser.id);
       expect(auditLog.actorRole).toBe(Role.ADMIN);
+      expect(auditLog.email).toBe(adminUser.email);
       expect(auditLog.reason).toBe(`${TEST_PREFIX}Nutrition Coaching (${dbPlan.id})`);
     });
 

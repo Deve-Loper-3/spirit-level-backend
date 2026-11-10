@@ -29,12 +29,13 @@ describe('Cafe inventory repository', () => {
         category: { select: { id: true, name: true } },
         stockQuantity: true,
         unitCost: true,
+        availability: true,
       },
     });
   });
 
-  it('applies category, escaped search and pagination in the DB, with matching count filters', async () => {
-    const filters = { categoryId: 'category-1', search: '  a%b_c\\d  ' };
+  it('applies category, escaped search, status and pagination in the DB, with matching count filters', async () => {
+    const filters = { categoryId: 'category-1', search: '  a%b_c\\d  ', status: 'LOW_STOCK' };
     prisma.cafeItem.count.mockResolvedValue(3);
 
     await listTrackedItems({ ...filters, skip: 10, take: 5 });
@@ -42,6 +43,7 @@ describe('Cafe inventory repository', () => {
 
     const where = {
       isTracked: true,
+      stockQuantity: { gt: 0, lt: 15 },
       categoryId: 'category-1',
       OR: [
         { name: { contains: 'a\\%b\\_c\\\\d', mode: 'insensitive' } },

@@ -13,6 +13,7 @@ const {
   countTrackedItems,
   getSummaryItems,
   updateStock: persistStock,
+  decrementStockIfAvailable,
 } = require('../repositories/cafeInventory.repository');
 const {
   decimalToNumber,
@@ -37,6 +38,7 @@ const updateStock = async ({ itemId, payload }) => {
 
   const data = { stockQuantity: payload.quantity };
   if (payload.quantity === 0) data.availability = DbCafeItemAvailability.SOLD_OUT;
+  // Restock does not auto-flip to AVAILABLE (staff must set availability explicitly).
 
   // One write persists quantity and its zero-stock availability side effect together.
   const updated = await orNotFound(() => persistStock(itemId, data), AppErrors.ITEM_NOT_FOUND);
@@ -44,25 +46,33 @@ const updateStock = async ({ itemId, payload }) => {
   return toCafeStockUpdateResponse(updated, deriveStockStatus(updated.stockQuantity));
 };
 
+/**
+ * Safe stock deduction for future order creation. Fails closed on races / insufficient stock.
+ */
+const consumeStock = async ({ itemId, quantity }) => {
+  const existing = await findById(itemId);
+  if (!existing) throw createAppError(AppErrors.ITEM_NOT_FOUND);
+  if (!existing.isTracked) throw createAppError(AppErrors.ITEM_NOT_TRACKED);
+
+  const updated = await decrementStockIfAvailable({
+    itemId,
+    quantity,
+    soldOutAvailability: DbCafeItemAvailability.SOLD_OUT,
+  });
+  if (!updated) throw createAppError(AppErrors.ITEM_INSUFFICIENT_STOCK);
+
+  return toCafeStockUpdateResponse(updated, deriveStockStatus(updated.stockQuantity));
+};
+
 const listInventory = async ({ query = {} } = {}) => {
   const { categoryId, search, status, page = DEFAULT_PAGE, limit = DEFAULT_LIMIT } = query;
-  const filters = { categoryId, search };
+  const filters = { categoryId, search, status };
   const { skip, take } = toSkipTake({ page, limit });
 
-  let items;
-  let total;
-  if (status) {
-    // Status is derived in the service, so filter the full candidate set before paging.
-    const candidates = await listTrackedItems(filters);
-    const matching = candidates.filter((item) => deriveStockStatus(item.stockQuantity) === status);
-    total = matching.length;
-    items = matching.slice(skip, skip + take);
-  } else {
-    [items, total] = await Promise.all([
-      listTrackedItems({ ...filters, skip, take }),
-      countTrackedItems(filters),
-    ]);
-  }
+  const [items, total] = await Promise.all([
+    listTrackedItems({ ...filters, skip, take }),
+    countTrackedItems(filters),
+  ]);
 
   return {
     data: items.map((item) =>
@@ -84,6 +94,7 @@ const getSummary = async () => {
     if (item.stockQuantity === 0) outOfStock += 1;
 
     // Persisted unitCost has scale 2. Convert exactly to integer fils before accumulating.
+    // unitCost 0 is treated as a missing/placeholder cost (excluded from stock value).
     const costMinor = BigInt(new Prisma.Decimal(item.unitCost).mul(MINOR_UNITS_PER_AED).toFixed(0));
     if (costMinor === 0n) itemsMissingCost += 1;
     if (costMinor > 0n) stockValueMinor += BigInt(item.stockQuantity) * costMinor;
@@ -104,4 +115,10 @@ const getSummary = async () => {
   };
 };
 
-module.exports = { deriveStockStatus, updateStock, listInventory, getSummary };
+module.exports = {
+  deriveStockStatus,
+  updateStock,
+  consumeStock,
+  listInventory,
+  getSummary,
+};

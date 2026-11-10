@@ -9,18 +9,41 @@ const {
   API_TO_DB_VISIBILITY,
 } = require('../constants/cafe');
 const { DEFAULT_PAGE, DEFAULT_LIMIT } = require('../constants/pagination');
-const { orNotFound } = require('../utils/prismaError.util');
+const { orNotFound, isUniqueConstraintError } = require('../utils/prismaError.util');
 const { escapeLikePattern } = require('../utils/like.util');
 const { toSkipTake, buildPagination } = require('../utils/pagination.util');
 const { toCafeItemResponse } = require('../repositories/cafe.mapper');
 const { findById: findCategoryById } = require('../repositories/cafeCategory.repository');
 const {
   findById,
+  findByName,
+  findByNameExcludingId,
   listItems: findItems,
   countItems,
   create,
   update,
 } = require('../repositories/cafeItem.repository');
+
+const isItemNameUniqueError = (err) => {
+  if (!isUniqueConstraintError(err)) return false;
+  const target = err.meta?.target;
+  if (!target) return true;
+  const targets = Array.isArray(target) ? target : [target];
+  return targets.some(
+    (t) =>
+      typeof t === 'string' &&
+      (t.includes('cafe_items_name_lower_idx') || t.includes('name')),
+  );
+};
+
+const assertItemNameAvailable = async (name, excludeId) => {
+  const trimmed = (name || '').trim();
+  if (!trimmed) return;
+  const existing = excludeId
+    ? await findByNameExcludingId(trimmed, excludeId)
+    : await findByName(trimmed);
+  if (existing) throw createAppError(AppErrors.ITEM_EXISTS);
+};
 
 const listItems = async ({ query = {}, userRole }) => {
   const { search, categoryId, page = DEFAULT_PAGE, limit = DEFAULT_LIMIT } = query;
@@ -75,6 +98,8 @@ const createItem = async ({ payload }) => {
     throw createAppError(AppErrors.CATEGORY_NOT_FOUND_BODY);
   }
 
+  await assertItemNameAvailable(payload.name);
+
   const isTracked = payload.isTracked !== undefined ? Boolean(payload.isTracked) : true;
 
   let stockQuantity;
@@ -118,21 +143,26 @@ const createItem = async ({ payload }) => {
     ? API_TO_DB_VISIBILITY[payload.visibility]
     : DbCafeItemVisibility.PUBLIC;
 
-  const created = await create({
-    name: payload.name.trim(),
-    categoryId: payload.categoryId,
-    description: payload.description ? payload.description.trim() : null,
-    nutrition: payload.nutrition ?? undefined,
-    priceAed: payload.priceAed,
-    imageUrl: payload.imageUrl ?? null,
-    availability: dbAvailability,
-    visibility: dbVisibility,
-    isTracked,
-    stockQuantity,
-    unitCost,
-  });
+  try {
+    const created = await create({
+      name: payload.name.trim(),
+      categoryId: payload.categoryId,
+      description: payload.description ? payload.description.trim() : null,
+      nutrition: payload.nutrition ?? undefined,
+      priceAed: payload.priceAed,
+      imageUrl: payload.imageUrl ?? null,
+      availability: dbAvailability,
+      visibility: dbVisibility,
+      isTracked,
+      stockQuantity,
+      unitCost,
+    });
 
-  return toCafeItemResponse(created);
+    return toCafeItemResponse(created);
+  } catch (err) {
+    if (isItemNameUniqueError(err)) throw createAppError(AppErrors.ITEM_EXISTS);
+    throw err;
+  }
 };
 
 const updateItem = async ({ itemId, payload }) => {
@@ -204,6 +234,7 @@ const updateItem = async ({ itemId, payload }) => {
 
   if (payload.name !== undefined) {
     dataToUpdate.name = payload.name.trim();
+    await assertItemNameAvailable(dataToUpdate.name, itemId);
   }
   if (payload.categoryId !== undefined) {
     dataToUpdate.categoryId = payload.categoryId;
@@ -221,8 +252,13 @@ const updateItem = async ({ itemId, payload }) => {
     dataToUpdate.imageUrl = payload.imageUrl ?? null;
   }
 
-  const updated = await orNotFound(() => update(itemId, dataToUpdate), AppErrors.ITEM_NOT_FOUND);
-  return toCafeItemResponse(updated);
+  try {
+    const updated = await orNotFound(() => update(itemId, dataToUpdate), AppErrors.ITEM_NOT_FOUND);
+    return toCafeItemResponse(updated);
+  } catch (err) {
+    if (isItemNameUniqueError(err)) throw createAppError(AppErrors.ITEM_EXISTS);
+    throw err;
+  }
 };
 
 const updateItemAvailability = async ({ itemId, payload }) => {

@@ -241,7 +241,9 @@ const Messages = Object.freeze({
   CATEGORY_UPDATE_EMPTY: 'Provide at least one field to update',
 
   ITEM_NOT_FOUND: 'Item not found',
+  ITEM_EXISTS: 'A cafe item with this name already exists',
   ITEM_NOT_TRACKED: 'Stock can only be updated for tracked items',
+  ITEM_INSUFFICIENT_STOCK: 'Not enough stock for this item',
   ITEM_SOLD_OUT_ZERO_STOCK: 'Cannot mark item as available when stock quantity is 0',
   ITEM_TRACKED_STOCK_REQUIRED: 'Tracked items require stockQuantity and unitCost',
   ITEM_NAME_REQUIRED: 'Item name is required',

@@ -11,10 +11,10 @@ const { Messages } = require('../constants/messages');
 
 const createPlan = async (req, res, next) => {
   try {
+    // Email is loaded in plan.service (authenticate does not attach it on req.user).
     const actor = {
       id: req.user.id,
       role: req.user.role,
-      email: req.user.email,
     };
     const meta = getRequestMeta(req);
     const plan = await createNewPlan({
@@ -43,7 +43,8 @@ const listPlans = async (req, res, next) => {
   }
 };
 
-const toActor = (req) => ({ id: req.user.id, role: req.user.role, email: req.user.email });
+// Email is resolved in plan.service (authenticate does not attach it on req.user).
+const toActor = (req) => ({ id: req.user.id, role: req.user.role });
 
 const getPlan = async (req, res, next) => {
   try {

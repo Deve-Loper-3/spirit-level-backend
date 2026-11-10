@@ -11,6 +11,39 @@ const findById = async (id, client = prisma) => {
   });
 };
 
+const findByName = async (name, client = prisma) => {
+  if (!name) return null;
+  const trimmed = name.trim();
+  return client.cafeItem.findFirst({
+    where: {
+      name: {
+        equals: trimmed,
+        mode: 'insensitive',
+      },
+    },
+    include: {
+      category: true,
+    },
+  });
+};
+
+const findByNameExcludingId = async (name, excludeId, client = prisma) => {
+  if (!name) return null;
+  const trimmed = name.trim();
+  return client.cafeItem.findFirst({
+    where: {
+      name: {
+        equals: trimmed,
+        mode: 'insensitive',
+      },
+      NOT: { id: excludeId },
+    },
+    include: {
+      category: true,
+    },
+  });
+};
+
 const listItems = async (
   { where = {}, skip = 0, take = 20, orderBy = { name: 'asc' } } = {},
   client = prisma,
@@ -90,6 +123,8 @@ const upsertByExternalRef = async ({ externalRef, data, client = prisma }) => {
 
 module.exports = {
   findById,
+  findByName,
+  findByNameExcludingId,
   findByExternalRef,
   listItems,
   countItems,

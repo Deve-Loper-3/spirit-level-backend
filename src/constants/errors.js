@@ -273,6 +273,11 @@ const AppErrors = Object.freeze({
     message: Messages.ITEM_NOT_FOUND,
     code: 'ITEM_NOT_FOUND',
   }),
+  ITEM_EXISTS: Object.freeze({
+    statusCode: 409,
+    message: Messages.ITEM_EXISTS,
+    code: 'ITEM_EXISTS',
+  }),
   ORDER_NOT_FOUND: Object.freeze({
     statusCode: 404,
     message: Messages.ORDER_NOT_FOUND,
@@ -287,6 +292,11 @@ const AppErrors = Object.freeze({
     statusCode: 409,
     message: Messages.ITEM_NOT_TRACKED,
     code: 'ITEM_NOT_TRACKED',
+  }),
+  ITEM_INSUFFICIENT_STOCK: Object.freeze({
+    statusCode: 409,
+    message: Messages.ITEM_INSUFFICIENT_STOCK,
+    code: 'ITEM_INSUFFICIENT_STOCK',
   }),
   ITEM_SOLD_OUT_ZERO_STOCK: Object.freeze({
     statusCode: 400,

@@ -198,8 +198,9 @@ router.get(
 
 router.all('/inventory/summary', methodNotAllowed(['GET']));
 
-// Orders (SLAPP-79/82), read-only. Role gate here; per-order visibility (admins see all, other
-// staff see only their own) is enforced in the service. '/orders/summary' precedes '/:orderId'.
+// Orders (SLAPP-79/82). Create is a later ticket — only list/detail/summary/status exist today.
+// Role gate here; per-order visibility (admins see all, other staff see only their own) is
+// enforced in the service. '/orders/summary' precedes '/:orderId'.
 router.get(
   '/orders',
   authenticate,

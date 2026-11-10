@@ -8,7 +8,12 @@ const {
   ORDER_STATUS_TRANSITIONS,
 } = require('../constants/cafeOrder');
 const { buildOrderScope, isOrderAdmin } = require('./cafeOrder.access');
-const { localDateTimeToUtc, getTodayInTimezone, addDaysToDateStr } = require('./schedule.service');
+const {
+  localDateTimeToUtc,
+  getTodayInTimezone,
+  addDaysToDateStr,
+} = require('../utils/timezone.util');
+const { findAuthWithEmailById } = require('../repositories/user.repository');
 const {
   listOrders: findOrders,
   countOrders,
@@ -23,6 +28,14 @@ const {
 } = require('../repositories/cafeOrder.mapper');
 const { toSkipTake, buildPagination } = require('../utils/pagination.util');
 const { DEFAULT_PAGE, DEFAULT_LIMIT } = require('../constants/pagination');
+
+// authenticate only attaches id/role/status; load email from DB for audit rows.
+const resolveActorEmail = async (actor) => {
+  if (actor?.email) return actor.email;
+  if (!actor?.id) return null;
+  const user = await findAuthWithEmailById(actor.id);
+  return user?.email ?? null;
+};
 
 const facilityTimezone = () => env.FACILITY_TIMEZONE || 'Asia/Dubai';
 
@@ -111,6 +124,7 @@ const updateOrderStatus = async ({ actor, orderId, status, meta = {} }) => {
   const from = DB_TO_API_ORDER_STATUS[order.status];
   if (!isAllowedTransition(from, status)) throw transitionConflict(from, status);
 
+  const actorEmail = await resolveActorEmail(actor);
   const updated = await updateOrderStatusWithAudit({
     orderId,
     from: order.status,
@@ -120,6 +134,7 @@ const updateOrderStatus = async ({ actor, orderId, status, meta = {} }) => {
       userId: null,
       actorId: actor.id,
       actorRole: actor.role,
+      email: actorEmail,
       reason: `${order.orderNumber} (${order.id})`,
       details: { orderId: order.id, orderNumber: order.orderNumber, from, to: status },
       meta,

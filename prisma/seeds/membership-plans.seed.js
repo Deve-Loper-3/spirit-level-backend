@@ -59,20 +59,46 @@ const parseCreditsIncluded = (str) => {
   return { count, creditType, validityValue, validityUnit };
 };
 
+/** Map a Glofox duration string to a standard recurring cycle, or null if not recurring. */
+const recurringBillingFromDuration = (durationStr) => {
+  const dur = parseDuration(durationStr);
+  if (!dur || dur.unit !== PlanValidityUnit.MONTH) return null;
+  if (dur.value === 1) return PlanBillingCycle.MONTH;
+  if (dur.value === 3) return PlanBillingCycle.QUARTER;
+  if (dur.value === 6) return PlanBillingCycle.HALF_YEAR;
+  if (dur.value === 12) return PlanBillingCycle.YEAR;
+  return null;
+};
+
+/**
+ * Trial → TRIAL; time-based → SUBSCRIPTION; credit-based with a standard
+ * recurring duration (1/3/6/12 months) and not buy-once → SUBSCRIPTION;
+ * otherwise CREDIT_PACK.
+ */
+const asLower = (val) =>
+  String(val || '')
+    .toLowerCase()
+    .trim();
+
+const deriveKind = ({ trialVal, planType, durationStr, buyOnceVal }) => {
+  if (asLower(trialVal) === 'yes') {
+    return PlanKind.TRIAL;
+  }
+  if (asLower(planType).startsWith('time-based')) {
+    return PlanKind.SUBSCRIPTION;
+  }
+  const buyOnce = asLower(buyOnceVal) === 'yes';
+  if (!buyOnce && recurringBillingFromDuration(durationStr)) {
+    return PlanKind.SUBSCRIPTION;
+  }
+  return PlanKind.CREDIT_PACK;
+};
+
 const deriveBillingCycle = (kind, durationStr) => {
   if (kind !== PlanKind.SUBSCRIPTION) {
     return PlanBillingCycle.ONE_OFF;
   }
-  const dur = parseDuration(durationStr);
-  if (!dur) return PlanBillingCycle.ONE_OFF;
-  if (dur.unit === PlanValidityUnit.MONTH) {
-    if (dur.value === 1) return PlanBillingCycle.MONTH;
-    if (dur.value === 3) return PlanBillingCycle.QUARTER;
-    if (dur.value === 6) return PlanBillingCycle.HALF_YEAR;
-    if (dur.value === 12) return PlanBillingCycle.YEAR;
-  }
-  // Any duration under 1 month (1 week, 2 weeks, etc.) is ONE_OFF
-  return PlanBillingCycle.ONE_OFF;
+  return recurringBillingFromDuration(durationStr) || PlanBillingCycle.ONE_OFF;
 };
 
 const deriveCreditRefill = (kind, billingCycle, creditType, creditsIncluded) => {
@@ -141,6 +167,19 @@ const runSeed = async (filePath, options = {}) => {
 
     stats.totalRead += 1;
 
+    // Upsert is keyed on externalRef; rows without a Glofox plan code cannot be seeded safely
+    const trimmedPlanCode = planCode ? String(planCode).trim() : '';
+    if (!trimmedPlanCode) {
+      stats.skipped += 1;
+      skippedList.push({
+        row: r,
+        planCode: planCode || null,
+        name: planNameRaw,
+        reason: 'Missing Glofox plan code (externalRef required for upsert)',
+      });
+      continue;
+    }
+
     // Handle Name Collisions:
     // If name collides case-insensitively with earlier row:
     // append parenthetical qualifier from "Membership" column (e.g. "(Coached)").
@@ -193,15 +232,8 @@ const runSeed = async (filePath, options = {}) => {
     const descriptionStr = getRowVal(row, 'Membership description');
     const priceStr = getRowVal(row, 'Price (AED)');
 
-    // 1. Kind
-    let kind;
-    if (trialVal.toLowerCase() === 'yes') {
-      kind = PlanKind.TRIAL;
-    } else if (planType.toLowerCase().startsWith('time-based')) {
-      kind = PlanKind.SUBSCRIPTION;
-    } else {
-      kind = PlanKind.CREDIT_PACK;
-    }
+    // 1. Kind (credit-based recurring memberships are SUBSCRIPTION, not CREDIT_PACK)
+    const kind = deriveKind({ trialVal, planType, durationStr, buyOnceVal });
 
     // 2. oneTimePurchasePerClient
     const oneTimePurchasePerClient =
@@ -307,7 +339,7 @@ const runSeed = async (filePath, options = {}) => {
       visibility,
       status,
       description,
-      externalRef: planCode ? String(planCode).trim() : null,
+      externalRef: trimmedPlanCode,
     };
 
     const parsed = membershipPlanSchema.safeParse(payload);
@@ -450,6 +482,8 @@ module.exports = {
   GLOFOX_SEED_CONFIG,
   parseDuration,
   parseCreditsIncluded,
+  recurringBillingFromDuration,
+  deriveKind,
   deriveBillingCycle,
   deriveCreditRefill,
 };

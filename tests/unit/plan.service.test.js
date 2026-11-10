@@ -1,5 +1,6 @@
 const planService = require('../../src/services/plan.service');
 const membershipPlanRepository = require('../../src/repositories/membershipPlan.repository');
+const userRepository = require('../../src/repositories/user.repository');
 const {
   PlanKind,
   PlanBillingCycle,
@@ -14,6 +15,7 @@ const { AuditAction } = require('../../src/constants/audit');
 const { Role } = require('../../src/constants/roles');
 
 jest.mock('../../src/repositories/membershipPlan.repository');
+jest.mock('../../src/repositories/user.repository');
 
 describe('plan.service - createPlan', () => {
   const actor = {
@@ -171,5 +173,49 @@ describe('plan.service - createPlan', () => {
         meta,
       }),
     ).rejects.toThrow('DB connection failed');
+  });
+
+  it('loads actor email from DB when controller does not pass it', async () => {
+    membershipPlanRepository.findActiveByName.mockResolvedValue(null);
+    userRepository.findAuthWithEmailById.mockResolvedValue({
+      id: actor.id,
+      email: 'looked-up@test.invalid',
+      role: Role.ADMIN,
+      status: 'ACTIVE',
+    });
+    membershipPlanRepository.createPlanWithAudit.mockResolvedValue({
+      id: 'created-plan-uuid',
+      name: 'Gold Class Membership',
+      kind: PlanKind.SUBSCRIPTION,
+      price: 350.5,
+      billingCycle: PlanBillingCycle.MONTH,
+      creditType: PlanCreditType.CLASS,
+      creditsIncluded: 15,
+      creditRefill: PlanCreditRefill.MONTHLY,
+      validityValue: 1,
+      validityUnit: PlanValidityUnit.MONTH,
+      startsOn: PlanStartsOn.PURCHASE_DATE,
+      oneTimePurchasePerClient: false,
+      visibility: PlanVisibility.PUBLIC,
+      status: PlanStatus.ACTIVE,
+      description: '15 classes a month',
+      externalRef: null,
+      version: 1,
+      createdAt: new Date('2026-10-25T10:00:00.000Z'),
+      updatedAt: new Date('2026-10-25T10:00:00.000Z'),
+    });
+
+    await planService.createPlan({
+      actor: { id: actor.id, role: actor.role },
+      payload: validPayload,
+      meta,
+    });
+
+    expect(userRepository.findAuthWithEmailById).toHaveBeenCalledWith(actor.id);
+    expect(membershipPlanRepository.createPlanWithAudit).toHaveBeenCalledWith(
+      expect.objectContaining({
+        auditData: expect.objectContaining({ email: 'looked-up@test.invalid' }),
+      }),
+    );
   });
 });

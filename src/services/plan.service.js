@@ -32,6 +32,7 @@ const {
 } = require('../repositories/membershipPlan.mapper');
 const { toSkipTake, buildPagination } = require('../utils/pagination.util');
 const { pick } = require('../utils/pick.util');
+const { findAuthWithEmailById } = require('../repositories/user.repository');
 
 const isPlanNameUniqueError = (err) => {
   if (!isUniqueConstraintError(err)) return false;
@@ -48,6 +49,14 @@ const isPlanNameUniqueError = (err) => {
     return target.includes('name') || target.includes('membership_plans_name_lower_active_idx');
   }
   return true;
+};
+
+// authenticate only attaches id/role/status; load email from DB for audit rows.
+const resolveActorEmail = async (actor) => {
+  if (actor?.email) return actor.email;
+  if (!actor?.id) return null;
+  const user = await findAuthWithEmailById(actor.id);
+  return user?.email ?? null;
 };
 
 const createPlan = async ({ actor, payload, meta }) => {
@@ -121,7 +130,7 @@ const createPlan = async ({ actor, payload, meta }) => {
     action: AuditAction.PLAN_CREATED,
     actorId: actor?.id,
     actorRole: actor?.role,
-    email: actor?.email,
+    email: await resolveActorEmail(actor),
     userId: null,
     meta,
   };
@@ -222,11 +231,12 @@ const updatePlan = async ({ actor, plan, next, meta }) => {
     }
   }
 
+  const actorEmail = await resolveActorEmail(actor);
   const auditFor = (updated) => ({
     action: AuditAction.PLAN_UPDATED,
     actorId: actor.id,
     actorRole: actor.role,
-    email: actor.email,
+    email: actorEmail,
     userId: null,
     meta,
     details: {
@@ -265,11 +275,12 @@ const changePlanStatus = async ({ actor, plan, status, reason, meta }) => {
   }
   if (plan.status === PlanStatus.ARCHIVED) await assertNameAvailable(plan.name, plan.id);
 
+  const actorEmail = await resolveActorEmail(actor);
   const auditFor = () => ({
     action: AuditAction.PLAN_STATUS_CHANGED,
     actorId: actor.id,
     actorRole: actor.role,
-    email: actor.email,
+    email: actorEmail,
     userId: null,
     meta,
     details: { from: plan.status.toLowerCase(), to: status.toLowerCase(), reason: reason ?? null },

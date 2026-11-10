@@ -2,6 +2,7 @@ const {
   localDateTimeToUtc,
   getTodayInTimezone,
   addDaysToDateStr,
+  // Re-exported from timezone.util for schedule callers.
   getIsoDayOfWeek,
 } = require('../../src/services/schedule.service');
 

@@ -66,6 +66,7 @@ const runSeed = async ({
   const ambiguousRows = [];
   const plannedCategories = new Map(); // normalizedName -> { id, name, isNew }
   const plannedItems = [];
+  const reservedItemNames = new Set(); // lowercase names claimed by this run or existing DB rows
 
   // 1. Preload existing categories from DB
   const existingCategories = await prisma.cafeCategory.findMany();
@@ -86,6 +87,7 @@ const runSeed = async ({
     if (item.externalRef) {
       existingItemMap.set(item.externalRef, item);
     }
+    if (item.name) reservedItemNames.add(item.name.trim().toLowerCase());
   }
 
   // 3. Scan rows
@@ -193,21 +195,34 @@ const runSeed = async ({
         ? DbCafeItemVisibility.STAFF_ONLY
         : DbCafeItemVisibility.PUBLIC;
 
-    // Item name
-    const itemName = deriveItemName(product, variant);
+    // Item name (case-insensitive unique across catalogue)
+    let itemName = deriveItemName(product, variant);
+    const existing = existingItemMap.get(externalRef);
 
     // Price
     const priceAed = parseFloat(rawPrice) || 0;
 
-    const existing = existingItemMap.get(externalRef);
     if (existing) {
       if (isForce) {
         stats.itemsUpdated++;
+        // Updating this row frees its old name for reuse by itself.
+        if (existing.name) reservedItemNames.delete(existing.name.trim().toLowerCase());
       } else {
         stats.itemsSkipped++;
       }
     } else {
       stats.itemsCreated++;
+    }
+
+    if (!existing || isForce) {
+      let uniqueName = itemName;
+      let suffix = 2;
+      while (reservedItemNames.has(uniqueName.toLowerCase())) {
+        uniqueName = `${itemName} (${externalRef.slice(-6) || suffix})`;
+        suffix += 1;
+      }
+      itemName = uniqueName;
+      reservedItemNames.add(itemName.toLowerCase());
     }
 
     plannedItems.push({

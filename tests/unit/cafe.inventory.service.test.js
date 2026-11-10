@@ -4,6 +4,7 @@ const repository = require('../../src/repositories/cafeInventory.repository');
 const {
   deriveStockStatus,
   updateStock,
+  consumeStock,
   listInventory,
   getSummary,
 } = require('../../src/services/cafeInventory.service');
@@ -14,6 +15,7 @@ jest.mock('../../src/repositories/cafeInventory.repository', () => ({
   countTrackedItems: jest.fn(),
   getSummaryItems: jest.fn(),
   updateStock: jest.fn(),
+  decrementStockIfAvailable: jest.fn(),
 }));
 
 const itemRow = (overrides = {}) => ({
@@ -136,6 +138,34 @@ describe('Cafe inventory service', () => {
     });
   });
 
+  describe('consumeStock', () => {
+    it('decrements atomically and maps the persisted stock view', async () => {
+      findById.mockResolvedValue(itemRow({ stockQuantity: 10 }));
+      repository.decrementStockIfAvailable.mockResolvedValue(
+        itemRow({ stockQuantity: 7, availability: 'AVAILABLE' }),
+      );
+
+      const result = await consumeStock({ itemId: 'item-1', quantity: 3 });
+
+      expect(repository.decrementStockIfAvailable).toHaveBeenCalledWith({
+        itemId: 'item-1',
+        quantity: 3,
+        soldOutAvailability: 'SOLD_OUT',
+      });
+      expect(result).toMatchObject({ quantity: 7, stockStatus: 'LOW_STOCK' });
+    });
+
+    it('returns 409 ITEM_INSUFFICIENT_STOCK when the atomic write matches nothing', async () => {
+      findById.mockResolvedValue(itemRow({ stockQuantity: 2 }));
+      repository.decrementStockIfAvailable.mockResolvedValue(null);
+
+      await expect(consumeStock({ itemId: 'item-1', quantity: 5 })).rejects.toMatchObject({
+        statusCode: 409,
+        code: 'ITEM_INSUFFICIENT_STOCK',
+      });
+    });
+  });
+
   describe('listInventory', () => {
     beforeEach(() => {
       repository.listTrackedItems.mockResolvedValue([]);
@@ -151,8 +181,14 @@ describe('Cafe inventory service', () => {
       expect(repository.listTrackedItems).toHaveBeenCalledWith({
         categoryId: undefined,
         search: undefined,
+        status: undefined,
         skip: 0,
         take: 20,
+      });
+      expect(repository.countTrackedItems).toHaveBeenCalledWith({
+        categoryId: undefined,
+        search: undefined,
+        status: undefined,
       });
       expect(result.data).toEqual([
         expect.objectContaining({
@@ -165,47 +201,57 @@ describe('Cafe inventory service', () => {
       expect(result.pagination).toEqual({ page: 1, limit: 20, total: 1, totalPages: 1 });
     });
 
-    it('passes category/search and page bounds to the repository and reuses count filters', async () => {
+    it('passes category/search/status and page bounds to the repository and reuses count filters', async () => {
       await listInventory({
-        query: { categoryId: 'category-1', search: 'Gel', page: 3, limit: 5 },
+        query: {
+          categoryId: 'category-1',
+          search: 'Gel',
+          status: 'LOW_STOCK',
+          page: 3,
+          limit: 5,
+        },
       });
 
       expect(repository.listTrackedItems).toHaveBeenCalledWith({
         categoryId: 'category-1',
         search: 'Gel',
+        status: 'LOW_STOCK',
         skip: 10,
         take: 5,
       });
       expect(repository.countTrackedItems).toHaveBeenCalledWith({
         categoryId: 'category-1',
         search: 'Gel',
+        status: 'LOW_STOCK',
       });
     });
 
-    it.each([
-      ['OUT_OF_STOCK', [0]],
-      ['LOW_STOCK', [1, 14]],
-      ['IN_STOCK', [15, 16]],
-    ])('filters %s from the full candidate set in the service', async (status, quantities) => {
-      repository.listTrackedItems.mockResolvedValue(
-        [0, 1, 14, 15, 16].map((stockQuantity) => itemRow({ stockQuantity })),
-      );
+    it.each(['OUT_OF_STOCK', 'LOW_STOCK', 'IN_STOCK'])(
+      'pushes %s into the repository where clause instead of filtering in memory',
+      async (status) => {
+        repository.listTrackedItems.mockResolvedValue([itemRow({ stockQuantity: 1 })]);
+        repository.countTrackedItems.mockResolvedValue(1);
 
-      const result = await listInventory({ query: { status, categoryId: 'category-1' } });
+        await listInventory({ query: { status, categoryId: 'category-1' } });
 
-      expect(repository.listTrackedItems).toHaveBeenCalledWith({
-        categoryId: 'category-1',
-        search: undefined,
-      });
-      expect(repository.countTrackedItems).not.toHaveBeenCalled();
-      expect(result.data.map((item) => item.quantity)).toEqual(quantities);
-      expect(result.pagination.total).toBe(quantities.length);
-    });
+        expect(repository.listTrackedItems).toHaveBeenCalledWith({
+          categoryId: 'category-1',
+          search: undefined,
+          status,
+          skip: 0,
+          take: 20,
+        });
+        expect(repository.countTrackedItems).toHaveBeenCalledWith({
+          categoryId: 'category-1',
+          search: undefined,
+          status,
+        });
+      },
+    );
 
-    it('filters status before slicing a page and computes the matching total', async () => {
-      repository.listTrackedItems.mockResolvedValue(
-        [0, 1, 15, 14, 16].map((stockQuantity) => itemRow({ stockQuantity })),
-      );
+    it('pages status-filtered results using repository totals', async () => {
+      repository.listTrackedItems.mockResolvedValue([itemRow({ stockQuantity: 14 })]);
+      repository.countTrackedItems.mockResolvedValue(2);
 
       const result = await listInventory({ query: { status: 'LOW_STOCK', page: 2, limit: 1 } });
 
@@ -213,8 +259,9 @@ describe('Cafe inventory service', () => {
       expect(result.pagination).toEqual({ page: 2, limit: 1, total: 2, totalPages: 2 });
     });
 
-    it('returns a zero-total empty page when no derived status matches', async () => {
-      repository.listTrackedItems.mockResolvedValue([itemRow({ stockQuantity: 0 })]);
+    it('returns a zero-total empty page when the repository finds no status matches', async () => {
+      repository.listTrackedItems.mockResolvedValue([]);
+      repository.countTrackedItems.mockResolvedValue(0);
 
       expect(await listInventory({ query: { status: 'LOW_STOCK' } })).toEqual({
         data: [],
@@ -223,7 +270,8 @@ describe('Cafe inventory service', () => {
     });
 
     it('keeps the matching total on a status-filtered page past the end', async () => {
-      repository.listTrackedItems.mockResolvedValue([itemRow({ stockQuantity: 1 })]);
+      repository.listTrackedItems.mockResolvedValue([]);
+      repository.countTrackedItems.mockResolvedValue(1);
 
       expect(await listInventory({ query: { status: 'LOW_STOCK', page: 2, limit: 1 } })).toEqual({
         data: [],

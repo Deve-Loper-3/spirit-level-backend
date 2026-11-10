@@ -1,6 +1,6 @@
 const z = require('zod');
 const { Messages } = require('../constants/messages');
-const { DEFAULT_PAGE, MAX_PAGE } = require('../constants/pagination');
+const { DEFAULT_PAGE, DEFAULT_LIMIT, MAX_LIMIT, MAX_PAGE } = require('../constants/pagination');
 
 // Query values arrive as strings, so numbers are coerced.
 const pageField = z.coerce
@@ -10,13 +10,14 @@ const pageField = z.coerce
   .max(MAX_PAGE, Messages.PAGE_INVALID)
   .default(DEFAULT_PAGE);
 
-// The page size field is named `limit` by some endpoints and `pageSize` by others.
-const buildSizeField = ({ message, max, defaultValue }) =>
-  z.coerce
-    .number({ error: message })
-    .int(message)
-    .min(1, message)
-    .max(max, message)
-    .default(defaultValue);
+const limitField = z.coerce
+  .number({ error: Messages.LIMIT_INVALID })
+  .int(Messages.LIMIT_INVALID)
+  .min(1, Messages.LIMIT_INVALID)
+  .max(MAX_LIMIT, Messages.LIMIT_INVALID)
+  .default(DEFAULT_LIMIT);
 
-module.exports = { pageField, buildSizeField };
+// The one set of paging query params every list endpoint accepts: ?page=1&limit=20
+const paginationQueryFields = { page: pageField, limit: limitField };
+
+module.exports = { pageField, limitField, paginationQueryFields };

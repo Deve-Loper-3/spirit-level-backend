@@ -61,10 +61,6 @@ const ITEM_PRICE_MAX = 100000;
 const ITEM_STOCK_MIN = 0;
 const ITEM_STOCK_MAX = 100000;
 
-const DEFAULT_PAGE = 1;
-const DEFAULT_LIMIT = 20;
-const MAX_LIMIT = 100;
-
 const CAFE_IMAGE_FOLDER = 'cafe-items';
 
 module.exports = Object.freeze({
@@ -90,7 +86,4 @@ module.exports = Object.freeze({
   ITEM_PRICE_MAX,
   ITEM_STOCK_MIN,
   ITEM_STOCK_MAX,
-  DEFAULT_PAGE,
-  DEFAULT_LIMIT,
-  MAX_LIMIT,
 });

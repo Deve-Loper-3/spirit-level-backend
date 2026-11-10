@@ -5,6 +5,7 @@ const env = require('../../config/env');
 const logger = require('../../config/logger');
 const { createAppError } = require('../../errors/AppError');
 const { Messages } = require('../../constants/messages');
+const { AppErrors } = require('../../constants/errors');
 const {
   MAX_IMAGE_SIZE_BYTES,
   IMAGE_EXTENSION_BY_MIME_TYPE,
@@ -21,26 +22,15 @@ const getStoreId = (token) => token?.split('_')[3];
 
 // The server picks the pathname, so the client can never choose the folder or file name.
 // Returns everything a mobile client needs to PUT the file straight to Vercel Blob.
-const createImageUploadToken = async (
-  contentType,
-  folder = PROFILE_IMAGE_FOLDER,
-) => {
+const createImageUploadToken = async (contentType, folder = PROFILE_IMAGE_FOLDER) => {
   const token = env.BLOB_READ_WRITE_TOKEN;
   if (!token) {
-    throw createAppError(
-      503,
-      Messages.IMAGE_UPLOAD_NOT_CONFIGURED,
-      'IMAGE_UPLOAD_NOT_CONFIGURED',
-    );
+    throw createAppError(AppErrors.IMAGE_UPLOAD_NOT_CONFIGURED);
   }
 
   const extension = IMAGE_EXTENSION_BY_MIME_TYPE[contentType];
   if (!extension) {
-    throw createAppError(
-      400,
-      Messages.IMAGE_TYPE_NOT_ALLOWED,
-      'IMAGE_TYPE_NOT_ALLOWED',
-    );
+    throw createAppError(AppErrors.IMAGE_TYPE_NOT_ALLOWED);
   }
 
   const pathname = `${folder}/${crypto.randomUUID()}.${extension}`;
@@ -58,7 +48,7 @@ const createImageUploadToken = async (
     });
   } catch (err) {
     logger.error({ err }, Messages.IMAGE_UPLOAD_TOKEN_FAILED);
-    throw createAppError(502, Messages.IMAGE_UPLOAD_TOKEN_FAILED, 'IMAGE_UPLOAD_TOKEN_FAILED');
+    throw createAppError(AppErrors.IMAGE_UPLOAD_TOKEN_FAILED);
   }
 
   return {

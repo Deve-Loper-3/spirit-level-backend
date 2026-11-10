@@ -118,7 +118,7 @@ describe('Membership plan validation (SL-MP-02)', () => {
     expect(result.error.issues.some((i) => i.path.includes('creditRefill'))).toBe(true);
   });
 
-  it('validateCreatePlan middleware returns 422 with all failing fields together', () => {
+  it('validateCreatePlan middleware returns 400 with all failing fields together', () => {
     const badBody = {
       // Missing price
       name: 'Bad Plan',
@@ -153,7 +153,7 @@ describe('Membership plan validation (SL-MP-02)', () => {
     validateCreatePlan(req, res, next);
 
     expect(next).not.toHaveBeenCalled();
-    expect(responseStatus).toBe(422);
+    expect(responseStatus).toBe(400);
     expect(responseBody.success).toBe(false);
     expect(responseBody.code).toBe('VALIDATION_ERROR');
     expect(Array.isArray(responseBody.errors)).toBe(true);
@@ -202,7 +202,7 @@ describe('Membership plan validation (SL-MP-02)', () => {
     validateCreatePlan(req, res, next);
 
     expect(next).not.toHaveBeenCalled();
-    expect(responseStatus).toBe(422);
+    expect(responseStatus).toBe(400);
     expect(responseBody.code).toBe('VALIDATION_ERROR');
 
     const errorFields = responseBody.errors.map((e) => e.field);

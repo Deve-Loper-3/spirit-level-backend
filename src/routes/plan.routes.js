@@ -5,6 +5,7 @@ const { planLimiter, planReadLimiter } = require('../middlewares/rateLimiter.mid
 const { loadPlan } = require('../middlewares/loadPlan.middleware');
 const { methodNotAllowed } = require('../middlewares/methodNotAllowed.middleware');
 const { Role } = require('../constants/roles');
+const { validatePlanIdParam } = require('../validators/idParam.validation');
 const {
   validateCreatePlan,
   validateListPlansQuery,
@@ -44,6 +45,7 @@ router.get(
   authenticate,
   authorize(Role.OWNER, Role.ADMIN, Role.COACH),
   planReadLimiter,
+  validatePlanIdParam,
   loadPlan(),
   getPlan,
 );
@@ -53,6 +55,7 @@ router.patch(
   authenticate,
   authorize(Role.OWNER, Role.ADMIN),
   planLimiter,
+  validatePlanIdParam,
   loadPlan({ rejectArchived: true }),
   validateUpdatePlanBody,
   updatePlan,
@@ -63,6 +66,7 @@ router.patch(
   authenticate,
   authorize(Role.OWNER, Role.ADMIN),
   planLimiter,
+  validatePlanIdParam,
   loadPlan(),
   validatePlanStatusBody,
   changePlanStatus,

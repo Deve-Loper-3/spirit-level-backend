@@ -85,12 +85,13 @@ describe('PATCH /api/v1/plans/:id/status', () => {
   });
 
   describe('Not found', () => {
-    it('returns 404 for an unknown or malformed id', async () => {
+    it('returns 404 for an unknown id and 400 for a malformed one', async () => {
       const unknown = await setStatusAs(users.admin, crypto.randomUUID(), { status: 'inactive' });
       const malformed = await setStatusAs(users.admin, 'not-a-uuid', { status: 'inactive' });
       expect(unknown.status).toBe(404);
       expect(unknown.body.code).toBe('PLAN_NOT_FOUND');
-      expect(malformed.status).toBe(404);
+      expect(malformed.status).toBe(400);
+      expect(malformed.body.code).toBe('VALIDATION_ERROR');
     });
 
     it('404 comes before body validation', async () => {
@@ -99,19 +100,19 @@ describe('PATCH /api/v1/plans/:id/status', () => {
     });
   });
 
-  describe('Body validation (422)', () => {
+  describe('Body validation (400)', () => {
     it.each([
       ['no status', {}, ['status']],
       ['an unknown status', { status: 'deleted' }, ['status']],
       ['a status that is not text', { status: 5 }, ['status']],
       ['a reason over 200 characters', { status: 'inactive', reason: 'a'.repeat(201) }, ['reason']],
-      ['another field', { status: 'inactive', price: 1 }, ['']],
+      ['another field', { status: 'inactive', price: 1 }, ['body']],
     ])('rejects %s', async (_label, body, fields) => {
       const plan = await createTestPlan(PREFIX);
 
       const res = await setStatusAs(users.admin, plan.id, body);
 
-      expect(res.status).toBe(422);
+      expect(res.status).toBe(400);
       expect(res.body.code).toBe('VALIDATION_ERROR');
       expect(res.body.errors.map((e) => e.field)).toEqual(fields);
       expect((await reload(plan.id)).status).toBe('ACTIVE');
@@ -132,7 +133,7 @@ describe('PATCH /api/v1/plans/:id/status', () => {
         status: 'active',
         reason: 'a'.repeat(201),
       });
-      expect(res.status).toBe(422);
+      expect(res.status).toBe(400);
     });
   });
 
@@ -159,7 +160,7 @@ describe('PATCH /api/v1/plans/:id/status', () => {
     });
   });
 
-  describe('Invalid transitions (409 invalid_transition)', () => {
+  describe('Invalid transitions (409 PLAN_INVALID_TRANSITION)', () => {
     it.each([['ARCHIVED', 'active']])(
       '%s -> %s is rejected and changes nothing',
       async (from, to) => {
@@ -168,7 +169,7 @@ describe('PATCH /api/v1/plans/:id/status', () => {
         const res = await setStatusAs(users.admin, plan.id, { status: to });
 
         expect(res.status).toBe(409);
-        expect(res.body).toMatchObject({ success: false, code: 'invalid_transition' });
+        expect(res.body).toMatchObject({ success: false, code: 'PLAN_INVALID_TRANSITION' });
         expect((await reload(plan.id)).status).toBe(from);
         expect(await audits(plan.id)).toHaveLength(0);
       },
@@ -259,7 +260,7 @@ describe('PATCH /api/v1/plans/:id/status', () => {
       const list = await request(app)
         .get('/api/v1/plans')
         .set('Authorization', bearerFor(users.coach))
-        .query({ q: 'Archive Me', pageSize: 100 });
+        .query({ q: 'Archive Me', limit: 100 });
 
       expect(detail.body.data.status).toBe('archived');
       expect(list.body.data).toEqual([]);
@@ -303,7 +304,7 @@ describe('PATCH /api/v1/plans/:id/status', () => {
   });
 
   describe('Restoring an archived plan', () => {
-    it('returns 409 duplicate_name when another plan took the name, and changes nothing', async () => {
+    it('returns 409 PLAN_DUPLICATE_NAME when another plan took the name, and changes nothing', async () => {
       const archived = await createTestPlan(PREFIX, {
         name: `${PREFIX}Reused Name`,
         status: 'ARCHIVED',
@@ -313,7 +314,7 @@ describe('PATCH /api/v1/plans/:id/status', () => {
       const res = await setStatusAs(users.admin, archived.id, { status: 'inactive' });
 
       expect(res.status).toBe(409);
-      expect(res.body).toMatchObject({ success: false, code: 'duplicate_name' });
+      expect(res.body).toMatchObject({ success: false, code: 'PLAN_DUPLICATE_NAME' });
       expect((await reload(archived.id)).status).toBe('ARCHIVED');
       expect(await audits(archived.id)).toHaveLength(0);
     });
@@ -337,7 +338,7 @@ describe('PATCH /api/v1/plans/:id/status', () => {
 
       const res = await setStatusAs(users.admin, archived.id, { status: 'active' });
 
-      expect(res.body.code).toBe('invalid_transition');
+      expect(res.body.code).toBe('PLAN_INVALID_TRANSITION');
     });
   });
 

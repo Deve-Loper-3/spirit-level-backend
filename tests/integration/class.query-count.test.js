@@ -83,14 +83,14 @@ describe('Batch Loading & Constant Query Count (No N+1)', () => {
 
     // 1. Fetch exactly 1 class (with coaches & slots)
     queries = [];
-    const res1 = await listClasses({ where, page: 1, pageSize: 1 }, testPrisma);
+    const res1 = await listClasses({ where, skip: 0, take: 1 }, testPrisma);
     expect(res1.classes.length).toBe(1);
     expect(res1.classes[0].coaches.length).toBeGreaterThanOrEqual(1);
     const countForOne = queries.length;
 
     // 2. Fetch 12 classes (with coaches & slots)
     queries = [];
-    const res12 = await listClasses({ where, page: 1, pageSize: 12 }, testPrisma);
+    const res12 = await listClasses({ where, skip: 0, take: 12 }, testPrisma);
     expect(res12.classes.length).toBe(12);
     expect(res12.classes[1].coaches.length).toBeGreaterThanOrEqual(1);
     const countForTwelve = queries.length;

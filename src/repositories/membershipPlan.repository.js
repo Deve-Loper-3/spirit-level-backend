@@ -169,7 +169,7 @@ const countNonArchivedByCreditType = () =>
   });
 
 // There is no purchases table yet, so no plan has active clients. The purchase ticket replaces
-// this body; plan_in_use (and later activeClientCount) read from here.
+// this body; PLAN_IN_USE (and later activeClientCount) read from here.
 const countActiveClients = async (_planId, _client = prisma) => 0;
 
 // Updates a plan that is not archived and writes its audit row in the same transaction. The
@@ -211,10 +211,7 @@ const changePlanStatusWithAudit = async ({ id, from, to, auditFor }, client = pr
   });
 };
 
-const createPlanWithAudit = async (
-  { planData, auditData, newMembershipData },
-  client = prisma,
-) => {
+const createPlanWithAudit = async ({ planData, auditData, newMembershipData }, client = prisma) => {
   return client.$transaction(async (tx) => {
     let membershipId = planData.membershipId;
 

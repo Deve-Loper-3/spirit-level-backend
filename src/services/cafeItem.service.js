@@ -7,9 +7,9 @@ const {
   DbCafeItemVisibility,
   API_TO_DB_AVAILABILITY,
   API_TO_DB_VISIBILITY,
-  DEFAULT_PAGE,
-  DEFAULT_LIMIT,
 } = require('../constants/cafe');
+const { DEFAULT_PAGE, DEFAULT_LIMIT } = require('../constants/pagination');
+const { orNotFound } = require('../utils/prismaError.util');
 const { escapeLikePattern } = require('../utils/like.util');
 const { toSkipTake, buildPagination } = require('../utils/pagination.util');
 const { toCafeItemResponse } = require('../repositories/cafe.mapper');
@@ -221,7 +221,7 @@ const updateItem = async ({ itemId, payload }) => {
     dataToUpdate.imageUrl = payload.imageUrl ?? null;
   }
 
-  const updated = await update(itemId, dataToUpdate);
+  const updated = await orNotFound(() => update(itemId, dataToUpdate), AppErrors.ITEM_NOT_FOUND);
   return toCafeItemResponse(updated);
 };
 
@@ -241,7 +241,10 @@ const updateItemAvailability = async ({ itemId, payload }) => {
   }
 
   const dbAvailability = API_TO_DB_AVAILABILITY[payload.availability];
-  const updated = await update(itemId, { availability: dbAvailability });
+  const updated = await orNotFound(
+    () => update(itemId, { availability: dbAvailability }),
+    AppErrors.ITEM_NOT_FOUND,
+  );
   return toCafeItemResponse(updated);
 };
 
@@ -252,7 +255,10 @@ const updateItemVisibility = async ({ itemId, payload }) => {
   }
 
   const dbVisibility = API_TO_DB_VISIBILITY[payload.visibility];
-  const updated = await update(itemId, { visibility: dbVisibility });
+  const updated = await orNotFound(
+    () => update(itemId, { visibility: dbVisibility }),
+    AppErrors.ITEM_NOT_FOUND,
+  );
   return toCafeItemResponse(updated);
 };
 

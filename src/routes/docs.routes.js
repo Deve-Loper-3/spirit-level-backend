@@ -3,6 +3,7 @@ const fs = require('fs');
 const { Router } = require('express');
 const swaggerUi = require('swagger-ui-express');
 const YAML = require('yaml');
+const { publicLimiter } = require('../middlewares/rateLimiter.middleware');
 
 const SPEC_PATH = path.join(__dirname, '../../docs/openapi.yaml');
 
@@ -14,6 +15,8 @@ const loadOpenApiDocument = () => {
 const createDocsRouter = () => {
   const router = Router();
   const document = loadOpenApiDocument();
+
+  router.use(publicLimiter);
 
   router.get('/openapi.yaml', (_req, res) => {
     res.type('application/yaml').send(fs.readFileSync(SPEC_PATH, 'utf8'));

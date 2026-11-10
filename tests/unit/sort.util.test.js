@@ -1,5 +1,5 @@
 const { parseSort } = require('../../src/utils/sort.util');
-const { buildMeta } = require('../../src/utils/pagination.util');
+const { buildPagination } = require('../../src/utils/pagination.util');
 const { escapeLikePattern } = require('../../src/utils/like.util');
 
 const ALLOWED = ['name', 'price', 'createdAt'];
@@ -29,15 +29,18 @@ describe('parseSort', () => {
   });
 });
 
-describe('buildMeta', () => {
-  it('returns the page envelope with the extra counts', () => {
-    const counts = { class_membership: 53, online_coaching: 7 };
-    expect(buildMeta({ page: 2, pageSize: 10, total: 60, counts })).toEqual({
+describe('buildPagination', () => {
+  it('returns the page envelope with the page count', () => {
+    expect(buildPagination({ page: 2, limit: 10, total: 61 })).toEqual({
       page: 2,
-      pageSize: 10,
-      total: 60,
-      counts,
+      limit: 10,
+      total: 61,
+      totalPages: 7,
     });
+  });
+
+  it('reports 0 pages for an empty result', () => {
+    expect(buildPagination({ page: 1, limit: 20, total: 0 }).totalPages).toBe(0);
   });
 });
 

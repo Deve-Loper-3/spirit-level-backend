@@ -117,13 +117,13 @@ describe('updatePlan', () => {
     expect(repository.updatePlanWithAudit.mock.calls[0][0].data).toEqual({ name: 'Platinum' });
   });
 
-  describe('duplicate_name', () => {
+  describe('PLAN_DUPLICATE_NAME', () => {
     it('is 409 when another plan has the name, and excludes the plan itself from the check', async () => {
       repository.findActiveByName.mockResolvedValue(planRow({ id: 'other' }));
 
       const err = await errorOf(run(planRow(), { name: 'Silver' }));
 
-      expect(err).toMatchObject({ statusCode: 409, code: 'duplicate_name' });
+      expect(err).toMatchObject({ statusCode: 409, code: 'PLAN_DUPLICATE_NAME' });
       expect(repository.findActiveByName).toHaveBeenCalledWith('Silver', undefined, {
         excludeId: 'plan-1',
       });
@@ -136,17 +136,17 @@ describe('updatePlan', () => {
       expect(repository.findActiveByName).not.toHaveBeenCalled();
     });
 
-    it('maps a unique-index race to 409 duplicate_name', async () => {
+    it('maps a unique-index race to 409 PLAN_DUPLICATE_NAME', async () => {
       const race = Object.assign(new Error('unique'), { code: 'P2002' });
       repository.updatePlanWithAudit.mockRejectedValue(race);
 
       const err = await errorOf(run(planRow(), { name: 'Silver' }));
 
-      expect(err).toMatchObject({ statusCode: 409, code: 'duplicate_name' });
+      expect(err).toMatchObject({ statusCode: 409, code: 'PLAN_DUPLICATE_NAME' });
     });
   });
 
-  describe('plan_in_use', () => {
+  describe('PLAN_IN_USE', () => {
     const toTime = { creditType: 'TIME', creditsIncluded: 0, creditRefill: null };
 
     it('is 409 when a plan with active clients switches from credits to time', async () => {
@@ -154,7 +154,7 @@ describe('updatePlan', () => {
 
       const err = await run(planRow(), toTime).catch((e) => e);
 
-      expect(err).toMatchObject({ statusCode: 409, code: 'plan_in_use' });
+      expect(err).toMatchObject({ statusCode: 409, code: 'PLAN_IN_USE' });
       expect(repository.updatePlanWithAudit).not.toHaveBeenCalled();
     });
 
@@ -164,7 +164,7 @@ describe('updatePlan', () => {
 
       const err = await run(plan, { creditType: 'CLASS', creditsIncluded: 5 }).catch((e) => e);
 
-      expect(err).toMatchObject({ statusCode: 409, code: 'plan_in_use' });
+      expect(err).toMatchObject({ statusCode: 409, code: 'PLAN_IN_USE' });
     });
 
     it('allows the switch when nobody uses the plan', async () => {
@@ -190,16 +190,16 @@ describe('updatePlan', () => {
 
       const err = await run(planRow(), { ...toTime, name: 'Silver' }).catch((e) => e);
 
-      expect(err.code).toBe('duplicate_name');
+      expect(err.code).toBe('PLAN_DUPLICATE_NAME');
     });
   });
 
-  it('is 409 plan_archived when the plan was archived between the read and the write', async () => {
+  it('is 409 PLAN_ARCHIVED when the plan was archived between the read and the write', async () => {
     repository.updatePlanWithAudit.mockResolvedValue(null);
 
     const err = await errorOf(run(planRow(), { price: 1 }));
 
-    expect(err).toMatchObject({ statusCode: 409, code: 'plan_archived' });
+    expect(err).toMatchObject({ statusCode: 409, code: 'PLAN_ARCHIVED' });
   });
 });
 
@@ -251,10 +251,10 @@ describe('changePlanStatus', () => {
         });
       });
     } else {
-      it('is 409 invalid_transition and writes nothing', async () => {
+      it('is 409 PLAN_INVALID_TRANSITION and writes nothing', async () => {
         const err = await errorOf(change(planRow({ status: from }), to));
 
-        expect(err).toMatchObject({ statusCode: 409, code: 'invalid_transition' });
+        expect(err).toMatchObject({ statusCode: 409, code: 'PLAN_INVALID_TRANSITION' });
         expect(repository.changePlanStatusWithAudit).not.toHaveBeenCalled();
       });
     }
@@ -290,12 +290,12 @@ describe('changePlanStatus', () => {
   });
 
   describe('restoring an archived plan', () => {
-    it('is 409 duplicate_name when a non-archived plan took the name, before any write', async () => {
+    it('is 409 PLAN_DUPLICATE_NAME when a non-archived plan took the name, before any write', async () => {
       repository.findActiveByName.mockResolvedValue(planRow({ id: 'other', status: 'ACTIVE' }));
 
       const err = await errorOf(change(planRow({ status: 'ARCHIVED' }), 'INACTIVE'));
 
-      expect(err).toMatchObject({ statusCode: 409, code: 'duplicate_name' });
+      expect(err).toMatchObject({ statusCode: 409, code: 'PLAN_DUPLICATE_NAME' });
       expect(repository.findActiveByName).toHaveBeenCalledWith('Gold Class', undefined, {
         excludeId: 'plan-1',
       });
@@ -316,22 +316,22 @@ describe('changePlanStatus', () => {
       expect(repository.findActiveByName).not.toHaveBeenCalled();
     });
 
-    it('maps a unique-index race to 409 duplicate_name', async () => {
+    it('maps a unique-index race to 409 PLAN_DUPLICATE_NAME', async () => {
       repository.changePlanStatusWithAudit.mockRejectedValue(
         Object.assign(new Error('unique'), { code: 'P2002' }),
       );
 
       const err = await errorOf(change(planRow({ status: 'ARCHIVED' }), 'INACTIVE'));
 
-      expect(err).toMatchObject({ statusCode: 409, code: 'duplicate_name' });
+      expect(err).toMatchObject({ statusCode: 409, code: 'PLAN_DUPLICATE_NAME' });
     });
   });
 
-  it('is 409 invalid_transition when the status changed between the read and the write', async () => {
+  it('is 409 PLAN_INVALID_TRANSITION when the status changed between the read and the write', async () => {
     repository.changePlanStatusWithAudit.mockResolvedValue(null);
 
     const err = await errorOf(change(planRow(), 'INACTIVE'));
 
-    expect(err).toMatchObject({ statusCode: 409, code: 'invalid_transition' });
+    expect(err).toMatchObject({ statusCode: 409, code: 'PLAN_INVALID_TRANSITION' });
   });
 });

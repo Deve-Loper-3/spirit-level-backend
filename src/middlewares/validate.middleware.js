@@ -1,7 +1,20 @@
 const { createAppError } = require('../errors/AppError');
 const { AppErrors } = require('../constants/errors');
+const { Messages } = require('../constants/messages');
+const { WHOLE_BODY_FIELD } = require('../utils/validationError.util');
 
+// A request without a body (no JSON content type) arrives with req.body undefined.
 const validateBody = (schema) => (req, _res, next) => {
+  if (req.body === undefined) {
+    return next(
+      createAppError(
+        AppErrors.VALIDATION_ERROR.statusCode,
+        Messages.VALIDATION_FAILED,
+        AppErrors.VALIDATION_ERROR.code,
+        [{ field: WHOLE_BODY_FIELD, message: Messages.BODY_REQUIRED }],
+      ),
+    );
+  }
   const result = schema.safeParse(req.body);
   if (!result.success) return next(result.error);
   req.body = result.data;

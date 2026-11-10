@@ -105,10 +105,10 @@ describe('GET /api/v1/cafe/orders', () => {
     });
 
     it.each(['userId', 'createdBy', 'createdById', 'user_id', 'source'])(
-      'rejects the `%s` query parameter with 422 instead of widening scope',
+      'rejects the `%s` query parameter with 400 instead of widening scope',
       async (param) => {
         const res = await get(coachA, { [param]: coachB.id });
-        expect(res.status).toBe(422);
+        expect(res.status).toBe(400);
         expect(res.body.errors).toEqual([
           expect.objectContaining({ field: param, message: 'Unknown query parameter' }),
         ]);
@@ -214,10 +214,10 @@ describe('GET /api/v1/cafe/orders', () => {
     });
 
     it.each([{ limit: 101 }, { limit: 0 }, { limit: 'abc' }, { page: 0 }, { page: -1 }])(
-      'rejects %o with 422',
+      'rejects %o with 400',
       async (query) => {
         const res = await get(coachA, query);
-        expect(res.status).toBe(422);
+        expect(res.status).toBe(400);
       },
     );
   });
@@ -234,9 +234,9 @@ describe('GET /api/v1/cafe/orders', () => {
       }
     });
 
-    it.each(['PREPARING', 'cancelled', 'paid'])('rejects status=%s with 422', async (status) => {
+    it.each(['PREPARING', 'cancelled', 'paid'])('rejects status=%s with 400', async (status) => {
       const res = await get(coachA, { status });
-      expect(res.status).toBe(422);
+      expect(res.status).toBe(400);
     });
 
     // Dubai is UTC+4 with no DST: local midnight on 2003-03-11 is 2003-03-10T20:00Z.
@@ -271,9 +271,9 @@ describe('GET /api/v1/cafe/orders', () => {
       [{ from: '2003-02-30' }, 'from'],
       [{ to: '10/03/2003' }, 'to'],
       [{ from: '2003-03-11', to: '2003-03-10' }, 'from'],
-    ])('rejects %o with 422 on %s', async (query, field) => {
+    ])('rejects %o with 400 on %s', async (query, field) => {
       const res = await get(coachA, query);
-      expect(res.status).toBe(422);
+      expect(res.status).toBe(400);
       expect(res.body.errors.map((e) => e.field)).toContain(field);
     });
 
@@ -330,7 +330,7 @@ describe('GET /api/v1/cafe/orders', () => {
 
       it('rejects a search longer than 100 characters', async () => {
         const res = await get(coachA, { search: 'x'.repeat(101) });
-        expect(res.status).toBe(422);
+        expect(res.status).toBe(400);
       });
     });
 

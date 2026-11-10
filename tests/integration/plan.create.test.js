@@ -105,7 +105,7 @@ describe('POST /api/v1/plans', () => {
     });
   });
 
-  describe('Validation errors (422 Unprocessable Entity)', () => {
+  describe('Validation errors (400 Unprocessable Entity)', () => {
     it('rejects time-based plan when creditsIncluded is 5', async () => {
       const payload = validPlanPayload({
         creditType: 'time',
@@ -118,7 +118,7 @@ describe('POST /api/v1/plans', () => {
         .set('Authorization', bearerFor(adminUser))
         .send(payload);
 
-      expect(res.status).toBe(422);
+      expect(res.status).toBe(400);
       expect(res.body.success).toBe(false);
       expect(res.body.code).toBe('VALIDATION_ERROR');
       const err = res.body.errors.find((e) => e.field === 'creditsIncluded');
@@ -134,7 +134,7 @@ describe('POST /api/v1/plans', () => {
         .set('Authorization', bearerFor(adminUser))
         .send(payload);
 
-      expect(res.status).toBe(422);
+      expect(res.status).toBe(400);
       expect(res.body.success).toBe(false);
       const err = res.body.errors.find((e) => e.field === 'creditsIncluded');
       expect(err).toBeDefined();
@@ -152,7 +152,7 @@ describe('POST /api/v1/plans', () => {
         .set('Authorization', bearerFor(adminUser))
         .send(payload);
 
-      expect(res.status).toBe(422);
+      expect(res.status).toBe(400);
       expect(res.body.success).toBe(false);
       const err = res.body.errors.find((e) => e.field === 'billingCycle');
       expect(err).toBeDefined();
@@ -170,13 +170,13 @@ describe('POST /api/v1/plans', () => {
         .set('Authorization', bearerFor(adminUser))
         .send(payload);
 
-      expect(res.status).toBe(422);
+      expect(res.status).toBe(400);
       expect(res.body.success).toBe(false);
       const err = res.body.errors.find((e) => e.field === 'creditRefill');
       expect(err).toBeDefined();
     });
 
-    it('rejects negative or missing price with 422', async () => {
+    it('rejects negative or missing price with 400', async () => {
       const payload = validPlanPayload({ price: -10 });
 
       const res = await request(app)
@@ -184,13 +184,13 @@ describe('POST /api/v1/plans', () => {
         .set('Authorization', bearerFor(adminUser))
         .send(payload);
 
-      expect(res.status).toBe(422);
+      expect(res.status).toBe(400);
       expect(res.body.success).toBe(false);
       const err = res.body.errors.find((e) => e.field === 'price');
       expect(err).toBeDefined();
     });
 
-    it('rejects a single body with missing price, credit_pack/month, and time/creditsIncluded 5 with 422 listing all three fields together', async () => {
+    it('rejects a single body with missing price, credit_pack/month, and time/creditsIncluded 5 with 400 listing all three fields together', async () => {
       const payload = {
         name: `${TEST_PREFIX}Combined_Errors`,
         kind: 'credit_pack',
@@ -209,7 +209,7 @@ describe('POST /api/v1/plans', () => {
         .set('Authorization', bearerFor(adminUser))
         .send(payload);
 
-      expect(res.status).toBe(422);
+      expect(res.status).toBe(400);
       expect(res.body.success).toBe(false);
       expect(res.body.code).toBe('VALIDATION_ERROR');
 
@@ -391,8 +391,8 @@ describe('POST /api/v1/plans', () => {
     });
   });
 
-  describe('Duplicate name conflict (409 duplicate_name)', () => {
-    it('returns 409 duplicate_name when comparing "Nutrition Coaching" vs "nutrition coaching" case-insensitively', async () => {
+  describe('Duplicate name conflict (409 PLAN_DUPLICATE_NAME)', () => {
+    it('returns 409 PLAN_DUPLICATE_NAME when comparing "Nutrition Coaching" vs "nutrition coaching" case-insensitively', async () => {
       const baseName = `${TEST_PREFIX}Unique Nutrition Coaching`;
       const firstPayload = validPlanPayload({ name: baseName });
 
@@ -411,7 +411,7 @@ describe('POST /api/v1/plans', () => {
 
       expect(secondRes.status).toBe(409);
       expect(secondRes.body.success).toBe(false);
-      expect(secondRes.body.code).toBe('duplicate_name');
+      expect(secondRes.body.code).toBe('PLAN_DUPLICATE_NAME');
     });
   });
 
@@ -553,7 +553,7 @@ describe('POST /api/v1/plans', () => {
       expect(res.body.data.membership).toBeNull();
     });
 
-    it('rejects mutual exclusivity violation with 422 when both membershipId and membership are provided', async () => {
+    it('rejects mutual exclusivity violation with 400 when both membershipId and membership are provided', async () => {
       const payload = validPlanPayload({
         name: `${TEST_PREFIX}Both_${Date.now()}`,
         membershipId: '123e4567-e89b-12d3-a456-426614174000',
@@ -565,11 +565,11 @@ describe('POST /api/v1/plans', () => {
         .set('Authorization', bearerFor(adminUser))
         .send(payload);
 
-      expect(res.status).toBe(422);
+      expect(res.status).toBe(400);
       expect(res.body.code).toBe('VALIDATION_ERROR');
     });
 
-    it('rejects non-existent membershipId with 422', async () => {
+    it('rejects non-existent membershipId with 400', async () => {
       const payload = validPlanPayload({
         name: `${TEST_PREFIX}UnknownMem_${Date.now()}`,
         membershipId: '00000000-0000-0000-0000-000000000000',
@@ -580,12 +580,10 @@ describe('POST /api/v1/plans', () => {
         .set('Authorization', bearerFor(adminUser))
         .send(payload);
 
-      expect(res.status).toBe(422);
+      expect(res.status).toBe(400);
       expect(res.body.code).toBe('VALIDATION_ERROR');
       expect(res.body.errors).toEqual(
-        expect.arrayContaining([
-          expect.objectContaining({ field: 'membershipId' }),
-        ]),
+        expect.arrayContaining([expect.objectContaining({ field: 'membershipId' })]),
       );
     });
 
@@ -628,7 +626,7 @@ describe('POST /api/v1/plans', () => {
         .send(failPayload);
 
       expect(res.status).toBe(409);
-      expect(res.body.code).toBe('duplicate_name');
+      expect(res.body.code).toBe('PLAN_DUPLICATE_NAME');
 
       // Verify the new membership was NOT created (rolled back!)
       const dbMem = await prisma.membership.findFirst({

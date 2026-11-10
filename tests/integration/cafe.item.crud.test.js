@@ -164,7 +164,7 @@ describe('Cafe Item Endpoints (Create, Detail, List)', () => {
       expect(res.body.data.availability).toBe('available');
     });
 
-    it('returns 422 CATEGORY_NOT_FOUND when categoryId does not exist', async () => {
+    it('returns 400 CATEGORY_NOT_FOUND when categoryId does not exist', async () => {
       const fakeCatId = '00000000-0000-0000-0000-000000000000';
       const payload = {
         name: `${TEST_PREFIX}BadCatItem`,
@@ -178,11 +178,11 @@ describe('Cafe Item Endpoints (Create, Detail, List)', () => {
         .set('Authorization', bearerFor(adminUser))
         .send(payload);
 
-      expect(res.status).toBe(422);
+      expect(res.status).toBe(400);
       expect(res.body.code).toBe('CATEGORY_NOT_FOUND');
     });
 
-    it('rejects price <= 0 with 422', async () => {
+    it('rejects price <= 0 with 400', async () => {
       const payload = {
         name: `${TEST_PREFIX}FreeItem`,
         categoryId: defaultCategory.id,
@@ -195,7 +195,7 @@ describe('Cafe Item Endpoints (Create, Detail, List)', () => {
         .set('Authorization', bearerFor(adminUser))
         .send(payload);
 
-      expect(res.status).toBe(422);
+      expect(res.status).toBe(400);
     });
 
     it('rejects unauthorized roles (COACH, MEMBER) with 403', async () => {

@@ -269,9 +269,9 @@ describe('PATCH /api/v1/cafe/orders/:orderId/status', () => {
       expect(res.body.code).toBe(AppErrors.ORDER_NOT_FOUND.code);
     });
 
-    it('422 for a non-UUID orderId', async () => {
+    it('400 for a non-UUID orderId', async () => {
       const res = await patch(admin, 'not-a-uuid', { status: 'ready' });
-      expect(res.status).toBe(422);
+      expect(res.status).toBe(400);
       expect(res.body.errors[0].field).toBe('orderId');
     });
 
@@ -279,10 +279,10 @@ describe('PATCH /api/v1/cafe/orders/:orderId/status', () => {
       ['paymentStatus', { status: 'ready', paymentStatus: 'paid' }],
       ['totalAed', { status: 'ready', totalAed: 0 }],
       ['items', { status: 'ready', items: [] }],
-    ])('422 for an extra body key (%s), and nothing changes', async (key, body) => {
+    ])('400 for an extra body key (%s), and nothing changes', async (key, body) => {
       const order = await newOrder();
       const res = await patch(admin, order.id, body);
-      expect(res.status).toBe(422);
+      expect(res.status).toBe(400);
       expect(res.body.errors).toEqual([
         expect.objectContaining({ field: key, message: 'Unknown field' }),
       ]);
@@ -295,21 +295,21 @@ describe('PATCH /api/v1/cafe/orders/:orderId/status', () => {
       ['cancel', { status: 'cancelled' }],
       ['paid', { status: 'paid' }],
       ['null', { status: null }],
-    ])('422 for %s', async (_label, body) => {
+    ])('400 for %s', async (_label, body) => {
       const order = await newOrder();
       const res = await patch(admin, order.id, body);
-      expect(res.status).toBe(422);
+      expect(res.status).toBe(400);
       expect(res.body.errors[0].field).toBe('status');
     });
 
-    it('422 for a query parameter', async () => {
+    it('400 for a query parameter', async () => {
       const order = await newOrder();
       const res = await request(app)
         .patch(url(order.id))
         .query({ force: 'true' })
         .set('Authorization', bearerFor(admin))
         .send({ status: 'ready' });
-      expect(res.status).toBe(422);
+      expect(res.status).toBe(400);
       expect(res.body.errors[0].field).toBe('force');
     });
 

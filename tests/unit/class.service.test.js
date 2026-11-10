@@ -62,7 +62,7 @@ describe('Class Service Unit Tests', () => {
   });
 
   describe('createClass', () => {
-    it('throws 422 if public class has no eligible plan IDs', async () => {
+    it('throws 400 if public class has no eligible plan IDs', async () => {
       await expect(
         createClass({
           payload: {
@@ -72,13 +72,13 @@ describe('Class Service Unit Tests', () => {
           },
         }),
       ).rejects.toMatchObject({
-        statusCode: 422,
+        statusCode: 400,
         code: 'VALIDATION_ERROR',
         message: Messages.CLASS_PUBLIC_REQUIRES_PLANS,
       });
     });
 
-    it('throws 422 if an unknown plan ID is provided', async () => {
+    it('throws 400 if an unknown plan ID is provided', async () => {
       repository.validatePlanIds.mockResolvedValueOnce({
         valid: false,
         unknownIds: ['bad-id'],
@@ -94,12 +94,12 @@ describe('Class Service Unit Tests', () => {
           },
         }),
       ).rejects.toMatchObject({
-        statusCode: 422,
+        statusCode: 400,
         message: Messages.CLASS_PLAN_NOT_FOUND,
       });
     });
 
-    it('throws 422 if an archived plan ID is provided', async () => {
+    it('throws 400 if an archived plan ID is provided', async () => {
       repository.validatePlanIds.mockResolvedValueOnce({
         valid: false,
         unknownIds: [],
@@ -115,7 +115,7 @@ describe('Class Service Unit Tests', () => {
           },
         }),
       ).rejects.toMatchObject({
-        statusCode: 422,
+        statusCode: 400,
         message: Messages.CLASS_PLAN_ARCHIVED,
       });
     });
@@ -274,14 +274,14 @@ describe('Class Service Unit Tests', () => {
       });
     });
 
-    it('throws 422 if public class is submitted with empty planIds', async () => {
+    it('throws 400 if public class is submitted with empty planIds', async () => {
       await expect(
         updateClassEligibility({
           classRecord: { id: 'c1', active: true, visibility: ClassVisibility.PUBLIC },
           planIds: [],
         }),
       ).rejects.toMatchObject({
-        statusCode: 422,
+        statusCode: 400,
         message: Messages.CLASS_PUBLIC_REQUIRES_PLANS,
       });
     });

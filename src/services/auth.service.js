@@ -5,6 +5,7 @@ const { hashPassword, comparePassword } = require('../utils/password.util');
 const { signAccessToken } = require('../utils/jwt.util');
 const { generateRefreshToken, hashToken } = require('../utils/token.util');
 const { createAppError } = require('../errors/AppError');
+const { isUniqueConstraintError } = require('../utils/prismaError.util');
 const { AppErrors } = require('../constants/errors');
 const { Messages } = require('../constants/messages');
 const { Role } = require('../constants/roles');
@@ -46,10 +47,11 @@ const registerMember = async ({
 }) => {
   const existing = await findByEmail(email);
 
-  if (existing) throw createAppError(409, Messages.USER_ALREADY_EXISTS);
+  if (existing) throw createAppError(AppErrors.USER_ALREADY_EXISTS);
 
   const passwordHash = await hashPassword(password);
 
+  // A parallel request with the same email or phone passes the check above and loses here.
   const user = await createUser({
     id: crypto.randomUUID(),
     fullName,
@@ -63,6 +65,9 @@ const registerMember = async ({
     passwordHash,
     role: Role.MEMBER,
     status: AccountStatus.PENDING,
+  }).catch((err) => {
+    if (isUniqueConstraintError(err)) throw createAppError(AppErrors.USER_ALREADY_EXISTS);
+    throw err;
   });
 
   return toPublicUser(user);

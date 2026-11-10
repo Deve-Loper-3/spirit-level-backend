@@ -22,7 +22,6 @@ const createCategory = async (req, res, next) => {
       payload: req.validatedBody || req.body,
     });
 
-    res.setHeader('Location', `/api/v1/cafe/categories/${category.id}`);
     return sendSuccess(res, {
       statusCode: 201,
       message: Messages.CATEGORY_CREATED_SUCCESS,

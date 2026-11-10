@@ -167,8 +167,8 @@ describe('GET /api/v1/cafe/orders/summary', () => {
     [{ from: 'yesterday' }],
     [{ status: 'preparing' }],
     [{ userId: 'x' }],
-  ])('rejects %o with 422', async (query) => {
-    expect((await get(admin, query)).status).toBe(422);
+  ])('rejects %o with 400', async (query) => {
+    expect((await get(admin, query)).status).toBe(400);
   });
 
   it('is not shadowed by /orders/:orderId', async () => {

@@ -1,7 +1,7 @@
 const { createAppError } = require('../errors/AppError');
 const { AppErrors } = require('../constants/errors');
 const { Role } = require('../constants/roles');
-const { isUniqueConstraintError } = require('../utils/prismaError.util');
+const { isUniqueConstraintError, orNotFound } = require('../utils/prismaError.util');
 const {
   findById,
   findByName,
@@ -71,7 +71,10 @@ const updateCategory = async ({ categoryId, payload }) => {
   }
 
   try {
-    const updated = await update(categoryId, payload);
+    const updated = await orNotFound(
+      () => update(categoryId, payload),
+      AppErrors.CATEGORY_NOT_FOUND,
+    );
     const count = await countItems(categoryId);
 
     return {
@@ -101,7 +104,7 @@ const deleteCategory = async ({ categoryId }) => {
     throw createAppError(AppErrors.CATEGORY_HAS_ITEMS);
   }
 
-  await remove(categoryId);
+  await orNotFound(() => remove(categoryId), AppErrors.CATEGORY_NOT_FOUND);
   return null;
 };
 

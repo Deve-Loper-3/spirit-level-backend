@@ -36,8 +36,8 @@ const createPlan = async (req, res, next) => {
 
 const listPlans = async (req, res, next) => {
   try {
-    const { plans, meta } = await findPlans({ query: req.validatedQuery });
-    return sendSuccess(res, { data: plans, meta });
+    const { plans, pagination, counts } = await findPlans({ query: req.validatedQuery });
+    return sendSuccess(res, { data: plans, pagination, counts });
   } catch (err) {
     return next(err);
   }

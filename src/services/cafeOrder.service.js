@@ -6,8 +6,6 @@ const {
   API_TO_DB_ORDER_STATUS,
   DB_TO_API_ORDER_STATUS,
   ORDER_STATUS_TRANSITIONS,
-  ORDER_DEFAULT_PAGE,
-  ORDER_DEFAULT_LIMIT,
 } = require('../constants/cafeOrder');
 const { buildOrderScope, isOrderAdmin } = require('./cafeOrder.access');
 const { localDateTimeToUtc, getTodayInTimezone, addDaysToDateStr } = require('./schedule.service');
@@ -24,6 +22,7 @@ const {
   toCafeOrderDetailResponse,
 } = require('../repositories/cafeOrder.mapper');
 const { toSkipTake, buildPagination } = require('../utils/pagination.util');
+const { DEFAULT_PAGE, DEFAULT_LIMIT } = require('../constants/pagination');
 
 const facilityTimezone = () => env.FACILITY_TIMEZONE || 'Asia/Dubai';
 
@@ -38,14 +37,7 @@ const toCreatedAtRange = ({ from, to }, timeZone = facilityTimezone()) => {
 };
 
 const listOrders = async ({ user, query = {} }) => {
-  const {
-    from,
-    to,
-    status,
-    search,
-    page = ORDER_DEFAULT_PAGE,
-    limit = ORDER_DEFAULT_LIMIT,
-  } = query;
+  const { from, to, status, search, page = DEFAULT_PAGE, limit = DEFAULT_LIMIT } = query;
   const scope = buildOrderScope(user);
   const filters = {
     createdAt: toCreatedAtRange({ from, to }),

@@ -5,10 +5,7 @@ const { planLimiter, planReadLimiter } = require('../middlewares/rateLimiter.mid
 const { methodNotAllowed } = require('../middlewares/methodNotAllowed.middleware');
 const { Role } = require('../constants/roles');
 const { validateCreateMembership } = require('../validators/membership.validation');
-const {
-  createMembership,
-  listMemberships,
-} = require('../controllers/membership.controller');
+const { createMembership, listMemberships } = require('../controllers/membership.controller');
 
 const router = Router();
 

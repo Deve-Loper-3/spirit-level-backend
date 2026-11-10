@@ -3,8 +3,8 @@ const { AppErrors } = require('../constants/errors');
 const { PlanStatus } = require('../constants/membershipPlan');
 const { findById } = require('../repositories/membershipPlan.repository');
 
-// Loads the plan named by :id onto req.plan. An unknown (or malformed) id is a 404, so the
-// response does not reveal the id format. `rejectArchived` is for routes that edit the plan.
+// Loads the plan named by :id onto req.plan. An unknown id is a 404 (a malformed one is already
+// a 400 from validatePlanIdParam, which runs first). `rejectArchived` is for routes that edit the plan.
 // Must run after `authenticate` and `authorize`, so only allowed callers can probe ids.
 const loadPlan =
   ({ rejectArchived = false } = {}) =>

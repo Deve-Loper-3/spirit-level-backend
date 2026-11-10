@@ -192,10 +192,7 @@ const findActiveByName = async (name, client = prisma) => {
 // Returns 0 until a bookings table exists; must mean sessions WITH bookings, never all future sessions.
 const countFutureBookedSessions = async (_classId, _client = prisma) => 0;
 
-const listClasses = async ({ where, page = 1, pageSize = 100 }, client = prisma) => {
-  const skip = (page - 1) * pageSize;
-  const take = pageSize;
-
+const listClasses = async ({ where, skip, take }, client = prisma) => {
   const [classes, total] = await Promise.all([
     client.class.findMany({
       where,
@@ -210,10 +207,7 @@ const listClasses = async ({ where, page = 1, pageSize = 100 }, client = prisma)
   return { classes, total };
 };
 
-const createClassWithPlans = async (
-  { data, planIds = [], coachIds = [] },
-  client = prisma,
-) => {
+const createClassWithPlans = async ({ data, planIds = [], coachIds = [] }, client = prisma) => {
   const id = crypto.randomUUID();
   const dedupedPlanIds = Array.from(new Set(planIds));
   const dedupedCoachIds = Array.from(new Set(coachIds));
@@ -255,7 +249,7 @@ const updateClass = async ({ id, data, coachIds, version }, client = prisma) => 
       const planCount = await tx.classEligiblePlan.count({ where: { classId: id } });
       if (planCount === 0) {
         throw createAppError(
-          422,
+          400,
           Messages.CLASS_PUBLIC_REQUIRES_PLANS,
           AppErrors.VALIDATION_ERROR.code,
           [{ field: 'visibility', message: Messages.CLASS_PUBLIC_REQUIRES_PLANS }],
@@ -342,7 +336,8 @@ const deactivateClass = async (id, client = prisma) => {
 
 const activateClass = async (id, client = prisma) => {
   return client.$transaction(async (tx) => {
-    const rows = await tx.$queryRaw`SELECT id, name, status FROM classes WHERE id = ${id} FOR UPDATE`;
+    const rows =
+      await tx.$queryRaw`SELECT id, name, status FROM classes WHERE id = ${id} FOR UPDATE`;
     const cls = rows && rows[0];
     if (!cls) return null;
 
@@ -385,7 +380,7 @@ const replaceEligiblePlans = async ({ classId, planIds }, client = prisma) => {
     const classRow = classes && classes[0];
     if (classRow && classRow.visibility === 'PUBLIC' && dedupedPlanIds.length === 0) {
       throw createAppError(
-        422,
+        400,
         Messages.CLASS_PUBLIC_REQUIRES_PLANS,
         AppErrors.VALIDATION_ERROR.code,
         [{ field: 'planIds', message: Messages.CLASS_PUBLIC_REQUIRES_PLANS }],

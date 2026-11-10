@@ -1,13 +1,7 @@
 const z = require('zod');
 const { Messages } = require('../constants/messages');
-const {
-  CafeOrderStatus,
-  ORDER_SEARCH_MAX_LENGTH,
-  ORDER_DEFAULT_PAGE,
-  ORDER_DEFAULT_LIMIT,
-  ORDER_MAX_LIMIT,
-} = require('../constants/cafeOrder');
-const { pageField, buildSizeField } = require('./pagination.validation');
+const { CafeOrderStatus, ORDER_SEARCH_MAX_LENGTH } = require('../constants/cafeOrder');
+const { paginationQueryFields } = require('./pagination.validation');
 const { sendValidationFailed } = require('../utils/validationError.util');
 
 const DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
@@ -54,12 +48,7 @@ const listOrdersQuerySchema = strictQuery({
       .max(ORDER_SEARCH_MAX_LENGTH, Messages.ORDER_SEARCH_INVALID)
       .optional(),
   ),
-  page: pageField.default(ORDER_DEFAULT_PAGE),
-  limit: buildSizeField({
-    message: Messages.ORDER_LIMIT_INVALID,
-    max: ORDER_MAX_LIMIT,
-    defaultValue: ORDER_DEFAULT_LIMIT,
-  }),
+  ...paginationQueryFields,
 }).superRefine(refineRange);
 
 const orderSummaryQuerySchema = strictQuery({
@@ -70,7 +59,7 @@ const orderSummaryQuerySchema = strictQuery({
 // The detail endpoint reads no query parameters; any present one is unknown and rejected.
 const orderDetailQuerySchema = strictQuery({});
 
-// PATCH /orders/:orderId/status body: exactly { status }, lowercase. Anything else is 422, so
+// PATCH /orders/:orderId/status body: exactly { status }, lowercase. Anything else is 400, so
 // paymentStatus, totals or items can never be sent along with a status change.
 const updateOrderStatusBodySchema = strictBody({
   status: z.enum(Object.values(CafeOrderStatus), { error: Messages.ORDER_STATUS_INVALID }),

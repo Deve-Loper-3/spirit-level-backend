@@ -10,6 +10,7 @@ const { createDocsRouter } = require('./routes/docs.routes');
 const notFound = require('./middlewares/notFound.middleware');
 const errorHandler = require('./middlewares/errorHandler.middleware');
 const clientType = require('./middlewares/clientType.middleware');
+const { publicLimiter } = require('./middlewares/rateLimiter.middleware');
 
 const CORS_MAX_AGE_SECONDS = 600;
 
@@ -59,7 +60,7 @@ const createApp = () => {
 
   app.use('/api-docs', createDocsRouter());
   app.use(routes);
-  app.use(notFound);
+  app.use(publicLimiter, notFound);
   app.use(errorHandler);
 
   return app;

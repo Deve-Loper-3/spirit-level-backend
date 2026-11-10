@@ -30,7 +30,7 @@ const {
   toSection,
   toEditableFields,
 } = require('../repositories/membershipPlan.mapper');
-const { toSkipTake, buildMeta } = require('../utils/pagination.util');
+const { toSkipTake, buildPagination } = require('../utils/pagination.util');
 const { pick } = require('../utils/pick.util');
 
 const isPlanNameUniqueError = (err) => {
@@ -64,10 +64,10 @@ const createPlan = async ({ actor, payload, meta }) => {
   let newMembershipData = null;
 
   if (payload.membershipId) {
-    // Mode 1: Existing membership - verify it exists, else 422
+    // Mode 1: Existing membership - verify it exists, else 400
     const mem = await findMembershipById(payload.membershipId);
     if (!mem) {
-      throw createAppError(422, Messages.VALIDATION_FAILED, AppErrors.VALIDATION_ERROR.code, [
+      throw createAppError(400, Messages.VALIDATION_FAILED, AppErrors.VALIDATION_ERROR.code, [
         { field: 'membershipId', message: Messages.MEMBERSHIP_NOT_FOUND },
       ]);
     }
@@ -150,11 +150,11 @@ const toSectionCounts = (groups) => {
 };
 
 const listPlans = async ({ query }) => {
-  const { page, pageSize, sort, ...filters } = query;
+  const { page, limit, sort, ...filters } = query;
 
   // The counts query ignores every filter, so it runs next to the list query.
   const [{ rows, total }, groups] = await Promise.all([
-    findPlans({ filters, sort, ...toSkipTake({ page, limit: pageSize }) }),
+    findPlans({ filters, sort, ...toSkipTake({ page, limit }) }),
     countNonArchivedByCreditType(),
   ]);
 
@@ -162,7 +162,8 @@ const listPlans = async ({ query }) => {
     plans: rows.map((plan) =>
       pick(toMembershipPlanResponse(plan, { activeClientCount: 0 }), PLAN_LIST_ITEM_FIELDS),
     ),
-    meta: buildMeta({ page, pageSize, total, counts: toSectionCounts(groups) }),
+    pagination: buildPagination({ page, limit, total }),
+    counts: toSectionCounts(groups),
   };
 };
 
@@ -212,7 +213,7 @@ const updatePlan = async ({ actor, plan, next, meta }) => {
     if (data.membershipId) {
       const mem = await findMembershipById(data.membershipId);
       if (!mem) {
-        throw createAppError(422, Messages.VALIDATION_FAILED, AppErrors.VALIDATION_ERROR.code, [
+        throw createAppError(400, Messages.VALIDATION_FAILED, AppErrors.VALIDATION_ERROR.code, [
           { field: 'membershipId', message: Messages.MEMBERSHIP_NOT_FOUND },
         ]);
       }

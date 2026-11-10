@@ -113,13 +113,13 @@ describe('PUT /api/v1/classes/:id/eligibility', () => {
       expect(res.body.code).toBe('CLASS_INACTIVE');
     });
 
-    it('returns 422 if public class is submitted with empty planIds', async () => {
+    it('returns 400 if public class is submitted with empty planIds', async () => {
       const res = await request(app)
         .put(`/api/v1/classes/${publicClass.id}/eligibility`)
         .set('Authorization', bearerFor(adminUser))
         .send({ planIds: [] });
 
-      expect(res.status).toBe(422);
+      expect(res.status).toBe(400);
       expect(res.body.errors[0].field).toBe('planIds');
     });
 
@@ -133,24 +133,24 @@ describe('PUT /api/v1/classes/:id/eligibility', () => {
       expect(res.body.data).toEqual({ classId: privateClass.id, planIds: [] });
     });
 
-    it('returns 422 when unknown plan ID is submitted', async () => {
+    it('returns 400 when unknown plan ID is submitted', async () => {
       const badId = 'e0000000-0000-4000-8000-000000000088';
       const res = await request(app)
         .put(`/api/v1/classes/${publicClass.id}/eligibility`)
         .set('Authorization', bearerFor(adminUser))
         .send({ planIds: [badId] });
 
-      expect(res.status).toBe(422);
+      expect(res.status).toBe(400);
       expect(res.body.errors[0].field).toBe('planIds');
     });
 
-    it('returns 422 when archived plan ID is submitted', async () => {
+    it('returns 400 when archived plan ID is submitted', async () => {
       const res = await request(app)
         .put(`/api/v1/classes/${publicClass.id}/eligibility`)
         .set('Authorization', bearerFor(adminUser))
         .send({ planIds: [archivedPlan.id] });
 
-      expect(res.status).toBe(422);
+      expect(res.status).toBe(400);
       expect(res.body.errors[0].field).toBe('planIds');
     });
 
@@ -229,8 +229,8 @@ describe('PUT /api/v1/classes/:id/eligibility', () => {
       ]);
 
       // Both requests finish without crash/deadlock
-      expect([200, 422]).toContain(putRes.status);
-      expect([200, 422]).toContain(patchRes.status);
+      expect([200, 400]).toContain(putRes.status);
+      expect([200, 400]).toContain(patchRes.status);
 
       // Invariant: Class in DB must NEVER end up PUBLIC with 0 eligible plans
       const finalClass = await prisma.class.findUnique({

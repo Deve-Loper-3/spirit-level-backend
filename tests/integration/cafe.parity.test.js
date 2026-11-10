@@ -121,8 +121,7 @@ describe('Cafe Web & Mobile Parity and Route Rate Limiter Coverage', () => {
 
       // Verify identical response structure
       expect(Object.keys(webRes.body.data)).toEqual(Object.keys(mobileRes.body.data));
-      expect(mobileRes.headers.location).toMatch(/^\/api\/v1\/cafe\/categories\/[0-9a-f-]+$/);
-      expect(webRes.headers.location).toMatch(/^\/api\/v1\/cafe\/categories\/[0-9a-f-]+$/);
+      expect(mobileRes.headers.location).toBeUndefined();
 
       // Browser gets CORS allow-origin and exposed Location
       expect(webRes.headers['access-control-allow-origin']).toBeDefined();

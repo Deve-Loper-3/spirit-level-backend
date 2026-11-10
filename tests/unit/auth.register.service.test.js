@@ -65,8 +65,18 @@ describe('auth.service - registerMember', () => {
     expect(userRepository.createUser).not.toHaveBeenCalled();
   });
 
-  it('propagates a createUser failure unchanged', async () => {
+  it('maps a unique-constraint race on createUser to 409 USER_ALREADY_EXISTS', async () => {
     const dbError = Object.assign(new Error('Unique constraint failed'), { code: 'P2002' });
+    userRepository.createUser.mockRejectedValue(dbError);
+
+    await expect(registerMember({ ...INPUT, profileImageUrl: IMAGE_URL })).rejects.toMatchObject({
+      statusCode: 409,
+      code: 'USER_ALREADY_EXISTS',
+    });
+  });
+
+  it('propagates any other createUser failure unchanged', async () => {
+    const dbError = new Error('connection lost');
     userRepository.createUser.mockRejectedValue(dbError);
 
     await expect(registerMember({ ...INPUT, profileImageUrl: IMAGE_URL })).rejects.toBe(dbError);

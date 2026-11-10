@@ -165,20 +165,22 @@ describe('BE-SCH-2: Class Slot Endpoints', () => {
       expect(slot.active).toBe(true);
     });
 
-    it('denies MEMBER from viewing slots of private class with 403', async () => {
+    it('hides the slots of a private class from a MEMBER: 404 CLASS_NOT_FOUND', async () => {
       const res = await request(app)
         .get(`/api/v1/classes/${privateClass.id}/slots`)
         .set('Authorization', bearerFor(memberUser));
 
-      expect(res.status).toBe(403);
+      expect(res.status).toBe(404);
+      expect(res.body.code).toBe('CLASS_NOT_FOUND');
     });
 
-    it('denies MEMBER from viewing slots of inactive class with 403', async () => {
+    it('hides the slots of an inactive class from a MEMBER: 404 CLASS_NOT_FOUND', async () => {
       const res = await request(app)
         .get(`/api/v1/classes/${inactiveClass.id}/slots`)
         .set('Authorization', bearerFor(memberUser));
 
-      expect(res.status).toBe(403);
+      expect(res.status).toBe(404);
+      expect(res.body.code).toBe('CLASS_NOT_FOUND');
     });
   });
 

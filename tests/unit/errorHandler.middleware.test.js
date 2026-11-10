@@ -131,3 +131,68 @@ describe('sendError', () => {
     expect(res.json).toHaveBeenCalledWith({ success: false, message: 'm' });
   });
 });
+
+describe('errorHandler status and code of framework and Prisma errors', () => {
+  const { Prisma } = require('@prisma/client');
+  const prismaError = (code) =>
+    new Prisma.PrismaClientKnownRequestError('boom', { code, clientVersion: '6.0.0' });
+
+  it('answers a body over the limit with 413 PAYLOAD_TOO_LARGE and a code', async () => {
+    const app = express();
+    app.use(express.json({ limit: '1kb' }));
+    app.post('/test', (_req, res) => res.sendStatus(204));
+    app.use(errorHandler);
+
+    const res = await request(app)
+      .post('/test')
+      .set('Content-Type', 'application/json')
+      .send(JSON.stringify({ text: 'x'.repeat(5000) }));
+
+    expect(res.status).toBe(413);
+    expect(res.body).toEqual({
+      success: false,
+      message: Messages.PAYLOAD_TOO_LARGE,
+      code: 'PAYLOAD_TOO_LARGE',
+    });
+  });
+
+  it('uses the constant message for malformed JSON', async () => {
+    const app = buildApp((_req, res) => res.sendStatus(204));
+    const res = await request(app)
+      .post('/test')
+      .set('Content-Type', 'application/json')
+      .send('{ bad json');
+    expect(res.body.message).toBe(Messages.MALFORMED_JSON);
+  });
+
+  it('an unmapped unique violation is a generic 409, not "User already exists"', async () => {
+    const app = buildApp((_req, _res, next) => next(prismaError('P2002')));
+    const res = await request(app).post('/test');
+    expect(res.status).toBe(409);
+    expect(res.body).toEqual({
+      success: false,
+      message: Messages.RESOURCE_ALREADY_EXISTS,
+      code: 'RESOURCE_ALREADY_EXISTS',
+    });
+    expect(res.body.message).not.toMatch(/user/i);
+  });
+
+  it('an unmapped missing-record error is a 404, not a 500', async () => {
+    const app = buildApp((_req, _res, next) => next(prismaError('P2025')));
+    const res = await request(app).post('/test');
+    expect(res.status).toBe(404);
+    expect(res.body.code).toBe('RESOURCE_NOT_FOUND');
+  });
+
+  it('the 404 fallback has a fixed message that does not echo the URL or query string', async () => {
+    const app = buildApp((_req, res) => res.sendStatus(204));
+    const res = await request(app).get('/nope?token=secret');
+    expect(res.status).toBe(404);
+    expect(res.body).toEqual({
+      success: false,
+      message: Messages.ROUTE_NOT_FOUND,
+      code: 'ROUTE_NOT_FOUND',
+    });
+    expect(JSON.stringify(res.body)).not.toContain('secret');
+  });
+});

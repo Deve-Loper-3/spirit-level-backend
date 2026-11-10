@@ -2,7 +2,12 @@ const { Router } = require('express');
 const env = require('../config/env');
 const { validateBody } = require('../middlewares/validate.middleware');
 const { authenticate } = require('../middlewares/authenticate.middleware');
-const { authLimiter, createAuthLimiter } = require('../middlewares/rateLimiter.middleware');
+const { methodNotAllowed } = require('../middlewares/methodNotAllowed.middleware');
+const {
+  authLimiter,
+  createAuthLimiter,
+  profileLimiter,
+} = require('../middlewares/rateLimiter.middleware');
 const {
   registerSchema,
   completeRegistrationSchema,
@@ -55,7 +60,7 @@ router.post('/refresh', refreshLimiter, validateBody(refreshTokenSchema), refres
 router.post('/logout', refreshLimiter, authenticate, validateBody(refreshTokenSchema), logout);
 
 // Any authenticated, active role may read its own profile.
-router.get('/me', authenticate, me);
+router.get('/me', authenticate, profileLimiter, me);
 
 router.post(
   '/forgot-password',
@@ -72,5 +77,16 @@ router.post(
   validateBody(resetPasswordSchema),
   resetPassword,
 );
+
+// Any other method on these paths: 405 with an Allow header (not 404).
+router.all('/register', methodNotAllowed(['POST']));
+router.all('/register/complete', methodNotAllowed(['POST']));
+router.all('/login', methodNotAllowed(['POST']));
+router.all('/refresh', methodNotAllowed(['POST']));
+router.all('/logout', methodNotAllowed(['POST']));
+router.all('/me', methodNotAllowed(['GET']));
+router.all('/forgot-password', methodNotAllowed(['POST']));
+router.all('/verify-otp', methodNotAllowed(['POST']));
+router.all('/reset-password', methodNotAllowed(['POST']));
 
 module.exports = router;

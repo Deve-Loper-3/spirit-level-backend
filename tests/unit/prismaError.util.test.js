@@ -2,7 +2,9 @@ const { Prisma } = require('@prisma/client');
 const {
   isUniqueConstraintError,
   isRecordNotFoundError,
+  orNotFound,
 } = require('../../src/utils/prismaError.util');
+const { AppErrors } = require('../../src/constants/errors');
 
 const prismaError = (code) =>
   new Prisma.PrismaClientKnownRequestError('boom', { code, clientVersion: '6.0.0' });
@@ -26,5 +28,30 @@ describe('prismaError.util', () => {
   it.each([new Error('x'), null, undefined, 'P2002'])('returns false for %p', (err) => {
     expect(isUniqueConstraintError(err)).toBe(false);
     expect(isRecordNotFoundError(err)).toBe(false);
+  });
+});
+
+describe('orNotFound', () => {
+  it('returns the result of the write', async () => {
+    await expect(orNotFound(async () => 'done', AppErrors.ITEM_NOT_FOUND)).resolves.toBe('done');
+  });
+
+  it('turns P2025 into the resource 404', async () => {
+    const work = async () => {
+      throw prismaError('P2025');
+    };
+    await expect(orNotFound(work, AppErrors.ITEM_NOT_FOUND)).rejects.toMatchObject({
+      statusCode: 404,
+      code: 'ITEM_NOT_FOUND',
+    });
+  });
+
+  it('lets every other error through unchanged', async () => {
+    const original = prismaError('P2002');
+    await expect(
+      orNotFound(async () => {
+        throw original;
+      }, AppErrors.ITEM_NOT_FOUND),
+    ).rejects.toBe(original);
   });
 });

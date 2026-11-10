@@ -117,12 +117,12 @@ describe('Cafe inventory validation (SLAPP-79/81 foundations)', () => {
       expect(res.status).not.toHaveBeenCalled();
     });
 
-    it.each([undefined, null, {}])('returns 422 for an absent quantity in body %j', (body) => {
+    it.each([undefined, null, {}])('returns 400 for an absent quantity in body %j', (body) => {
       const req = { body };
 
       validateUpdateItemStock(req, res, next);
 
-      expect(res.status).toHaveBeenCalledWith(422);
+      expect(res.status).toHaveBeenCalledWith(400);
       expect(res.json).toHaveBeenCalledWith({
         success: false,
         message: Messages.VALIDATION_FAILED,
@@ -161,7 +161,7 @@ describe('Cafe inventory validation (SLAPP-79/81 foundations)', () => {
       expect(next).toHaveBeenCalledWith();
     });
 
-    it('returns every invalid query field in the existing 422 envelope', () => {
+    it('returns every invalid query field in the existing 400 envelope', () => {
       const req = {
         query: {
           page: '0',
@@ -174,7 +174,7 @@ describe('Cafe inventory validation (SLAPP-79/81 foundations)', () => {
 
       validateListInventoryQuery(req, res, next);
 
-      expect(res.status).toHaveBeenCalledWith(422);
+      expect(res.status).toHaveBeenCalledWith(400);
       expect(res.json).toHaveBeenCalledWith({
         success: false,
         message: Messages.VALIDATION_FAILED,

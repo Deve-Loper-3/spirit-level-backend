@@ -359,14 +359,15 @@ describe('PATCH /api/v1/coaches/:coachId/status', () => {
       expect((await reloadCoach(coach.id)).status).toBe(CoachStatus.ACTIVE);
     });
 
-    it('has no DELETE route: a coach cannot be removed', async () => {
+    it('has no DELETE route: 405 with Allow, and a coach cannot be removed', async () => {
       const { coach } = await seedCoach();
 
       const res = await request(app)
         .delete(`${COACHES_URL}/${coach.id}`)
         .set('Authorization', bearerFor(admin));
 
-      expect(res.status).toBe(404);
+      expect(res.status).toBe(405);
+      expect(res.headers.allow).toBe('GET, PATCH');
       expect(await reloadCoach(coach.id)).not.toBeNull();
     });
   });

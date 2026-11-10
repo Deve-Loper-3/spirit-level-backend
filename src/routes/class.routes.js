@@ -5,6 +5,7 @@ const { classLimiter, classReadLimiter } = require('../middlewares/rateLimiter.m
 const { loadClass } = require('../middlewares/loadClass.middleware');
 const { methodNotAllowed } = require('../middlewares/methodNotAllowed.middleware');
 const { Role } = require('../constants/roles');
+const { validateClassIdParam, validateSlotIdParams } = require('../validators/idParam.validation');
 const {
   validateCreateClass,
   validateUpdateClassBody,
@@ -61,6 +62,7 @@ router.post(
   authenticate,
   authorize(Role.OWNER, Role.ADMIN),
   classLimiter,
+  validateClassIdParam,
   loadClass(),
   activateClass,
 );
@@ -72,6 +74,7 @@ router.post(
   authenticate,
   authorize(Role.OWNER, Role.ADMIN),
   classLimiter,
+  validateClassIdParam,
   loadClass(),
   archiveClass,
 );
@@ -83,6 +86,7 @@ router.post(
   authenticate,
   authorize(Role.OWNER, Role.ADMIN),
   classLimiter,
+  validateClassIdParam,
   loadClass(),
   deactivateClass,
 );
@@ -94,6 +98,7 @@ router.put(
   authenticate,
   authorize(Role.OWNER, Role.ADMIN),
   classLimiter,
+  validateClassIdParam,
   loadClass(),
   validateClassEligibility,
   updateEligibility,
@@ -106,6 +111,7 @@ router.patch(
   authenticate,
   authorize(Role.OWNER, Role.ADMIN),
   classLimiter,
+  validateSlotIdParams,
   loadClass(),
   validateUpdateSlotBody,
   updateSlot,
@@ -117,6 +123,7 @@ router.delete(
   authenticate,
   authorize(Role.OWNER, Role.ADMIN),
   classLimiter,
+  validateSlotIdParams,
   loadClass(),
   deleteSlot,
 );
@@ -128,6 +135,7 @@ router.get(
   authenticate,
   authorize(Role.OWNER, Role.ADMIN, Role.COACH, Role.MEMBER),
   classReadLimiter,
+  validateClassIdParam,
   loadClass(),
   validateListSlotsQuery,
   listSlots,
@@ -139,6 +147,7 @@ router.post(
   authenticate,
   authorize(Role.OWNER, Role.ADMIN),
   classLimiter,
+  validateClassIdParam,
   loadClass(),
   validateCreateSlotsBody,
   createSlots,
@@ -151,6 +160,7 @@ router.get(
   authenticate,
   authorize(Role.OWNER, Role.ADMIN, Role.COACH, Role.MEMBER),
   classReadLimiter,
+  validateClassIdParam,
   loadClass(),
   getClass,
 );
@@ -161,6 +171,7 @@ router.patch(
   authenticate,
   authorize(Role.OWNER, Role.ADMIN),
   classLimiter,
+  validateClassIdParam,
   loadClass(),
   validateUpdateClassBody,
   updateClass,

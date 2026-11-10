@@ -13,11 +13,11 @@ const { Messages } = require('../constants/messages');
 
 const listClasses = async (req, res, next) => {
   try {
-    const { classes, meta } = await serviceListClasses({
+    const { classes, pagination } = await serviceListClasses({
       user: req.user,
       query: req.validatedQuery,
     });
-    return sendSuccess(res, { data: classes, meta });
+    return sendSuccess(res, { data: classes, pagination });
   } catch (err) {
     return next(err);
   }

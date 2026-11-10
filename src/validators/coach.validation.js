@@ -7,8 +7,7 @@ const {
   COACH_MANAGER_ROLES,
   COACH_READER_ROLES,
 } = require('../constants/coach');
-const { DEFAULT_LIMIT, MAX_LIMIT } = require('../constants/pagination');
-const { pageField, buildSizeField } = require('./pagination.validation');
+const { paginationQueryFields } = require('./pagination.validation');
 const { pick } = require('../utils/pick.util');
 const { staffUserFields } = require('./staff.validation');
 const { trustedImageUrl } = require('./uploads.validation');
@@ -67,13 +66,7 @@ const coachStatusBodySchema = z.object({ status: coachStatusField }).strict();
 
 // A blank search means "no search".
 const listQueryFields = {
-  page: pageField,
-
-  limit: buildSizeField({
-    message: Messages.LIMIT_INVALID,
-    max: MAX_LIMIT,
-    defaultValue: DEFAULT_LIMIT,
-  }),
+  ...paginationQueryFields,
 
   search: z
     .string({ error: Messages.COACH_SEARCH_INVALID })

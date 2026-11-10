@@ -4,6 +4,7 @@ const { authorize } = require('../middlewares/authorize.middleware');
 const { classLimiter, classReadLimiter } = require('../middlewares/rateLimiter.middleware');
 const { methodNotAllowed } = require('../middlewares/methodNotAllowed.middleware');
 const { Role } = require('../constants/roles');
+const { validateSessionIdParam } = require('../validators/idParam.validation');
 const {
   validateListSessionsQuery,
   validateCreateSessionBody,
@@ -48,6 +49,7 @@ router.post(
   authenticate,
   authorize(Role.OWNER, Role.ADMIN, Role.COACH),
   classLimiter,
+  validateSessionIdParam,
   validateCancelSessionBody,
   cancelSession,
 );
@@ -59,6 +61,7 @@ router.post(
   authenticate,
   authorize(Role.OWNER, Role.ADMIN),
   classLimiter,
+  validateSessionIdParam,
   restoreSession,
 );
 router.all('/:id/restore', methodNotAllowed(['POST']));
@@ -69,6 +72,7 @@ router.get(
   authenticate,
   authorize(Role.OWNER, Role.ADMIN, Role.COACH, Role.MEMBER),
   classReadLimiter,
+  validateSessionIdParam,
   getSession,
 );
 
@@ -78,6 +82,7 @@ router.patch(
   authenticate,
   authorize(Role.OWNER, Role.ADMIN, Role.COACH),
   classLimiter,
+  validateSessionIdParam,
   validatePatchSessionBody,
   patchSession,
 );

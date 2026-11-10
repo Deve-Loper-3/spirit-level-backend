@@ -75,7 +75,7 @@ describe('Schedule Service - Adapter Seams & Stubs Unit Tests', () => {
   });
 
   describe('1. getBookingStats bookedCount vs Capacity Check', () => {
-    it('rejects PATCH capacity with 422 CAPACITY_BELOW_BOOKED when new capacity < bookedCount', async () => {
+    it('rejects PATCH capacity with 400 CAPACITY_BELOW_BOOKED when new capacity < bookedCount', async () => {
       scheduleRepository.findSessionById.mockResolvedValue(baseSessionRecord);
       getBookingStats.mockResolvedValue({ bookedCount: 15, waitlistCount: 3 });
 
@@ -89,7 +89,7 @@ describe('Schedule Service - Adapter Seams & Stubs Unit Tests', () => {
           user: adminUser,
         }),
       ).rejects.toMatchObject({
-        statusCode: 422,
+        statusCode: 400,
         code: AppErrors.CAPACITY_BELOW_BOOKED.code,
       });
 
@@ -376,7 +376,11 @@ describe('Schedule Service - Adapter Seams & Stubs Unit Tests', () => {
     it('allows admin cancel even when session has active bookings (review flow)', async () => {
       scheduleRepository.findSessionById.mockResolvedValue(baseSessionRecord);
       getBookingStats.mockResolvedValue({ bookedCount: 8, waitlistCount: 2 });
-      getCancelOutcome.mockResolvedValue({ booking: { cancelledCount: 8 }, credit: true, waitlist: true });
+      getCancelOutcome.mockResolvedValue({
+        booking: { cancelledCount: 8 },
+        credit: true,
+        waitlist: true,
+      });
       scheduleRepository.updateSession.mockResolvedValue(true);
 
       const result = await cancelSession({

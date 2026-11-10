@@ -2,60 +2,60 @@ const { ZodError } = require('zod');
 const { Prisma } = require('@prisma/client');
 const logger = require('../config/logger');
 const { sendError } = require('../utils/apiResponse.util');
+const { toFieldErrors } = require('../utils/validationError.util');
 const { Messages } = require('../constants/messages');
 const { AppErrors } = require('../constants/errors');
-const { isRestrictViolationError } = require('../utils/prismaError.util');
+const {
+  isUniqueConstraintError,
+  isRecordNotFoundError,
+  isRestrictViolationError,
+} = require('../utils/prismaError.util');
 
-const PRISMA_UNIQUE_VIOLATION = 'P2002';
 // createAppError(status, message) falls back to this code; it tells the client nothing.
 const GENERIC_ERROR_CODE = 'APP_ERROR';
 
-const resolveUniqueConstraintMessage = (_target) => {
-  return Messages.USER_ALREADY_EXISTS;
-};
+const sendAppError = (res, errorDef) =>
+  sendError(res, {
+    statusCode: errorDef.statusCode,
+    message: errorDef.message,
+    code: errorDef.code,
+  });
 
 const errorHandler = (err, req, res, _next) => {
   // Malformed JSON body
   if (err.type === 'entity.parse.failed') {
     return sendError(res, {
-      statusCode: 400,
-      message: 'Malformed JSON in request body',
+      statusCode: AppErrors.VALIDATION_ERROR.statusCode,
+      message: Messages.MALFORMED_JSON,
       code: AppErrors.VALIDATION_ERROR.code,
     });
+  }
+
+  // Body larger than the json() limit
+  if (err.type === 'entity.too.large') {
+    return sendAppError(res, AppErrors.PAYLOAD_TOO_LARGE);
   }
 
   // ZodError — validation failure
   if (err instanceof ZodError) {
-    const errors = err.issues.map((e) => ({
-      field: e.path.join('.'),
-      message: e.message,
-    }));
     return sendError(res, {
-      statusCode: 400,
+      statusCode: AppErrors.VALIDATION_ERROR.statusCode,
       message: Messages.VALIDATION_FAILED,
       code: AppErrors.VALIDATION_ERROR.code,
-      errors,
+      errors: toFieldErrors(err.issues),
     });
   }
 
-  // Prisma unique-constraint violation
-  if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === PRISMA_UNIQUE_VIOLATION) {
-    const target = err.meta?.target;
-    const message = resolveUniqueConstraintMessage(target);
-    return sendError(res, {
-      statusCode: 409,
-      message,
-      code: AppErrors.USER_ALREADY_EXISTS.code,
-    });
+  // Safety nets for Prisma errors a service did not map itself. Services that know which record
+  // is involved throw their own error (USER_ALREADY_EXISTS, CATEGORY_NOT_FOUND, ...) first.
+  if (err instanceof Prisma.PrismaClientKnownRequestError) {
+    if (isUniqueConstraintError(err)) return sendAppError(res, AppErrors.RESOURCE_ALREADY_EXISTS);
+    if (isRecordNotFoundError(err)) return sendAppError(res, AppErrors.RESOURCE_NOT_FOUND);
   }
 
   // Postgres RESTRICT foreign key violation
   if (isRestrictViolationError(err)) {
-    return sendError(res, {
-      statusCode: 409,
-      message: Messages.RESOURCE_IN_USE,
-      code: AppErrors.RESOURCE_IN_USE.code,
-    });
+    return sendAppError(res, AppErrors.RESOURCE_IN_USE);
   }
 
   const statusCode = err.statusCode || err.status || 500;

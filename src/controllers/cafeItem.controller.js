@@ -110,10 +110,7 @@ const patchItemVisibility = async (req, res, next) => {
 
 const issueCafeImageToken = async (req, res, next) => {
   try {
-    const data = await createImageUploadToken(
-      req.validatedBody.contentType,
-      CAFE_IMAGE_FOLDER,
-    );
+    const data = await createImageUploadToken(req.validatedBody.contentType, CAFE_IMAGE_FOLDER);
 
     return sendSuccess(res, {
       statusCode: 200,

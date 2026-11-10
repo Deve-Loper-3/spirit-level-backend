@@ -265,14 +265,14 @@ describe('Class Validation Unit Tests', () => {
         visibility: 'public',
         active: 'all',
         page: '2',
-        pageSize: '50',
+        limit: '50',
       });
       expect(result.success).toBe(true);
       expect(result.data).toMatchObject({
         visibility: 'public',
         active: 'all',
         page: 2,
-        pageSize: 50,
+        limit: 50,
       });
     });
   });

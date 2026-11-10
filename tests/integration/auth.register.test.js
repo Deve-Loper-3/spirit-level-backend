@@ -155,6 +155,21 @@ describe('POST /api/v1/auth/register', () => {
     expect(res2.status).toBe(409);
     expect(res2.body.success).toBe(false);
     expect(res2.body.message).toBe(Messages.USER_ALREADY_EXISTS);
+    expect(res2.body.code).toBe('USER_ALREADY_EXISTS');
+  });
+
+  it('answers an oversized body with 413 and a code', async () => {
+    const res = await request(app)
+      .post('/api/v1/auth/register')
+      .set('Content-Type', 'application/json')
+      .send(JSON.stringify({ fullName: 'x'.repeat(1024 * 1024 + 1) }));
+
+    expect(res.status).toBe(413);
+    expect(res.body).toEqual({
+      success: false,
+      message: Messages.PAYLOAD_TOO_LARGE,
+      code: 'PAYLOAD_TOO_LARGE',
+    });
   });
 
   it('allows registration with an existing phone number and a different email', async () => {
@@ -265,7 +280,7 @@ describe('POST /api/v1/auth/register', () => {
 
     expect(res.status).toBe(400);
     expect(res.body.success).toBe(false);
-    expect(res.body.message).toBe('Malformed JSON in request body');
+    expect(res.body.message).toBe(Messages.MALFORMED_JSON);
   });
 
   it('stores the password as a bcrypt hash in the database', async () => {

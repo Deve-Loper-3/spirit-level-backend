@@ -303,7 +303,7 @@ describe('Web + Mobile Parity across all Class Endpoints', () => {
     expect(mobileRes.body.code).toBe('CLASS_DUPLICATE_NAME');
   });
 
-  it('proves parity on 422 VALIDATION_ERROR (POST invalid intensity)', async () => {
+  it('proves parity on 400 VALIDATION_ERROR (POST invalid intensity)', async () => {
     const { mobileRes } = await sendWithClientTypes((req, headers) => {
       let r = req
         .post('/api/v1/classes')
@@ -321,7 +321,7 @@ describe('Web + Mobile Parity across all Class Endpoints', () => {
       });
       return r;
     });
-    expect(mobileRes.status).toBe(422);
+    expect(mobileRes.status).toBe(400);
     expect(mobileRes.body.code).toBe('VALIDATION_ERROR');
   });
 

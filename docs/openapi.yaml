@@ -3,16 +3,49 @@ info:
   title: Spirit Level API
   version: 1.0.0
   description: |
-    Backend API for Spirit Level.
+    Backend API for Spirit Level. One contract for the Next.js web app and the Kotlin mobile app.
 
-    **Base path:** `/api/v1` for versioned routes. Health checks live under `/health`.
+    **Base path:** `/api/v1` for versioned routes. Health checks live under `/health`; this
+    document and Swagger UI are served under `/api-docs`.
 
-    **Auth:** Protected routes expect `Authorization: Bearer <accessToken>`.
-    Refresh tokens are sent in the JSON body (not cookies).
+    **Auth:** Protected routes expect `Authorization: Bearer <accessToken>`. Refresh tokens are
+    sent in the JSON body (not cookies), so nothing depends on `Origin` or cookies. CORS allows the
+    request headers `Content-Type` and `Authorization` and exposes `Location`, `Allow`,
+    `RateLimit-*` and `Retry-After`.
 
-    **Envelope:** Success responses use `{ success: true, message?, data }`.
-    List endpoints may also include `pagination`.
-    Errors use `{ success: false, message, code?, errors? }`.
+    **Formats:** ids are UUID strings; instants are ISO-8601 UTC strings; calendar dates are
+    `YYYY-MM-DD`; slot times are facility-local `HH:mm`; enum values are lowercase unless a schema
+    says otherwise. Responses carry no `Cache-Control` header.
+
+    **Success envelope:** `{ success: true, message?, data }`.
+
+    **Lists:** every list endpoint takes the same query, `?page=1&limit=20` (`page` from 1,
+    `limit` 1 to 100, default 20), and answers
+    `{ success: true, data: [...], pagination: { page, limit, total, totalPages } }`.
+    `GET /plans` also returns a top-level `counts`. A page past the end is `200` with an empty `data`.
+    `GET /memberships` and `GET /classes/{id}/slots` return their whole (small) set without paging.
+
+    **Error envelope:** `{ success: false, message, code, errors?, details? }`. `code` is always
+    present (UPPER_SNAKE_CASE) and is the value to branch on; `message` is for people. `errors[]`
+    (`{ field, message }`) lists every failing field of a 400; `details` carries structured extras
+    (for example `conflicts[]`).
+
+    **Status codes:**
+    - `400` `VALIDATION_ERROR` for anything wrong with the request itself: body, query, path
+      ids that are not UUIDs, an unsupported image type, an empty or missing body, malformed JSON.
+      Business rules that depend on stored data use `409` (conflict) or `404` (not found).
+    - `401` no or invalid token. `403` signed in but the role may not do this.
+    - `404` the resource does not exist **or the caller may not see it** (hidden classes,
+      sessions and orders look exactly like missing ones). An unknown path is `404 ROUTE_NOT_FOUND`.
+    - `405` `METHOD_NOT_ALLOWED` with an `Allow` header, for the wrong method on a real path.
+    - `409` conflicts with current data. `413` `PAYLOAD_TOO_LARGE` for a JSON body over 1 MB.
+    - `429` `TOO_MANY_REQUESTS`, `500`, `502`, `503`.
+
+    **Rate limits:** 1000 requests per 15 minutes by default. Public routes (login, register,
+    password reset, upload token, `/health/ready`, `/api-docs`, the 404 fallback and the 405
+    answers) are limited per client IP; routes behind login are limited per user and IP, counted
+    after authentication and authorization. `/auth/refresh` and `/auth/logout` have their own,
+    stricter limit. `GET /health` is not limited.
 
     **Coaches:** Create via `POST /api/v1/admin/staff/coaches` (not generic staff create).
     Soft-delete is status deactivation only (no hard DELETE).
@@ -38,6 +71,14 @@ tags:
     description: Membership plan management (ADMIN / OWNER)
   - name: Cafe
     description: Cafe / Refuel Bar catalogue - categories, items and item image upload (reads for all roles, writes for ADMIN / OWNER) - plus inventory stock, list and summary (ADMIN / OWNER only) - plus the order queue, order detail and order summary (ADMIN / OWNER see all orders, COACH only their own) and the one-step order status change (ADMIN / OWNER only)
+  - name: Memberships
+    description: Memberships (groups of plans) - list and create (ADMIN / OWNER create; COACH may read)
+  - name: Classes
+    description: Class templates, eligibility and recurring slots
+  - name: Sessions
+    description: 'Dated class sessions: calendar, create, update, cancel and restore'
+  - name: Docs
+    description: This specification and Swagger UI
 
 paths:
   /health:
@@ -64,6 +105,29 @@ paths:
                   timestamp:
                     type: string
                     format: date-time
+    put:
+      tags:
+        - Health
+      summary: Not supported
+      description: 'Every method other than GET answers 405 with `Allow: GET`.'
+      operationId: methodNotAllowed_health
+      responses:
+        '405':
+          description: 'Route exists but not for this method (`Allow: GET`)'
+          headers:
+            Allow:
+              description: Methods the route supports
+              schema:
+                type: string
+                example: GET
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+              example:
+                success: false
+                message: Method not allowed for this route
+                code: METHOD_NOT_ALLOWED
 
   /health/ready:
     get:
@@ -86,6 +150,8 @@ paths:
                   db:
                     type: string
                     example: up
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
         '503':
           description: Database is not ready
           content:
@@ -100,6 +166,29 @@ paths:
                   db:
                     type: string
                     example: down
+    put:
+      tags:
+        - Health
+      summary: Not supported
+      description: 'Every method other than GET answers 405 with `Allow: GET`.'
+      operationId: methodNotAllowed_health_ready
+      responses:
+        '405':
+          description: 'Route exists but not for this method (`Allow: GET`)'
+          headers:
+            Allow:
+              description: Methods the route supports
+              schema:
+                type: string
+                example: GET
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+              example:
+                success: false
+                message: Method not allowed for this route
+                code: METHOD_NOT_ALLOWED
 
   /api/v1/auth/register:
     post:
@@ -153,6 +242,29 @@ paths:
                 message: User already exists
         '429':
           $ref: '#/components/responses/TooManyRequests'
+    put:
+      tags:
+        - Auth
+      summary: Not supported
+      description: 'Every method other than POST answers 405 with `Allow: POST`.'
+      operationId: methodNotAllowed_api_v1_auth_register
+      responses:
+        '405':
+          description: 'Route exists but not for this method (`Allow: POST`)'
+          headers:
+            Allow:
+              description: Methods the route supports
+              schema:
+                type: string
+                example: POST
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+              example:
+                success: false
+                message: Method not allowed for this route
+                code: METHOD_NOT_ALLOWED
 
   /api/v1/auth/register/complete:
     post:
@@ -193,6 +305,29 @@ paths:
           $ref: '#/components/responses/ValidationError'
         '429':
           $ref: '#/components/responses/TooManyRequests'
+    put:
+      tags:
+        - Auth
+      summary: Not supported
+      description: 'Every method other than POST answers 405 with `Allow: POST`.'
+      operationId: methodNotAllowed_api_v1_auth_register_complete
+      responses:
+        '405':
+          description: 'Route exists but not for this method (`Allow: POST`)'
+          headers:
+            Allow:
+              description: Methods the route supports
+              schema:
+                type: string
+                example: POST
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+              example:
+                success: false
+                message: Method not allowed for this route
+                code: METHOD_NOT_ALLOWED
 
   /api/v1/auth/login:
     post:
@@ -242,6 +377,29 @@ paths:
                 $ref: '#/components/schemas/ErrorEnvelope'
         '429':
           $ref: '#/components/responses/TooManyRequests'
+    put:
+      tags:
+        - Auth
+      summary: Not supported
+      description: 'Every method other than POST answers 405 with `Allow: POST`.'
+      operationId: methodNotAllowed_api_v1_auth_login
+      responses:
+        '405':
+          description: 'Route exists but not for this method (`Allow: POST`)'
+          headers:
+            Allow:
+              description: Methods the route supports
+              schema:
+                type: string
+                example: POST
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+              example:
+                success: false
+                message: Method not allowed for this route
+                code: METHOD_NOT_ALLOWED
 
   /api/v1/auth/refresh:
     post:
@@ -286,6 +444,29 @@ paths:
                 $ref: '#/components/schemas/ErrorEnvelope'
         '429':
           $ref: '#/components/responses/TooManyRequests'
+    put:
+      tags:
+        - Auth
+      summary: Not supported
+      description: 'Every method other than POST answers 405 with `Allow: POST`.'
+      operationId: methodNotAllowed_api_v1_auth_refresh
+      responses:
+        '405':
+          description: 'Route exists but not for this method (`Allow: POST`)'
+          headers:
+            Allow:
+              description: Methods the route supports
+              schema:
+                type: string
+                example: POST
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+              example:
+                success: false
+                message: Method not allowed for this route
+                code: METHOD_NOT_ALLOWED
 
   /api/v1/auth/logout:
     post:
@@ -325,6 +506,29 @@ paths:
           $ref: '#/components/responses/Unauthorized'
         '429':
           $ref: '#/components/responses/TooManyRequests'
+    put:
+      tags:
+        - Auth
+      summary: Not supported
+      description: 'Every method other than POST answers 405 with `Allow: POST`.'
+      operationId: methodNotAllowed_api_v1_auth_logout
+      responses:
+        '405':
+          description: 'Route exists but not for this method (`Allow: POST`)'
+          headers:
+            Allow:
+              description: Methods the route supports
+              schema:
+                type: string
+                example: POST
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+              example:
+                success: false
+                message: Method not allowed for this route
+                code: METHOD_NOT_ALLOWED
 
   /api/v1/auth/me:
     get:
@@ -354,6 +558,31 @@ paths:
                             $ref: '#/components/schemas/PublicUser'
         '401':
           $ref: '#/components/responses/Unauthorized'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+    put:
+      tags:
+        - Auth
+      summary: Not supported
+      description: 'Every method other than GET answers 405 with `Allow: GET`.'
+      operationId: methodNotAllowed_api_v1_auth_me
+      responses:
+        '405':
+          description: 'Route exists but not for this method (`Allow: GET`)'
+          headers:
+            Allow:
+              description: Methods the route supports
+              schema:
+                type: string
+                example: GET
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+              example:
+                success: false
+                message: Method not allowed for this route
+                code: METHOD_NOT_ALLOWED
 
   /api/v1/auth/forgot-password:
     post:
@@ -388,6 +617,29 @@ paths:
           $ref: '#/components/responses/ValidationError'
         '429':
           $ref: '#/components/responses/TooManyRequests'
+    put:
+      tags:
+        - Auth
+      summary: Not supported
+      description: 'Every method other than POST answers 405 with `Allow: POST`.'
+      operationId: methodNotAllowed_api_v1_auth_forgot_password
+      responses:
+        '405':
+          description: 'Route exists but not for this method (`Allow: POST`)'
+          headers:
+            Allow:
+              description: Methods the route supports
+              schema:
+                type: string
+                example: POST
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+              example:
+                success: false
+                message: Method not allowed for this route
+                code: METHOD_NOT_ALLOWED
 
   /api/v1/auth/verify-otp:
     post:
@@ -438,6 +690,29 @@ paths:
                 $ref: '#/components/schemas/ErrorEnvelope'
         '429':
           $ref: '#/components/responses/TooManyRequests'
+    put:
+      tags:
+        - Auth
+      summary: Not supported
+      description: 'Every method other than POST answers 405 with `Allow: POST`.'
+      operationId: methodNotAllowed_api_v1_auth_verify_otp
+      responses:
+        '405':
+          description: 'Route exists but not for this method (`Allow: POST`)'
+          headers:
+            Allow:
+              description: Methods the route supports
+              schema:
+                type: string
+                example: POST
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+              example:
+                success: false
+                message: Method not allowed for this route
+                code: METHOD_NOT_ALLOWED
 
   /api/v1/auth/reset-password:
     post:
@@ -478,6 +753,29 @@ paths:
                 $ref: '#/components/schemas/ErrorEnvelope'
         '429':
           $ref: '#/components/responses/TooManyRequests'
+    put:
+      tags:
+        - Auth
+      summary: Not supported
+      description: 'Every method other than POST answers 405 with `Allow: POST`.'
+      operationId: methodNotAllowed_api_v1_auth_reset_password
+      responses:
+        '405':
+          description: 'Route exists but not for this method (`Allow: POST`)'
+          headers:
+            Allow:
+              description: Methods the route supports
+              schema:
+                type: string
+                example: POST
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+              example:
+                success: false
+                message: Method not allowed for this route
+                code: METHOD_NOT_ALLOWED
 
   /api/v1/uploads/profile-image/token:
     post:
@@ -526,6 +824,29 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorEnvelope'
+    put:
+      tags:
+        - Uploads
+      summary: Not supported
+      description: 'Every method other than POST answers 405 with `Allow: POST`.'
+      operationId: methodNotAllowed_api_v1_uploads_profile_image_token
+      responses:
+        '405':
+          description: 'Route exists but not for this method (`Allow: POST`)'
+          headers:
+            Allow:
+              description: Methods the route supports
+              schema:
+                type: string
+                example: POST
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+              example:
+                success: false
+                message: Method not allowed for this route
+                code: METHOD_NOT_ALLOWED
 
   /api/v1/uploads/profile-image:
     patch:
@@ -561,6 +882,31 @@ paths:
           $ref: '#/components/responses/ValidationError'
         '401':
           $ref: '#/components/responses/Unauthorized'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+    put:
+      tags:
+        - Uploads
+      summary: Not supported
+      description: 'Every method other than PATCH answers 405 with `Allow: PATCH`.'
+      operationId: methodNotAllowed_api_v1_uploads_profile_image
+      responses:
+        '405':
+          description: 'Route exists but not for this method (`Allow: PATCH`)'
+          headers:
+            Allow:
+              description: Methods the route supports
+              schema:
+                type: string
+                example: PATCH
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+              example:
+                success: false
+                message: Method not allowed for this route
+                code: METHOD_NOT_ALLOWED
 
   /api/v1/admin/staff:
     post:
@@ -618,6 +964,31 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorEnvelope'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+    put:
+      tags:
+        - Admin Staff
+      summary: Not supported
+      description: 'Every method other than POST answers 405 with `Allow: POST`.'
+      operationId: methodNotAllowed_api_v1_admin_staff
+      responses:
+        '405':
+          description: 'Route exists but not for this method (`Allow: POST`)'
+          headers:
+            Allow:
+              description: Methods the route supports
+              schema:
+                type: string
+                example: POST
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+              example:
+                success: false
+                message: Method not allowed for this route
+                code: METHOD_NOT_ALLOWED
 
   /api/v1/admin/staff/coaches:
     post:
@@ -677,6 +1048,31 @@ paths:
               example:
                 success: false
                 message: A coach with this email already exists
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+    put:
+      tags:
+        - Admin Staff
+      summary: Not supported
+      description: 'Every method other than POST answers 405 with `Allow: POST`.'
+      operationId: methodNotAllowed_api_v1_admin_staff_coaches
+      responses:
+        '405':
+          description: 'Route exists but not for this method (`Allow: POST`)'
+          headers:
+            Allow:
+              description: Methods the route supports
+              schema:
+                type: string
+                example: POST
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+              example:
+                success: false
+                message: Method not allowed for this route
+                code: METHOD_NOT_ALLOWED
 
   /api/v1/coaches:
     get:
@@ -737,6 +1133,31 @@ paths:
           $ref: '#/components/responses/Unauthorized'
         '403':
           $ref: '#/components/responses/Forbidden'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+    put:
+      tags:
+        - Coaches
+      summary: Not supported
+      description: 'Every method other than GET answers 405 with `Allow: GET`.'
+      operationId: methodNotAllowed_api_v1_coaches
+      responses:
+        '405':
+          description: 'Route exists but not for this method (`Allow: GET`)'
+          headers:
+            Allow:
+              description: Methods the route supports
+              schema:
+                type: string
+                example: GET
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+              example:
+                success: false
+                message: Method not allowed for this route
+                code: METHOD_NOT_ALLOWED
 
   /api/v1/coaches/me:
     get:
@@ -764,6 +1185,31 @@ paths:
           $ref: '#/components/responses/Forbidden'
         '404':
           $ref: '#/components/responses/CoachNotFound'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+    put:
+      tags:
+        - Coaches
+      summary: Not supported
+      description: 'Every method other than GET answers 405 with `Allow: GET`.'
+      operationId: methodNotAllowed_api_v1_coaches_me
+      responses:
+        '405':
+          description: 'Route exists but not for this method (`Allow: GET`)'
+          headers:
+            Allow:
+              description: Methods the route supports
+              schema:
+                type: string
+                example: GET
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+              example:
+                success: false
+                message: Method not allowed for this route
+                code: METHOD_NOT_ALLOWED
 
   /api/v1/coaches/{coachId}:
     get:
@@ -800,6 +1246,8 @@ paths:
           $ref: '#/components/responses/Forbidden'
         '404':
           $ref: '#/components/responses/CoachNotFound'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
     patch:
       tags: [Coaches]
       summary: Update a coach profile
@@ -853,6 +1301,31 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorEnvelope'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+    put:
+      tags:
+        - Coaches
+      summary: Not supported
+      description: 'Every method other than GET, PATCH answers 405 with `Allow: GET, PATCH`.'
+      operationId: methodNotAllowed_api_v1_coaches__coachId
+      responses:
+        '405':
+          description: 'Route exists but not for this method (`Allow: GET, PATCH`)'
+          headers:
+            Allow:
+              description: Methods the route supports
+              schema:
+                type: string
+                example: GET, PATCH
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+              example:
+                success: false
+                message: Method not allowed for this route
+                code: METHOD_NOT_ALLOWED
 
   /api/v1/coaches/{coachId}/status:
     patch:
@@ -898,6 +1371,31 @@ paths:
           $ref: '#/components/responses/Forbidden'
         '404':
           $ref: '#/components/responses/CoachNotFound'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+    put:
+      tags:
+        - Coaches
+      summary: Not supported
+      description: 'Every method other than PATCH answers 405 with `Allow: PATCH`.'
+      operationId: methodNotAllowed_api_v1_coaches__coachId_status
+      responses:
+        '405':
+          description: 'Route exists but not for this method (`Allow: PATCH`)'
+          headers:
+            Allow:
+              description: Methods the route supports
+              schema:
+                type: string
+                example: PATCH
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+              example:
+                success: false
+                message: Method not allowed for this route
+                code: METHOD_NOT_ALLOWED
 
   /api/v1/plans:
     get:
@@ -906,7 +1404,7 @@ paths:
       description: |
         OWNER, ADMIN or COACH. A MEMBER receives 403 Forbidden.
 
-        Returns one page of plans in the short list form, plus `meta.counts` for the two
+        Returns one page of plans in the short list form, plus a top-level `counts` for the two
         section tabs. Every filter is optional and filters combine with AND.
 
         **Archived plans** are hidden by default (only `active` and `inactive` are returned).
@@ -918,13 +1416,13 @@ paths:
         **Sorting** accepts `name` (default, ignores letter case), `price` or `createdAt`;
         a leading `-` sorts descending (`-price` = most expensive first).
 
-        **`meta.counts`** is the number of non-archived plans per section. It ignores `q`, every
+        **`counts`** is the number of non-archived plans per section. It ignores `q`, every
         filter and `status`, so the tab badges do not change while searching or filtering.
 
         **Unknown query parameters are ignored**, so web and mobile clients can add parameters
         without breaking. The trade-off: a misspelled parameter name (for example
         `sections=online_coaching`) is silently dropped and the filter is not applied. A known
-        parameter with an invalid value returns 422.
+        parameter with an invalid value returns 400.
 
         `activeClientCount` is a placeholder and is always `0`.
       operationId: listPlans
@@ -963,20 +1461,8 @@ paths:
             type: string
             maxLength: 100
             example: nutrition
-        - name: page
-          in: query
-          schema:
-            type: integer
-            minimum: 1
-            maximum: 100000
-            default: 1
-        - name: pageSize
-          in: query
-          schema:
-            type: integer
-            minimum: 1
-            maximum: 100
-            default: 20
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/Limit'
         - name: sort
           in: query
           description: '`name`, `price` or `createdAt`; prefix with `-` for descending'
@@ -993,18 +1479,19 @@ paths:
                 allOf:
                   - $ref: '#/components/schemas/SuccessEnvelope'
                   - type: object
+                    required:
+                      - pagination
+                      - counts
                     properties:
                       data:
                         type: array
                         items:
                           $ref: '#/components/schemas/PlanListItem'
-                      meta:
-                        $ref: '#/components/schemas/PlanListMeta'
-        '401':
-          $ref: '#/components/responses/Unauthorized'
-        '403':
-          $ref: '#/components/responses/Forbidden'
-        '422':
+                      pagination:
+                        $ref: '#/components/schemas/Pagination'
+                      counts:
+                        $ref: '#/components/schemas/PlanSectionCounts'
+        '400':
           description: A known query parameter has an invalid value (returns all failing fields together)
           content:
             application/json:
@@ -1017,8 +1504,12 @@ paths:
                 errors:
                   - field: section
                     message: 'Section must be one of: class_membership, online_coaching'
-                  - field: pageSize
-                    message: Page size must be a whole number between 1 and 100
+                  - field: limit
+                    message: Limit must be a whole number between 1 and 100
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
         '429':
           $ref: '#/components/responses/TooManyRequests'
 
@@ -1059,21 +1550,7 @@ paths:
                         example: Membership plan created successfully
                       data:
                         $ref: '#/components/schemas/PlanDetail'
-        '401':
-          $ref: '#/components/responses/Unauthorized'
-        '403':
-          $ref: '#/components/responses/Forbidden'
-        '409':
-          description: A non-archived plan with this name already exists
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorEnvelope'
-              example:
-                success: false
-                message: A membership plan with this name already exists
-                code: duplicate_name
-        '422':
+        '400':
           description: Validation failed (returns all failing fields together)
           content:
             application/json:
@@ -1090,8 +1567,45 @@ paths:
                     message: Only a membership renews monthly.
                   - field: creditsIncluded
                     message: creditsIncluded must be 0 when creditType is TIME
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '409':
+          description: A non-archived plan with this name already exists
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+              example:
+                success: false
+                message: A membership plan with this name already exists
+                code: PLAN_DUPLICATE_NAME
         '429':
           $ref: '#/components/responses/TooManyRequests'
+    put:
+      tags:
+        - Plans
+      summary: Not supported
+      description: 'Every method other than GET, POST answers 405 with `Allow: GET, POST`.'
+      operationId: methodNotAllowed_api_v1_plans
+      responses:
+        '405':
+          description: 'Route exists but not for this method (`Allow: GET, POST`)'
+          headers:
+            Allow:
+              description: Methods the route supports
+              schema:
+                type: string
+                example: GET, POST
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+              example:
+                success: false
+                message: Method not allowed for this route
+                code: METHOD_NOT_ALLOWED
 
   /api/v1/plans/{id}:
     parameters:
@@ -1103,7 +1617,7 @@ paths:
         OWNER, ADMIN or COACH. A MEMBER receives 403 Forbidden.
 
         Returns the full plan in the same shape as the create response, including archived
-        plans. An unknown or malformed id returns 404.
+        plans. A value that is not a UUID is 400 `VALIDATION_ERROR`; an unknown UUID is 404.
 
         `activeClientCount` is a placeholder and is always `0` until purchases exist.
       operationId: getPlan
@@ -1121,6 +1635,8 @@ paths:
                     properties:
                       data:
                         $ref: '#/components/schemas/PlanDetail'
+        '400':
+          $ref: '#/components/responses/ValidationError'
         '401':
           $ref: '#/components/responses/Unauthorized'
         '403':
@@ -1135,8 +1651,8 @@ paths:
       description: |
         OWNER or ADMIN only; a COACH or MEMBER receives 403. Send only the fields to change.
 
-        **Check order:** 401/403, 429, 404, 409 `plan_archived`, 422 (fields that cannot be
-        edited), 422 (the merged result), 409 `duplicate_name`, 409 `plan_in_use`, then the
+        **Check order:** 401/403, 429, 404, 409 `PLAN_ARCHIVED`, 400 (fields that cannot be
+        edited), 400 (the merged result), 409 `PLAN_DUPLICATE_NAME`, 409 `PLAN_IN_USE`, then the
         update.
 
         **Validation** runs on the stored plan with the sent fields laid over it, using the same
@@ -1144,9 +1660,9 @@ paths:
         switching `creditType` to `time` also needs `creditsIncluded: 0` and `creditRefill: null`)
         must send both.
 
-        **Not editable (422):** `id`, `section`, `status` (use `PATCH /api/v1/plans/{id}/status`),
+        **Not editable (400):** `id`, `section`, `status` (use `PATCH /api/v1/plans/{id}/status`),
         `version`, `externalRef`, `createdAt`, `updatedAt`. Unknown fields and an empty body are
-        also 422.
+        also 400.
 
         **Versioning:** `version` goes up by 1 when any commercial field changes (`price`,
         `billingCycle`, `creditType`, `creditsIncluded`, `creditRefill`, `validityValue`,
@@ -1155,8 +1671,8 @@ paths:
         the next billing cycle. Sending a field with its current value changes nothing: no
         version bump, no audit entry, and the current plan is returned.
 
-        **Conflicts (409):** `plan_archived` (archived plans cannot be edited), `duplicate_name`
-        (another non-archived plan has the name, case-insensitive), `plan_in_use` (switching
+        **Conflicts (409):** `PLAN_ARCHIVED` (archived plans cannot be edited), `PLAN_DUPLICATE_NAME`
+        (another non-archived plan has the name, case-insensitive), `PLAN_IN_USE` (switching
         between time-based and credit-based while the plan has active clients).
 
         The update, the version bump and the audit entry (changed fields with old and new values)
@@ -1184,36 +1700,7 @@ paths:
                         example: Membership plan updated successfully
                       data:
                         $ref: '#/components/schemas/PlanDetail'
-        '401':
-          $ref: '#/components/responses/Unauthorized'
-        '403':
-          $ref: '#/components/responses/Forbidden'
-        '404':
-          $ref: '#/components/responses/PlanNotFound'
-        '409':
-          description: |
-            `plan_archived`, `duplicate_name` or `plan_in_use`
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorEnvelope'
-              examples:
-                archived:
-                  value:
-                    success: false
-                    message: An archived membership plan cannot be edited
-                    code: plan_archived
-                duplicateName:
-                  value:
-                    success: false
-                    message: A membership plan with this name already exists
-                    code: duplicate_name
-                inUse:
-                  value:
-                    success: false
-                    message: Time-based and credit-based plans cannot be switched while clients are using the plan
-                    code: plan_in_use
-        '422':
+        '400':
           description: Validation failed (returns all failing fields together)
           content:
             application/json:
@@ -1226,6 +1713,35 @@ paths:
                 errors:
                   - field: status
                     message: 'Status cannot be edited here, use PATCH /api/v1/plans/:id/status'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/PlanNotFound'
+        '409':
+          description: |
+            `PLAN_ARCHIVED`, `PLAN_DUPLICATE_NAME` or `PLAN_IN_USE`
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+              examples:
+                archived:
+                  value:
+                    success: false
+                    message: An archived membership plan cannot be edited
+                    code: PLAN_ARCHIVED
+                duplicateName:
+                  value:
+                    success: false
+                    message: A membership plan with this name already exists
+                    code: PLAN_DUPLICATE_NAME
+                inUse:
+                  value:
+                    success: false
+                    message: Time-based and credit-based plans cannot be switched while clients are using the plan
+                    code: PLAN_IN_USE
         '429':
           $ref: '#/components/responses/TooManyRequests'
     delete:
@@ -1237,7 +1753,21 @@ paths:
       operationId: deletePlanNotAllowed
       responses:
         '405':
-          $ref: '#/components/responses/MethodNotAllowed'
+          description: 'Route exists but not for this method (`Allow: GET, PATCH`)'
+          headers:
+            Allow:
+              description: Methods the route supports
+              schema:
+                type: string
+                example: GET, PATCH
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+              example:
+                success: false
+                message: Method not allowed for this route
+                code: METHOD_NOT_ALLOWED
 
   /api/v1/plans/{id}/status:
     parameters:
@@ -1248,17 +1778,17 @@ paths:
       description: |
         OWNER or ADMIN only; a COACH or MEMBER receives 403.
 
-        **Check order:** 401/403, 429, 404, 422 (body), then the same-status shortcut, 409
-        `invalid_transition`, 409 `duplicate_name` (restoring only), then the update.
+        **Check order:** 401/403, 429, 404, 400 (body), then the same-status shortcut, 409
+        `PLAN_INVALID_TRANSITION`, 409 `PLAN_DUPLICATE_NAME` (restoring only), then the update.
 
         **Allowed moves:** `active` <-> `inactive`, `active`/`inactive` -> `archived`,
         `archived` -> `inactive`. Anything else (for example `archived` -> `active`) is
-        409 `invalid_transition`.
+        409 `PLAN_INVALID_TRANSITION`.
 
         **Same status again** returns 200 with the current values, changes nothing and writes no
         audit entry.
 
-        **Restoring** an archived plan (`archived` -> `inactive`) returns 409 `duplicate_name`
+        **Restoring** an archived plan (`archived` -> `inactive`) returns 409 `PLAN_DUPLICATE_NAME`
         when another non-archived plan has taken the name meanwhile.
 
         Each real change writes an audit entry with `from`, `to` and `reason`. The version never
@@ -1287,30 +1817,7 @@ paths:
                         example: Membership plan status updated successfully
                       data:
                         $ref: '#/components/schemas/PlanStatusResult'
-        '401':
-          $ref: '#/components/responses/Unauthorized'
-        '403':
-          $ref: '#/components/responses/Forbidden'
-        '404':
-          $ref: '#/components/responses/PlanNotFound'
-        '409':
-          description: '`invalid_transition`, or `duplicate_name` when restoring'
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorEnvelope'
-              examples:
-                invalidTransition:
-                  value:
-                    success: false
-                    message: This status change is not allowed
-                    code: invalid_transition
-                duplicateName:
-                  value:
-                    success: false
-                    message: A membership plan with this name already exists
-                    code: duplicate_name
-        '422':
+        '400':
           description: Body failed validation
           content:
             application/json:
@@ -1323,6 +1830,29 @@ paths:
                 errors:
                   - field: status
                     message: 'Status must be one of: active, inactive, archived'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/PlanNotFound'
+        '409':
+          description: '`PLAN_INVALID_TRANSITION`, or `PLAN_DUPLICATE_NAME` when restoring'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+              examples:
+                invalidTransition:
+                  value:
+                    success: false
+                    message: This status change is not allowed
+                    code: PLAN_INVALID_TRANSITION
+                duplicateName:
+                  value:
+                    success: false
+                    message: A membership plan with this name already exists
+                    code: PLAN_DUPLICATE_NAME
         '429':
           $ref: '#/components/responses/TooManyRequests'
     delete:
@@ -1332,7 +1862,21 @@ paths:
       operationId: deletePlanStatusNotAllowed
       responses:
         '405':
-          $ref: '#/components/responses/MethodNotAllowed'
+          description: 'Route exists but not for this method (`Allow: PATCH`)'
+          headers:
+            Allow:
+              description: Methods the route supports
+              schema:
+                type: string
+                example: PATCH
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+              example:
+                success: false
+                message: Method not allowed for this route
+                code: METHOD_NOT_ALLOWED
 
   /api/v1/classes:
     get:
@@ -1359,51 +1903,30 @@ paths:
           schema:
             type: string
             enum: [true, false, all]
-        - name: page
-          in: query
-          description: Page number, minimum 1
-          schema:
-            type: integer
-            default: 1
-        - name: pageSize
-          in: query
-          description: Items per page, maximum 100
-          schema:
-            type: integer
-            default: 100
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/Limit'
       responses:
         '200':
-          description: List of classes with pagination metadata
+          description: One page of classes
           content:
             application/json:
               schema:
-                type: object
-                required: [success, data, meta]
-                properties:
-                  success:
-                    type: boolean
-                    example: true
-                  data:
-                    type: array
-                    items:
-                      $ref: '#/components/schemas/ClassResponse'
-                  meta:
-                    type: object
-                    required: [page, pageSize, total]
+                allOf:
+                  - $ref: '#/components/schemas/SuccessEnvelope'
+                  - type: object
+                    required:
+                      - pagination
                     properties:
-                      page:
-                        type: integer
-                        example: 1
-                      pageSize:
-                        type: integer
-                        example: 100
-                      total:
-                        type: integer
-                        example: 12
+                      data:
+                        type: array
+                        items:
+                          $ref: '#/components/schemas/ClassResponse'
+                      pagination:
+                        $ref: '#/components/schemas/Pagination'
+        '400':
+          $ref: '#/components/responses/ValidationError'
         '401':
           $ref: '#/components/responses/Unauthorized'
-        '422':
-          $ref: '#/components/responses/ValidationFailed'
         '429':
           $ref: '#/components/responses/TooManyRequests'
     post:
@@ -1444,6 +1967,8 @@ paths:
                     example: Class created successfully
                   data:
                     $ref: '#/components/schemas/ClassResponse'
+        '400':
+          $ref: '#/components/responses/ValidationError'
         '401':
           $ref: '#/components/responses/Unauthorized'
         '403':
@@ -1453,15 +1978,36 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ErrorResponse'
+                $ref: '#/components/schemas/ErrorEnvelope'
               example:
                 success: false
                 message: A class with this name already exists
                 code: CLASS_DUPLICATE_NAME
-        '422':
-          $ref: '#/components/responses/ValidationFailed'
         '429':
           $ref: '#/components/responses/TooManyRequests'
+    put:
+      tags:
+        - Classes
+      summary: Not supported
+      description: 'Every method other than GET, POST answers 405 with `Allow: GET, POST`.'
+      operationId: methodNotAllowed_api_v1_classes
+      responses:
+        '405':
+          description: 'Route exists but not for this method (`Allow: GET, POST`)'
+          headers:
+            Allow:
+              description: Methods the route supports
+              schema:
+                type: string
+                example: GET, POST
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+              example:
+                success: false
+                message: Method not allowed for this route
+                code: METHOD_NOT_ALLOWED
 
   /api/v1/classes/{id}:
     get:
@@ -1495,6 +2041,8 @@ paths:
                     example: true
                   data:
                     $ref: '#/components/schemas/ClassResponse'
+        '400':
+          $ref: '#/components/responses/ValidationError'
         '401':
           $ref: '#/components/responses/Unauthorized'
         '404':
@@ -1502,7 +2050,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ErrorResponse'
+                $ref: '#/components/schemas/ErrorEnvelope'
               example:
                 success: false
                 message: Class not found
@@ -1515,7 +2063,7 @@ paths:
       description: |
         Available to OWNER, ADMIN.
         Supports optimistic locking if version is sent.
-        Rejects active, eligiblePlanIds, externalRef with 422.
+        Rejects active, eligiblePlanIds, externalRef with 400.
       operationId: updateClass
       security:
         - bearerAuth: []
@@ -1549,22 +2097,45 @@ paths:
                     example: Class updated successfully
                   data:
                     $ref: '#/components/schemas/ClassResponse'
+        '400':
+          $ref: '#/components/responses/ValidationError'
         '401':
           $ref: '#/components/responses/Unauthorized'
         '403':
           $ref: '#/components/responses/Forbidden'
         '404':
-          $ref: '#/components/responses/NotFound'
+          $ref: '#/components/responses/ClassNotFound'
         '409':
           description: Conflict (duplicate name, version mismatch, or inactive class)
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ErrorResponse'
-        '422':
-          $ref: '#/components/responses/ValidationFailed'
+                $ref: '#/components/schemas/ErrorEnvelope'
         '429':
           $ref: '#/components/responses/TooManyRequests'
+    put:
+      tags:
+        - Classes
+      summary: Not supported
+      description: 'Every method other than GET, PATCH answers 405 with `Allow: GET, PATCH`.'
+      operationId: methodNotAllowed_api_v1_classes__id
+      responses:
+        '405':
+          description: 'Route exists but not for this method (`Allow: GET, PATCH`)'
+          headers:
+            Allow:
+              description: Methods the route supports
+              schema:
+                type: string
+                example: GET, PATCH
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+              example:
+                success: false
+                message: Method not allowed for this route
+                code: METHOD_NOT_ALLOWED
 
   /api/v1/classes/{id}/deactivate:
     post:
@@ -1600,20 +2171,25 @@ paths:
                     example: Class deactivated successfully
                   data:
                     type: object
-                    required: [id, active]
+                    required: [id, status, active]
                     properties:
                       id:
                         type: string
                         format: uuid
+                      status:
+                        type: string
+                        enum: [deactivated]
                       active:
                         type: boolean
                         example: false
+        '400':
+          $ref: '#/components/responses/ValidationError'
         '401':
           $ref: '#/components/responses/Unauthorized'
         '403':
           $ref: '#/components/responses/Forbidden'
         '404':
-          $ref: '#/components/responses/NotFound'
+          $ref: '#/components/responses/ClassNotFound'
         '409':
           description: Class has future bookings
           content:
@@ -1639,6 +2215,29 @@ paths:
                         example: 3
         '429':
           $ref: '#/components/responses/TooManyRequests'
+    put:
+      tags:
+        - Classes
+      summary: Not supported
+      description: 'Every method other than POST answers 405 with `Allow: POST`.'
+      operationId: methodNotAllowed_api_v1_classes__id_deactivate
+      responses:
+        '405':
+          description: 'Route exists but not for this method (`Allow: POST`)'
+          headers:
+            Allow:
+              description: Methods the route supports
+              schema:
+                type: string
+                example: POST
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+              example:
+                success: false
+                message: Method not allowed for this route
+                code: METHOD_NOT_ALLOWED
 
   /api/v1/classes/{id}/activate:
     post:
@@ -1685,24 +2284,49 @@ paths:
                       active:
                         type: boolean
                         example: true
+        '400':
+          $ref: '#/components/responses/ValidationError'
         '401':
           $ref: '#/components/responses/Unauthorized'
         '403':
           $ref: '#/components/responses/Forbidden'
         '404':
-          $ref: '#/components/responses/NotFound'
+          $ref: '#/components/responses/ClassNotFound'
         '409':
           description: Active class with this name already exists
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ErrorResponse'
+                $ref: '#/components/schemas/ErrorEnvelope'
               example:
                 success: false
                 message: A class with this name already exists
                 code: CLASS_DUPLICATE_NAME
         '429':
           $ref: '#/components/responses/TooManyRequests'
+    put:
+      tags:
+        - Classes
+      summary: Not supported
+      description: 'Every method other than POST answers 405 with `Allow: POST`.'
+      operationId: methodNotAllowed_api_v1_classes__id_activate
+      responses:
+        '405':
+          description: 'Route exists but not for this method (`Allow: POST`)'
+          headers:
+            Allow:
+              description: Methods the route supports
+              schema:
+                type: string
+                example: POST
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+              example:
+                success: false
+                message: Method not allowed for this route
+                code: METHOD_NOT_ALLOWED
 
   /api/v1/classes/{id}/archive:
     post:
@@ -1749,20 +2373,45 @@ paths:
                       active:
                         type: boolean
                         example: false
+        '400':
+          $ref: '#/components/responses/ValidationError'
         '401':
           $ref: '#/components/responses/Unauthorized'
         '403':
           $ref: '#/components/responses/Forbidden'
         '404':
-          $ref: '#/components/responses/NotFound'
+          $ref: '#/components/responses/ClassNotFound'
         '409':
           description: Class has future bookings
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ErrorResponse'
+                $ref: '#/components/schemas/ErrorEnvelope'
         '429':
           $ref: '#/components/responses/TooManyRequests'
+    put:
+      tags:
+        - Classes
+      summary: Not supported
+      description: 'Every method other than POST answers 405 with `Allow: POST`.'
+      operationId: methodNotAllowed_api_v1_classes__id_archive
+      responses:
+        '405':
+          description: 'Route exists but not for this method (`Allow: POST`)'
+          headers:
+            Allow:
+              description: Methods the route supports
+              schema:
+                type: string
+                example: POST
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+              example:
+                success: false
+                message: Method not allowed for this route
+                code: METHOD_NOT_ALLOWED
 
   /api/v1/classes/{id}/eligibility:
     put:
@@ -1821,18 +2470,41 @@ paths:
                         items:
                           type: string
                           format: uuid
+        '400':
+          $ref: '#/components/responses/ValidationError'
         '401':
           $ref: '#/components/responses/Unauthorized'
         '403':
           $ref: '#/components/responses/Forbidden'
         '404':
-          $ref: '#/components/responses/NotFound'
+          $ref: '#/components/responses/ClassNotFound'
         '409':
-          $ref: '#/components/responses/Conflict'
-        '422':
-          $ref: '#/components/responses/ValidationFailed'
+          $ref: '#/components/responses/ClassInactive'
         '429':
           $ref: '#/components/responses/TooManyRequests'
+    delete:
+      tags:
+        - Classes
+      summary: Not supported
+      description: 'Every method other than PUT answers 405 with `Allow: PUT`.'
+      operationId: methodNotAllowed_api_v1_classes__id_eligibility
+      responses:
+        '405':
+          description: 'Route exists but not for this method (`Allow: PUT`)'
+          headers:
+            Allow:
+              description: Methods the route supports
+              schema:
+                type: string
+                example: PUT
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+              example:
+                success: false
+                message: Method not allowed for this route
+                code: METHOD_NOT_ALLOWED
 
   /api/v1/cafe/categories:
     get:
@@ -1887,9 +2559,6 @@ paths:
       responses:
         '201':
           description: Category created
-          headers:
-            Location:
-              $ref: '#/components/headers/CafeCategoryLocation'
           content:
             application/json:
               schema:
@@ -1901,14 +2570,14 @@ paths:
                         example: Category created successfully
                       data:
                         $ref: '#/components/schemas/CafeCategory'
+        '400':
+          $ref: '#/components/responses/ValidationError'
         '401':
           $ref: '#/components/responses/Unauthorized'
         '403':
           $ref: '#/components/responses/Forbidden'
         '409':
           $ref: '#/components/responses/CafeCategoryExists'
-        '422':
-          $ref: '#/components/responses/ValidationFailed'
         '429':
           $ref: '#/components/responses/TooManyRequests'
     put:
@@ -1920,7 +2589,21 @@ paths:
       operationId: cafeCategoriesMethodNotAllowed
       responses:
         '405':
-          $ref: '#/components/responses/CafeMethodNotAllowedCollection'
+          description: 'Route exists but not for this method (`Allow: GET, POST`)'
+          headers:
+            Allow:
+              description: Methods the route supports
+              schema:
+                type: string
+                example: GET, POST
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+              example:
+                success: false
+                message: Method not allowed for this route
+                code: METHOD_NOT_ALLOWED
 
   /api/v1/cafe/categories/{categoryId}:
     parameters:
@@ -1929,10 +2612,10 @@ paths:
       tags: [Cafe]
       summary: Update a cafe category (partial)
       description: |
-        OWNER or ADMIN only. Send `name` and/or `description`; an empty body is 422. Sending
+        OWNER or ADMIN only. Send `name` and/or `description`; an empty body is 400. Sending
         `description: null` or a blank string clears it.
 
-        **Check order:** 401/403, 429, 422 (id or body), 404, 409.
+        **Check order:** 401/403, 429, 400 (id or body), 404, 409.
       operationId: updateCafeCategory
       security:
         - bearerAuth: []
@@ -1958,6 +2641,8 @@ paths:
                         example: Category updated successfully
                       data:
                         $ref: '#/components/schemas/CafeCategory'
+        '400':
+          $ref: '#/components/responses/ValidationError'
         '401':
           $ref: '#/components/responses/Unauthorized'
         '403':
@@ -1966,8 +2651,6 @@ paths:
           $ref: '#/components/responses/CafeCategoryNotFound'
         '409':
           $ref: '#/components/responses/CafeCategoryExists'
-        '422':
-          $ref: '#/components/responses/ValidationFailed'
         '429':
           $ref: '#/components/responses/TooManyRequests'
     delete:
@@ -1994,6 +2677,8 @@ paths:
                       data:
                         nullable: true
                         example: null
+        '400':
+          $ref: '#/components/responses/ValidationError'
         '401':
           $ref: '#/components/responses/Unauthorized'
         '403':
@@ -2010,8 +2695,6 @@ paths:
                 success: false
                 message: Cannot delete category with associated items
                 code: CATEGORY_HAS_ITEMS
-        '422':
-          $ref: '#/components/responses/ValidationFailed'
         '429':
           $ref: '#/components/responses/TooManyRequests'
     put:
@@ -2021,7 +2704,21 @@ paths:
       operationId: cafeCategoryMethodNotAllowed
       responses:
         '405':
-          $ref: '#/components/responses/CafeMethodNotAllowedCategory'
+          description: 'Route exists but not for this method (`Allow: PATCH, DELETE`)'
+          headers:
+            Allow:
+              description: Methods the route supports
+              schema:
+                type: string
+                example: PATCH, DELETE
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+              example:
+                success: false
+                message: Method not allowed for this route
+                code: METHOD_NOT_ALLOWED
 
   /api/v1/cafe/items:
     get:
@@ -2078,12 +2775,12 @@ paths:
                           $ref: '#/components/schemas/CafeItem'
                       pagination:
                         $ref: '#/components/schemas/Pagination'
+        '400':
+          $ref: '#/components/responses/ValidationError'
         '401':
           $ref: '#/components/responses/Unauthorized'
         '403':
           $ref: '#/components/responses/Forbidden'
-        '422':
-          $ref: '#/components/responses/ValidationFailed'
         '429':
           $ref: '#/components/responses/TooManyRequests'
     post:
@@ -2103,7 +2800,7 @@ paths:
         `availability` defaults to `available`, `visibility` to `public`. `imageUrl` must be an
         `https://` URL (use the upload token endpoint for a hosted image) or `null`.
 
-        **Check order:** 401/403, 429, 422 (body), 422 `CATEGORY_NOT_FOUND` (the `categoryId` in
+        **Check order:** 401/403, 429, 400 (body), 400 `CATEGORY_NOT_FOUND` (the `categoryId` in
         the body), 400.
       operationId: createCafeItem
       security:
@@ -2140,13 +2837,11 @@ paths:
                       data:
                         $ref: '#/components/schemas/CafeItem'
         '400':
-          $ref: '#/components/responses/CafeStockRuleViolation'
+          $ref: '#/components/responses/CafeItemBadRequest'
         '401':
           $ref: '#/components/responses/Unauthorized'
         '403':
           $ref: '#/components/responses/Forbidden'
-        '422':
-          $ref: '#/components/responses/CafeItemValidationFailed'
         '429':
           $ref: '#/components/responses/TooManyRequests'
     put:
@@ -2158,7 +2853,21 @@ paths:
       operationId: cafeItemsMethodNotAllowed
       responses:
         '405':
-          $ref: '#/components/responses/CafeMethodNotAllowedCollection'
+          description: 'Route exists but not for this method (`Allow: GET, POST`)'
+          headers:
+            Allow:
+              description: Methods the route supports
+              schema:
+                type: string
+                example: GET, POST
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+              example:
+                success: false
+                message: Method not allowed for this route
+                code: METHOD_NOT_ALLOWED
 
   /api/v1/cafe/items/{itemId}:
     parameters:
@@ -2184,23 +2893,23 @@ paths:
                     properties:
                       data:
                         $ref: '#/components/schemas/CafeItem'
+        '400':
+          $ref: '#/components/responses/ValidationError'
         '401':
           $ref: '#/components/responses/Unauthorized'
         '403':
           $ref: '#/components/responses/Forbidden'
         '404':
           $ref: '#/components/responses/CafeItemNotFound'
-        '422':
-          $ref: '#/components/responses/ValidationFailed'
         '429':
           $ref: '#/components/responses/TooManyRequests'
     patch:
       tags: [Cafe]
       summary: Update a cafe item's core fields (partial)
       description: |
-        OWNER or ADMIN only. Send only the fields to change; an empty body is 422.
+        OWNER or ADMIN only. Send only the fields to change; an empty body is 400.
 
-        `availability` and `visibility` are **not** editable here: sending either is 422 with
+        `availability` and `visibility` are **not** editable here: sending either is 400 with
         the message "Availability and visibility cannot be updated on this endpoint, use
         dedicated endpoints" on that field (`ITEM_FIELD_NOT_EDITABLE_HERE`; this is a
         field-level message in `errors[]`, the envelope `code` is `VALIDATION_ERROR`). Use
@@ -2214,7 +2923,7 @@ paths:
         same request (400 `ITEM_TRACKED_STOCK_REQUIRED`). A tracked item cannot have its stock or
         cost set to `null` (same 400). Switching to `isTracked: false` stores both as `null`.
 
-        **Check order:** 401/403, 429, 422 (id or body), 404 `ITEM_NOT_FOUND`, 422
+        **Check order:** 401/403, 429, 400 (id or body), 404 `ITEM_NOT_FOUND`, 400
         `CATEGORY_NOT_FOUND` (the `categoryId` in the body), 400.
       operationId: updateCafeItem
       security:
@@ -2243,15 +2952,13 @@ paths:
                       data:
                         $ref: '#/components/schemas/CafeItem'
         '400':
-          $ref: '#/components/responses/CafeStockRuleViolation'
+          $ref: '#/components/responses/CafeItemBadRequest'
         '401':
           $ref: '#/components/responses/Unauthorized'
         '403':
           $ref: '#/components/responses/Forbidden'
         '404':
           $ref: '#/components/responses/CafeItemNotFound'
-        '422':
-          $ref: '#/components/responses/CafeItemValidationFailed'
         '429':
           $ref: '#/components/responses/TooManyRequests'
     delete:
@@ -2263,7 +2970,21 @@ paths:
       operationId: deleteCafeItemNotAllowed
       responses:
         '405':
-          $ref: '#/components/responses/CafeMethodNotAllowedItem'
+          description: 'Route exists but not for this method (`Allow: GET, PATCH`)'
+          headers:
+            Allow:
+              description: Methods the route supports
+              schema:
+                type: string
+                example: GET, PATCH
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+              example:
+                success: false
+                message: Method not allowed for this route
+                code: METHOD_NOT_ALLOWED
 
   /api/v1/cafe/items/{itemId}/availability:
     parameters:
@@ -2304,23 +3025,31 @@ paths:
                       data:
                         $ref: '#/components/schemas/CafeItem'
         '400':
-          description: Tracked item with zero stock cannot be set to `available`
+          description: Validation failed, or a tracked item with zero stock cannot be set to `available` (`ITEM_SOLD_OUT_ZERO_STOCK`)
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorEnvelope'
-              example:
-                success: false
-                message: Cannot mark item as available when stock quantity is 0
-                code: ITEM_SOLD_OUT_ZERO_STOCK
+              examples:
+                validation:
+                  value:
+                    success: false
+                    message: Validation failed
+                    code: VALIDATION_ERROR
+                    errors:
+                      - field: availability
+                        message: 'Availability must be one of: available, sold_out'
+                soldOutZeroStock:
+                  value:
+                    success: false
+                    message: Cannot mark item as available when stock quantity is 0
+                    code: ITEM_SOLD_OUT_ZERO_STOCK
         '401':
           $ref: '#/components/responses/Unauthorized'
         '403':
           $ref: '#/components/responses/Forbidden'
         '404':
           $ref: '#/components/responses/CafeItemNotFound'
-        '422':
-          $ref: '#/components/responses/ValidationFailed'
         '429':
           $ref: '#/components/responses/TooManyRequests'
     put:
@@ -2330,7 +3059,21 @@ paths:
       operationId: cafeItemAvailabilityMethodNotAllowed
       responses:
         '405':
-          $ref: '#/components/responses/CafeMethodNotAllowedPatchOnly'
+          description: 'Route exists but not for this method (`Allow: PATCH`)'
+          headers:
+            Allow:
+              description: Methods the route supports
+              schema:
+                type: string
+                example: PATCH
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+              example:
+                success: false
+                message: Method not allowed for this route
+                code: METHOD_NOT_ALLOWED
 
   /api/v1/cafe/items/{itemId}/visibility:
     parameters:
@@ -2367,14 +3110,14 @@ paths:
                         example: Cafe item visibility updated successfully
                       data:
                         $ref: '#/components/schemas/CafeItem'
+        '400':
+          $ref: '#/components/responses/ValidationError'
         '401':
           $ref: '#/components/responses/Unauthorized'
         '403':
           $ref: '#/components/responses/Forbidden'
         '404':
           $ref: '#/components/responses/CafeItemNotFound'
-        '422':
-          $ref: '#/components/responses/ValidationFailed'
         '429':
           $ref: '#/components/responses/TooManyRequests'
     put:
@@ -2384,7 +3127,21 @@ paths:
       operationId: cafeItemVisibilityMethodNotAllowed
       responses:
         '405':
-          $ref: '#/components/responses/CafeMethodNotAllowedPatchOnly'
+          description: 'Route exists but not for this method (`Allow: PATCH`)'
+          headers:
+            Allow:
+              description: Methods the route supports
+              schema:
+                type: string
+                example: PATCH
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+              example:
+                success: false
+                message: Method not allowed for this route
+                code: METHOD_NOT_ALLOWED
 
   /api/v1/cafe/items/{itemId}/stock:
     parameters:
@@ -2426,6 +3183,8 @@ paths:
                         example: Cafe item stock updated successfully
                       data:
                         $ref: '#/components/schemas/CafeItemStockUpdate'
+        '400':
+          $ref: '#/components/responses/ValidationError'
         '401':
           $ref: '#/components/responses/Unauthorized'
         '403':
@@ -2434,8 +3193,6 @@ paths:
           $ref: '#/components/responses/CafeItemNotFound'
         '409':
           $ref: '#/components/responses/CafeItemNotTracked'
-        '422':
-          $ref: '#/components/responses/ValidationFailed'
         '429':
           $ref: '#/components/responses/TooManyRequests'
     put:
@@ -2445,7 +3202,21 @@ paths:
       operationId: cafeItemStockMethodNotAllowed
       responses:
         '405':
-          $ref: '#/components/responses/CafeMethodNotAllowedPatchOnly'
+          description: 'Route exists but not for this method (`Allow: PATCH`)'
+          headers:
+            Allow:
+              description: Methods the route supports
+              schema:
+                type: string
+                example: PATCH
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+              example:
+                success: false
+                message: Method not allowed for this route
+                code: METHOD_NOT_ALLOWED
 
   /api/v1/cafe/inventory:
     get:
@@ -2479,7 +3250,7 @@ paths:
             format: uuid
         - name: status
           in: query
-          description: Uppercase only; lowercase values are 422
+          description: Uppercase only; lowercase values are 400
           schema:
             $ref: '#/components/schemas/CafeStockStatus'
         - name: page
@@ -2511,12 +3282,12 @@ paths:
                           $ref: '#/components/schemas/CafeInventoryItem'
                       pagination:
                         $ref: '#/components/schemas/Pagination'
+        '400':
+          $ref: '#/components/responses/ValidationError'
         '401':
           $ref: '#/components/responses/Unauthorized'
         '403':
           $ref: '#/components/responses/Forbidden'
-        '422':
-          $ref: '#/components/responses/ValidationFailed'
         '429':
           $ref: '#/components/responses/TooManyRequests'
     put:
@@ -2526,7 +3297,21 @@ paths:
       operationId: cafeInventoryMethodNotAllowed
       responses:
         '405':
-          $ref: '#/components/responses/CafeMethodNotAllowedGetOnly'
+          description: 'Route exists but not for this method (`Allow: GET`)'
+          headers:
+            Allow:
+              description: Methods the route supports
+              schema:
+                type: string
+                example: GET
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+              example:
+                success: false
+                message: Method not allowed for this route
+                code: METHOD_NOT_ALLOWED
 
   /api/v1/cafe/inventory/summary:
     get:
@@ -2572,7 +3357,21 @@ paths:
       operationId: cafeInventorySummaryMethodNotAllowed
       responses:
         '405':
-          $ref: '#/components/responses/CafeMethodNotAllowedGetOnly'
+          description: 'Route exists but not for this method (`Allow: GET`)'
+          headers:
+            Allow:
+              description: Methods the route supports
+              schema:
+                type: string
+                example: GET
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+              example:
+                success: false
+                message: Method not allowed for this route
+                code: METHOD_NOT_ALLOWED
 
   /api/v1/cafe/orders:
     get:
@@ -2590,10 +3389,10 @@ paths:
 
         **Strict query parameters.** Allowed: `from`, `to`, `status`, `search`, `page`, `limit`.
         Any other query parameter (for example `source`, `userId`, `createdBy`, `sort`) is
-        rejected with 422 `VALIDATION_ERROR`, one `errors[]` entry per unknown key
+        rejected with 400 `VALIDATION_ERROR`, one `errors[]` entry per unknown key
         (`{ field: <key>, message: "Unknown query parameter" }`). There is no source filter, and
         no parameter can change whose orders are returned. A repeated parameter
-        (`?status=a&status=b`) is also 422. Unlike the older cafe catalogue and inventory
+        (`?status=a&status=b`) is also 400. Unlike the older cafe catalogue and inventory
         endpoints, which ignore unknown keys.
 
         `paymentStatus` is always `not_tracked`: payments are not recorded and an order is never
@@ -2638,12 +3437,12 @@ paths:
                           $ref: '#/components/schemas/CafeOrderListItem'
                       pagination:
                         $ref: '#/components/schemas/Pagination'
+        '400':
+          $ref: '#/components/responses/ValidationError'
         '401':
           $ref: '#/components/responses/Unauthorized'
         '403':
           $ref: '#/components/responses/Forbidden'
-        '422':
-          $ref: '#/components/responses/ValidationFailed'
         '429':
           $ref: '#/components/responses/TooManyRequests'
     post:
@@ -2653,7 +3452,21 @@ paths:
       operationId: cafeOrdersMethodNotAllowed
       responses:
         '405':
-          $ref: '#/components/responses/CafeMethodNotAllowedGetOnly'
+          description: 'Route exists but not for this method (`Allow: GET`)'
+          headers:
+            Allow:
+              description: Methods the route supports
+              schema:
+                type: string
+                example: GET
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+              example:
+                success: false
+                message: Method not allowed for this route
+                code: METHOD_NOT_ALLOWED
 
   /api/v1/cafe/orders/summary:
     get:
@@ -2672,7 +3485,7 @@ paths:
 
         **Strict query parameters.** Allowed: `from`, `to` only. Any other query parameter
         (including the list's `status`, `search`, `page`, `limit`, and `source` / `userId`) is
-        rejected with 422 `VALIDATION_ERROR`, one `errors[]` entry per unknown key
+        rejected with 400 `VALIDATION_ERROR`, one `errors[]` entry per unknown key
         (`{ field: <key>, message: "Unknown query parameter" }`).
       operationId: getCafeOrderSummary
       security:
@@ -2696,12 +3509,12 @@ paths:
                     properties:
                       data:
                         $ref: '#/components/schemas/CafeOrderSummary'
+        '400':
+          $ref: '#/components/responses/ValidationError'
         '401':
           $ref: '#/components/responses/Unauthorized'
         '403':
           $ref: '#/components/responses/Forbidden'
-        '422':
-          $ref: '#/components/responses/ValidationFailed'
         '429':
           $ref: '#/components/responses/TooManyRequests'
     put:
@@ -2711,7 +3524,21 @@ paths:
       operationId: cafeOrderSummaryMethodNotAllowed
       responses:
         '405':
-          $ref: '#/components/responses/CafeMethodNotAllowedGetOnly'
+          description: 'Route exists but not for this method (`Allow: GET`)'
+          headers:
+            Allow:
+              description: Methods the route supports
+              schema:
+                type: string
+                example: GET
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+              example:
+                success: false
+                message: Method not allowed for this route
+                code: METHOD_NOT_ALLOWED
 
   /api/v1/cafe/orders/{orderId}:
     get:
@@ -2724,9 +3551,9 @@ paths:
         price changes or deletions never change them.
 
         **Strict query parameters.** Allowed: none. Any query parameter (for example `userId`
-        or `include`) is rejected with 422 `VALIDATION_ERROR`, one `errors[]` entry per unknown
+        or `include`) is rejected with 400 `VALIDATION_ERROR`, one `errors[]` entry per unknown
         key (`{ field: <key>, message: "Unknown query parameter" }`). A non-UUID `orderId` is
-        also 422 (`field: orderId`). Validation runs before the lookup, so a 422 never reveals
+        also 400 (`field: orderId`). Validation runs before the lookup, so a 400 never reveals
         whether the order exists.
       operationId: getCafeOrder
       security:
@@ -2748,14 +3575,14 @@ paths:
                     properties:
                       data:
                         $ref: '#/components/schemas/CafeOrderDetail'
+        '400':
+          $ref: '#/components/responses/ValidationError'
         '401':
           $ref: '#/components/responses/Unauthorized'
         '403':
           $ref: '#/components/responses/Forbidden'
         '404':
           $ref: '#/components/responses/CafeOrderNotFound'
-        '422':
-          $ref: '#/components/responses/ValidationFailed'
         '429':
           $ref: '#/components/responses/TooManyRequests'
     patch:
@@ -2765,7 +3592,21 @@ paths:
       operationId: cafeOrderMethodNotAllowed
       responses:
         '405':
-          $ref: '#/components/responses/CafeMethodNotAllowedGetOnly'
+          description: 'Route exists but not for this method (`Allow: GET`)'
+          headers:
+            Allow:
+              description: Methods the route supports
+              schema:
+                type: string
+                example: GET
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+              example:
+                success: false
+                message: Method not allowed for this route
+                code: METHOD_NOT_ALLOWED
 
   /api/v1/cafe/orders/{orderId}/status:
     patch:
@@ -2790,9 +3631,9 @@ paths:
 
         Only `status` and `updatedAt` change. `paymentStatus` stays `not_tracked`; totals and
         line items are never touched. The body must be exactly `{ "status": ... }`: any other
-        key (for example `paymentStatus`, `totalAed`, `items`) is 422, one `errors[]` entry per
+        key (for example `paymentStatus`, `totalAed`, `items`) is 400, one `errors[]` entry per
         key (`{ field: <key>, message: "Unknown field" }`). Query parameters are not accepted
-        (422 `Unknown query parameter`).
+        (400 `Unknown query parameter`).
 
         The 200 response has the same `data` shape as `GET /api/v1/cafe/orders/{orderId}`.
       operationId: updateCafeOrderStatus
@@ -2850,6 +3691,8 @@ paths:
                       unitPriceAed: 9
                       quantity: 1
                       lineTotalAed: 9
+        '400':
+          $ref: '#/components/responses/ValidationError'
         '401':
           $ref: '#/components/responses/Unauthorized'
         '403':
@@ -2858,8 +3701,6 @@ paths:
           $ref: '#/components/responses/CafeOrderNotFound'
         '409':
           $ref: '#/components/responses/CafeOrderInvalidStatusTransition'
-        '422':
-          $ref: '#/components/responses/ValidationFailed'
         '429':
           $ref: '#/components/responses/TooManyRequests'
     get:
@@ -2869,7 +3710,21 @@ paths:
       operationId: cafeOrderStatusMethodNotAllowed
       responses:
         '405':
-          $ref: '#/components/responses/CafeMethodNotAllowedPatchOnly'
+          description: 'Route exists but not for this method (`Allow: PATCH`)'
+          headers:
+            Allow:
+              description: Methods the route supports
+              schema:
+                type: string
+                example: PATCH
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+              example:
+                success: false
+                message: Method not allowed for this route
+                code: METHOD_NOT_ALLOWED
 
   /api/v1/cafe/uploads/image/token:
     post:
@@ -2906,12 +3761,12 @@ paths:
                         example: Image upload token issued successfully
                       data:
                         $ref: '#/components/schemas/ProfileImageUploadToken'
+        '400':
+          $ref: '#/components/responses/ValidationError'
         '401':
           $ref: '#/components/responses/Unauthorized'
         '403':
           $ref: '#/components/responses/Forbidden'
-        '422':
-          $ref: '#/components/responses/ValidationFailed'
         '429':
           $ref: '#/components/responses/TooManyRequests'
         '502':
@@ -2933,7 +3788,770 @@ paths:
       operationId: cafeImageTokenMethodNotAllowed
       responses:
         '405':
-          $ref: '#/components/responses/CafeMethodNotAllowedPostOnly'
+          description: 'Route exists but not for this method (`Allow: POST`)'
+          headers:
+            Allow:
+              description: Methods the route supports
+              schema:
+                type: string
+                example: POST
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+              example:
+                success: false
+                message: Method not allowed for this route
+                code: METHOD_NOT_ALLOWED
+  /api/v1/memberships:
+    get:
+      tags:
+        - Memberships
+      summary: List memberships with their plans
+      description: |
+        OWNER, ADMIN or COACH. A MEMBER receives 403.
+
+        Returns every membership (not paginated; the set is small) with its plans in the full plan
+        view and a `planCount`.
+      operationId: listMemberships
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: All memberships
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/SuccessEnvelope'
+                  - type: object
+                    properties:
+                      data:
+                        type: array
+                        items:
+                          $ref: '#/components/schemas/Membership'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+    post:
+      tags:
+        - Memberships
+      summary: Create a membership
+      description: |
+        OWNER or ADMIN. The name is trimmed and must be unique ignoring letter case.
+        There is no `GET /memberships/{id}`, so the response has no `Location` header.
+      operationId: createMembership
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateMembershipRequest'
+      responses:
+        '201':
+          description: Membership created (with no plans yet)
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/SuccessEnvelope'
+                  - type: object
+                    properties:
+                      data:
+                        $ref: '#/components/schemas/Membership'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '409':
+          description: A membership with this name already exists
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+              example:
+                success: false
+                message: A membership with this name already exists
+                code: MEMBERSHIP_EXISTS
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+    put:
+      tags:
+        - Memberships
+      summary: Not supported
+      description: 'Every method other than GET, POST answers 405 with `Allow: GET, POST`.'
+      operationId: methodNotAllowed_api_v1_memberships
+      responses:
+        '405':
+          description: 'Route exists but not for this method (`Allow: GET, POST`)'
+          headers:
+            Allow:
+              description: Methods the route supports
+              schema:
+                type: string
+                example: GET, POST
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+              example:
+                success: false
+                message: Method not allowed for this route
+                code: METHOD_NOT_ALLOWED
+  /api/v1/classes/{id}/slots:
+    parameters:
+      - $ref: '#/components/parameters/ClassId'
+    get:
+      tags:
+        - Classes
+      summary: List the recurring slots of a class
+      description: |
+        OWNER, ADMIN, COACH or MEMBER. A class the caller may not see (a MEMBER asking for a private
+        or inactive class, a COACH for a private class they are not assigned to) is 404
+        `CLASS_NOT_FOUND`, the same as a class that does not exist.
+
+        Not paginated: a class has a handful of weekly slots. Inactive (soft-deleted) slots are left
+        out unless `includeInactive=true`; the flag is ignored for MEMBER.
+      operationId: listClassSlots
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: includeInactive
+          in: query
+          schema:
+            type: string
+            enum:
+              - 'true'
+              - 'false'
+            default: 'false'
+      responses:
+        '200':
+          description: The slots of the class
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/SuccessEnvelope'
+                  - type: object
+                    properties:
+                      data:
+                        type: array
+                        items:
+                          $ref: '#/components/schemas/Slot'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/ClassNotFound'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+    post:
+      tags:
+        - Classes
+      summary: Create recurring slots for a class
+      description: |
+        OWNER or ADMIN. Creates one slot per weekday and time in the body, then generates the
+        sessions of the rolling window (`reconciliation`). A slot or coach that collides with an
+        existing one is 409 (`SLOT_CONFLICT`, `COACH_CONFLICT`); an inactive class is 409
+        `CLASS_INACTIVE`; a `startDate` in the past is 400.
+      operationId: createClassSlots
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateSlotsRequest'
+      responses:
+        '201':
+          description: Slots created
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/SuccessEnvelope'
+                  - type: object
+                    properties:
+                      data:
+                        $ref: '#/components/schemas/CreatedSlots'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/ClassNotFound'
+        '409':
+          $ref: '#/components/responses/ScheduleConflict'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+    put:
+      tags:
+        - Classes
+      summary: Not supported
+      description: 'Every method other than GET, POST answers 405 with `Allow: GET, POST`.'
+      operationId: methodNotAllowed_api_v1_classes__id_slots
+      responses:
+        '405':
+          description: 'Route exists but not for this method (`Allow: GET, POST`)'
+          headers:
+            Allow:
+              description: Methods the route supports
+              schema:
+                type: string
+                example: GET, POST
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+              example:
+                success: false
+                message: Method not allowed for this route
+                code: METHOD_NOT_ALLOWED
+  /api/v1/classes/{id}/slots/{slotId}:
+    parameters:
+      - $ref: '#/components/parameters/ClassId'
+      - $ref: '#/components/parameters/SlotId'
+    patch:
+      tags:
+        - Classes
+      summary: Update a slot
+      description: |
+        OWNER or ADMIN. Send only the fields to change (at least one). Changing time, weekday or
+        coaches re-checks conflicts and reconciles the generated sessions.
+      operationId: updateClassSlot
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateSlotRequest'
+      responses:
+        '200':
+          description: The updated slot
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/SuccessEnvelope'
+                  - type: object
+                    properties:
+                      data:
+                        $ref: '#/components/schemas/Slot'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          description: Class or slot not found (`CLASS_NOT_FOUND` or `SLOT_NOT_FOUND`)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+              example:
+                success: false
+                message: Class slot not found
+                code: SLOT_NOT_FOUND
+        '409':
+          $ref: '#/components/responses/ScheduleConflict'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+    delete:
+      tags:
+        - Classes
+      summary: Deactivate a slot
+      description: |
+        OWNER or ADMIN. A soft delete: the slot becomes inactive and its future, unbooked,
+        non-overridden generated sessions are removed. Sessions with bookings or manual changes stay.
+      operationId: deleteClassSlot
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: The slot is inactive
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/SuccessEnvelope'
+                  - type: object
+                    properties:
+                      data:
+                        $ref: '#/components/schemas/DeletedSlot'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/SlotNotFound'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+    put:
+      tags:
+        - Classes
+      summary: Not supported
+      description: 'Every method other than PATCH, DELETE answers 405 with `Allow: PATCH, DELETE`.'
+      operationId: methodNotAllowed_api_v1_classes__id_slots__slotId
+      responses:
+        '405':
+          description: 'Route exists but not for this method (`Allow: PATCH, DELETE`)'
+          headers:
+            Allow:
+              description: Methods the route supports
+              schema:
+                type: string
+                example: PATCH, DELETE
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+              example:
+                success: false
+                message: Method not allowed for this route
+                code: METHOD_NOT_ALLOWED
+  /api/v1/sessions:
+    get:
+      tags:
+        - Sessions
+      summary: List sessions in a date range (calendar)
+      description: |
+        OWNER, ADMIN, COACH or MEMBER. `from` and `to` are required ISO-8601 instants and may be at
+        most 92 days apart. Sorted by `startAt`, earliest first.
+
+        A MEMBER sees only sessions of active public classes that are not private. A COACH sees
+        those plus every session of the classes they are assigned to.
+
+        **Known limitation:** the role filter runs after the page is cut, so for a MEMBER or COACH a
+        page can hold fewer than `limit` items, and `pagination.total` is the number of visible
+        sessions on this page, not across all pages. OWNER and ADMIN see every session.
+      operationId: listSessions
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: from
+          in: query
+          required: true
+          schema:
+            type: string
+            format: date-time
+          example: 2030-06-01T00:00:00.000Z
+        - name: to
+          in: query
+          required: true
+          schema:
+            type: string
+            format: date-time
+          example: 2030-06-08T00:00:00.000Z
+        - name: classId
+          in: query
+          schema:
+            type: string
+            format: uuid
+        - name: coachId
+          in: query
+          schema:
+            type: string
+            format: uuid
+        - name: state
+          in: query
+          schema:
+            type: string
+            enum:
+              - open
+              - full
+              - cancelled
+        - name: isPrivate
+          in: query
+          schema:
+            type: boolean
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/Limit'
+      responses:
+        '200':
+          description: One page of sessions
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/SuccessEnvelope'
+                  - type: object
+                    required:
+                      - pagination
+                    properties:
+                      data:
+                        type: array
+                        items:
+                          $ref: '#/components/schemas/Session'
+                      pagination:
+                        $ref: '#/components/schemas/Pagination'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+    post:
+      tags:
+        - Sessions
+      summary: Create a one-off session
+      description: |
+        OWNER or ADMIN. Everything not sent is inherited from the class (duration, capacity,
+        coaches, intensity, type, description, image). `startAt` must be in the future, and
+        `durationMin` must match the interval. Another session of the class at the same `startAt`
+        is 409 `SESSION_CONFLICT`.
+      operationId: createSession
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateSessionRequest'
+      responses:
+        '201':
+          description: Session created
+          headers:
+            Location:
+              description: Path of the new session
+              schema:
+                type: string
+                example: /api/v1/sessions/7b0c3a5e-2f0d-4f65-9a7f-1d3a9a0f2c11
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/SuccessEnvelope'
+                  - type: object
+                    properties:
+                      data:
+                        $ref: '#/components/schemas/Session'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/ClassNotFound'
+        '409':
+          $ref: '#/components/responses/ScheduleConflict'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+    put:
+      tags:
+        - Sessions
+      summary: Not supported
+      description: 'Every method other than GET, POST answers 405 with `Allow: GET, POST`.'
+      operationId: methodNotAllowed_api_v1_sessions
+      responses:
+        '405':
+          description: 'Route exists but not for this method (`Allow: GET, POST`)'
+          headers:
+            Allow:
+              description: Methods the route supports
+              schema:
+                type: string
+                example: GET, POST
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+              example:
+                success: false
+                message: Method not allowed for this route
+                code: METHOD_NOT_ALLOWED
+  /api/v1/sessions/{id}:
+    parameters:
+      - $ref: '#/components/parameters/SessionId'
+    get:
+      tags:
+        - Sessions
+      summary: Get a session
+      description: |
+        OWNER, ADMIN, COACH or MEMBER. A session the caller may not see (a private session, or a
+        session of a class the caller may not see) is 404 `SESSION_NOT_FOUND`, the same as a session
+        that does not exist.
+      operationId: getSession
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: The session
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/SuccessEnvelope'
+                  - type: object
+                    properties:
+                      data:
+                        $ref: '#/components/schemas/Session'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/SessionNotFound'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+    patch:
+      tags:
+        - Sessions
+      summary: Update a session
+      description: |
+        OWNER, ADMIN or COACH. A COACH may change only `capacity`, and only on a session they are
+        assigned to (otherwise 403). Past sessions cannot be changed (409 `SESSION_PAST_IMMUTABLE`).
+        Send the `version` you read; if the session changed since, the answer is 409
+        `SESSION_VERSION_CONFLICT`. Changing coaches or times needs a reason in `overrideReasons`
+        (400 when missing).
+      operationId: patchSession
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PatchSessionRequest'
+      responses:
+        '200':
+          description: The updated session
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/SuccessEnvelope'
+                  - type: object
+                    properties:
+                      data:
+                        $ref: '#/components/schemas/Session'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/SessionNotFound'
+        '409':
+          $ref: '#/components/responses/ScheduleConflict'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+    put:
+      tags:
+        - Sessions
+      summary: Not supported
+      description: 'Every method other than GET, PATCH answers 405 with `Allow: GET, PATCH`.'
+      operationId: methodNotAllowed_api_v1_sessions__id
+      responses:
+        '405':
+          description: 'Route exists but not for this method (`Allow: GET, PATCH`)'
+          headers:
+            Allow:
+              description: Methods the route supports
+              schema:
+                type: string
+                example: GET, PATCH
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+              example:
+                success: false
+                message: Method not allowed for this route
+                code: METHOD_NOT_ALLOWED
+  /api/v1/sessions/{id}/cancel:
+    parameters:
+      - $ref: '#/components/parameters/SessionId'
+    post:
+      tags:
+        - Sessions
+      summary: Cancel a session
+      description: |
+        OWNER, ADMIN or COACH. A COACH may cancel only their own session, and only while it has no
+        bookings (otherwise 403). A reason is required. Past sessions are 409 `SESSION_PAST_IMMUTABLE`.
+      operationId: cancelSession
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CancelSessionRequest'
+      responses:
+        '200':
+          description: The session is cancelled
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/SuccessEnvelope'
+                  - type: object
+                    properties:
+                      data:
+                        $ref: '#/components/schemas/CancelSessionResult'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/SessionNotFound'
+        '409':
+          $ref: '#/components/responses/ScheduleConflict'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+    put:
+      tags:
+        - Sessions
+      summary: Not supported
+      description: 'Every method other than POST answers 405 with `Allow: POST`.'
+      operationId: methodNotAllowed_api_v1_sessions__id_cancel
+      responses:
+        '405':
+          description: 'Route exists but not for this method (`Allow: POST`)'
+          headers:
+            Allow:
+              description: Methods the route supports
+              schema:
+                type: string
+                example: POST
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+              example:
+                success: false
+                message: Method not allowed for this route
+                code: METHOD_NOT_ALLOWED
+  /api/v1/sessions/{id}/restore:
+    parameters:
+      - $ref: '#/components/parameters/SessionId'
+    post:
+      tags:
+        - Sessions
+      summary: Restore a cancelled session
+      description: |
+        OWNER or ADMIN. Only a cancelled, future session can be restored (409 `SESSION_NOT_CANCELLED`
+        or `SESSION_PAST_IMMUTABLE`). Conflicts that appeared since the cancellation (another session
+        at the same start, a busy coach) are 409.
+      operationId: restoreSession
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: The restored (open) session
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/SuccessEnvelope'
+                  - type: object
+                    properties:
+                      data:
+                        $ref: '#/components/schemas/Session'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/SessionNotFound'
+        '409':
+          $ref: '#/components/responses/ScheduleConflict'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+    put:
+      tags:
+        - Sessions
+      summary: Not supported
+      description: 'Every method other than POST answers 405 with `Allow: POST`.'
+      operationId: methodNotAllowed_api_v1_sessions__id_restore
+      responses:
+        '405':
+          description: 'Route exists but not for this method (`Allow: POST`)'
+          headers:
+            Allow:
+              description: Methods the route supports
+              schema:
+                type: string
+                example: POST
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+              example:
+                success: false
+                message: Method not allowed for this route
+                code: METHOD_NOT_ALLOWED
+  /api-docs/:
+    get:
+      tags:
+        - Docs
+      summary: Swagger UI
+      description: Interactive API documentation (HTML). Public. Rate limited per IP.
+      operationId: apiDocsUi
+      responses:
+        '200':
+          description: Swagger UI page
+          content:
+            text/html:
+              schema:
+                type: string
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+  /api-docs/openapi.yaml:
+    get:
+      tags:
+        - Docs
+      summary: This specification as YAML
+      description: Public. Rate limited per IP.
+      operationId: apiDocsYaml
+      responses:
+        '200':
+          description: The OpenAPI document
+          content:
+            application/yaml:
+              schema:
+                type: string
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+  /api-docs/openapi.json:
+    get:
+      tags:
+        - Docs
+      summary: This specification as JSON
+      description: Public. Rate limited per IP.
+      operationId: apiDocsJson
+      responses:
+        '200':
+          description: The OpenAPI document
+          content:
+            application/json:
+              schema:
+                type: object
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
 
 components:
   securitySchemes:
@@ -2950,7 +4568,7 @@ components:
       required: true
       schema:
         type: string
-      description: Plan id (UUID). An unknown or malformed id returns 404.
+      description: Plan id (UUID). A value that is not a UUID is 400 `VALIDATION_ERROR`; an unknown UUID is 404 `PLAN_NOT_FOUND`.
 
     CoachId:
       name: coachId
@@ -2968,7 +4586,7 @@ components:
       schema:
         type: string
         format: uuid
-      description: Cafe category id. A value that is not a UUID is 422 `VALIDATION_ERROR`; an unknown UUID is 404 `CATEGORY_NOT_FOUND`.
+      description: Cafe category id. A value that is not a UUID is 400 `VALIDATION_ERROR`; an unknown UUID is 404 `CATEGORY_NOT_FOUND`.
 
     CafeItemId:
       name: itemId
@@ -2977,15 +4595,51 @@ components:
       schema:
         type: string
         format: uuid
-      description: Cafe item id. A value that is not a UUID is 422 `VALIDATION_ERROR`; an unknown UUID is 404 `ITEM_NOT_FOUND`.
-
-  headers:
-    CafeCategoryLocation:
-      description: Path of the created category
+      description: Cafe item id. A value that is not a UUID is 400 `VALIDATION_ERROR`; an unknown UUID is 404 `ITEM_NOT_FOUND`.
+    Page:
+      name: page
+      in: query
+      description: Page number, starting at 1
+      schema:
+        type: integer
+        minimum: 1
+        maximum: 100000
+        default: 1
+    Limit:
+      name: limit
+      in: query
+      description: Items per page
+      schema:
+        type: integer
+        minimum: 1
+        maximum: 100
+        default: 20
+    ClassId:
+      name: id
+      in: path
+      required: true
       schema:
         type: string
-        example: /api/v1/cafe/categories/7b0c3a5e-2f0d-4f65-9a7f-1d3a9a0f2c11
+        format: uuid
+      description: Class id. A value that is not a UUID is 400 `VALIDATION_ERROR`; an unknown UUID is 404 `CLASS_NOT_FOUND`.
+    SlotId:
+      name: slotId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+      description: Slot id. A value that is not a UUID is 400 `VALIDATION_ERROR`; an unknown UUID (or a slot of another class) is 404 `SLOT_NOT_FOUND`.
+    SessionId:
+      name: id
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+      description: Session id. A value that is not a UUID is 400 `VALIDATION_ERROR`; an unknown UUID is 404 `SESSION_NOT_FOUND`.
 
+  headers:
     CafeItemLocation:
       description: Path of the created item
       schema:
@@ -2994,7 +4648,7 @@ components:
 
   responses:
     ValidationError:
-      description: Request body failed validation
+      description: Request failed validation (400). Returns every failing field together. `errors[].field` is the body/query/path field, or `body` for a rule about the request as a whole (for example an empty PATCH).
       content:
         application/json:
           schema:
@@ -3002,6 +4656,7 @@ components:
           example:
             success: false
             message: Validation failed
+            code: VALIDATION_ERROR
             errors:
               - field: email
                 message: Must be a valid email address
@@ -3015,6 +4670,7 @@ components:
           example:
             success: false
             message: Authentication token was not provided
+            code: UNAUTHORIZED
 
     Forbidden:
       description: Authenticated but not allowed for this action
@@ -3025,6 +4681,7 @@ components:
           example:
             success: false
             message: You do not have permission to perform this action
+            code: FORBIDDEN
 
     CoachNotFound:
       description: Coach missing or not visible to the caller
@@ -3035,9 +4692,10 @@ components:
           example:
             success: false
             message: Coach not found
+            code: COACH_NOT_FOUND
 
     PlanNotFound:
-      description: No plan with this id (an id that is not a UUID is also a 404)
+      description: No plan with this id. (An id that is not a UUID is 400 `VALIDATION_ERROR`, not 404.)
       content:
         application/json:
           schema:
@@ -3047,25 +4705,29 @@ components:
             message: Membership plan not found
             code: PLAN_NOT_FOUND
 
-    MethodNotAllowed:
-      description: The route exists but not for this method
-      headers:
-        Allow:
-          description: Methods the route supports
-          schema:
-            type: string
-            example: GET, PATCH
-      content:
-        application/json:
-          schema:
-            $ref: '#/components/schemas/ErrorEnvelope'
-          example:
-            success: false
-            message: Method not allowed for this route
-            code: METHOD_NOT_ALLOWED
-
     TooManyRequests:
-      description: Rate limit exceeded
+      description: Rate limit exceeded (1000 requests per 15 minutes by default). Limits are per client IP, and per user and IP on routes behind login. The `RateLimit-*` headers are on every response of a limited route.
+      headers:
+        Retry-After:
+          description: Seconds until the limit resets
+          schema:
+            type: integer
+            example: 540
+        RateLimit-Limit:
+          description: Requests allowed per window
+          schema:
+            type: integer
+            example: 1000
+        RateLimit-Remaining:
+          description: Requests left in this window
+          schema:
+            type: integer
+            example: 0
+        RateLimit-Reset:
+          description: Seconds until the window resets
+          schema:
+            type: integer
+            example: 540
       content:
         application/json:
           schema:
@@ -3073,20 +4735,7 @@ components:
           example:
             success: false
             message: Too many requests, please try again later
-
-    ValidationFailed:
-      description: Validation failed (returns all failing fields together)
-      content:
-        application/json:
-          schema:
-            $ref: '#/components/schemas/ErrorEnvelope'
-          example:
-            success: false
-            message: Validation failed
-            code: VALIDATION_ERROR
-            errors:
-              - field: name
-                message: Category name is required
+            code: TOO_MANY_REQUESTS
 
     CafeCategoryNotFound:
       description: No category with this id
@@ -3131,145 +4780,6 @@ components:
             success: false
             message: Stock can only be updated for tracked items
             code: ITEM_NOT_TRACKED
-
-    CafeStockRuleViolation:
-      description: |
-        A stock rule was broken: `ITEM_TRACKED_STOCK_REQUIRED` (tracked item without
-        `stockQuantity` and `unitCost`, or either set to `null`) or
-        `ITEM_SOLD_OUT_ZERO_STOCK` (`available` requested with zero stock, create only)
-      content:
-        application/json:
-          schema:
-            $ref: '#/components/schemas/ErrorEnvelope'
-          examples:
-            trackedStockRequired:
-              value:
-                success: false
-                message: Tracked items require stockQuantity and unitCost
-                code: ITEM_TRACKED_STOCK_REQUIRED
-            soldOutZeroStock:
-              value:
-                success: false
-                message: Cannot mark item as available when stock quantity is 0
-                code: ITEM_SOLD_OUT_ZERO_STOCK
-
-    CafeItemValidationFailed:
-      description: |
-        Validation failed (all failing fields together), or the `categoryId` in the body does
-        not exist. The latter is 422 with code `CATEGORY_NOT_FOUND` (the same code as the 404
-        on the category routes, which address the category by path).
-      content:
-        application/json:
-          schema:
-            $ref: '#/components/schemas/ErrorEnvelope'
-          examples:
-            validation:
-              value:
-                success: false
-                message: Validation failed
-                code: VALIDATION_ERROR
-                errors:
-                  - field: priceAed
-                    message: Price must be greater than 0
-            fieldNotEditableHere:
-              summary: PATCH /items/{itemId} with availability or visibility
-              value:
-                success: false
-                message: Validation failed
-                code: VALIDATION_ERROR
-                errors:
-                  - field: availability
-                    message: Availability and visibility cannot be updated on this endpoint, use dedicated endpoints
-            categoryNotFoundInBody:
-              value:
-                success: false
-                message: Category not found
-                code: CATEGORY_NOT_FOUND
-
-    CafeMethodNotAllowedCollection:
-      description: 'Route exists but not for this method (`Allow: GET, POST`)'
-      headers:
-        Allow:
-          description: Methods the route supports
-          schema:
-            type: string
-            example: GET, POST
-      content:
-        application/json:
-          schema:
-            $ref: '#/components/schemas/ErrorEnvelope'
-          example:
-            success: false
-            message: Method not allowed for this route
-            code: METHOD_NOT_ALLOWED
-
-    CafeMethodNotAllowedCategory:
-      description: 'Route exists but not for this method (`Allow: PATCH, DELETE`)'
-      headers:
-        Allow:
-          description: Methods the route supports
-          schema:
-            type: string
-            example: PATCH, DELETE
-      content:
-        application/json:
-          schema:
-            $ref: '#/components/schemas/ErrorEnvelope'
-          example:
-            success: false
-            message: Method not allowed for this route
-            code: METHOD_NOT_ALLOWED
-
-    CafeMethodNotAllowedItem:
-      description: 'Route exists but not for this method (`Allow: GET, PATCH`)'
-      headers:
-        Allow:
-          description: Methods the route supports
-          schema:
-            type: string
-            example: GET, PATCH
-      content:
-        application/json:
-          schema:
-            $ref: '#/components/schemas/ErrorEnvelope'
-          example:
-            success: false
-            message: Method not allowed for this route
-            code: METHOD_NOT_ALLOWED
-
-    CafeMethodNotAllowedPatchOnly:
-      description: 'Route exists but not for this method (`Allow: PATCH`)'
-      headers:
-        Allow:
-          description: Methods the route supports
-          schema:
-            type: string
-            example: PATCH
-      content:
-        application/json:
-          schema:
-            $ref: '#/components/schemas/ErrorEnvelope'
-          example:
-            success: false
-            message: Method not allowed for this route
-            code: METHOD_NOT_ALLOWED
-
-    CafeMethodNotAllowedPostOnly:
-      description: 'Route exists but not for this method (`Allow: POST`)'
-      headers:
-        Allow:
-          description: Methods the route supports
-          schema:
-            type: string
-            example: POST
-      content:
-        application/json:
-          schema:
-            $ref: '#/components/schemas/ErrorEnvelope'
-          example:
-            success: false
-            message: Method not allowed for this route
-            code: METHOD_NOT_ALLOWED
 
     CafeOrderInvalidStatusTransition:
       description: |
@@ -3321,23 +4831,138 @@ components:
             success: false
             message: Order not found
             code: ORDER_NOT_FOUND
-
-    CafeMethodNotAllowedGetOnly:
-      description: 'Route exists but not for this method (`Allow: GET`)'
-      headers:
-        Allow:
-          description: Methods the route supports
-          schema:
-            type: string
-            example: GET
+    ClassInactive:
+      description: The class is deactivated or archived, so it cannot be edited (`CLASS_INACTIVE`)
       content:
         application/json:
           schema:
             $ref: '#/components/schemas/ErrorEnvelope'
           example:
             success: false
-            message: Method not allowed for this route
-            code: METHOD_NOT_ALLOWED
+            message: A deactivated or archived class cannot be edited
+            code: CLASS_INACTIVE
+    PayloadTooLarge:
+      description: The JSON body is larger than 1 MB
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorEnvelope'
+          example:
+            success: false
+            message: Request body is too large
+            code: PAYLOAD_TOO_LARGE
+    RouteNotFound:
+      description: No route matches this path. The message is fixed and never echoes the URL.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorEnvelope'
+          example:
+            success: false
+            message: The requested route does not exist
+            code: ROUTE_NOT_FOUND
+    ClassNotFound:
+      description: No such class, or the class is not visible to the caller (a hidden class looks exactly like a missing one)
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorEnvelope'
+          example:
+            success: false
+            message: Class not found
+            code: CLASS_NOT_FOUND
+    SlotNotFound:
+      description: No such slot in this class
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorEnvelope'
+          example:
+            success: false
+            message: Class slot not found
+            code: SLOT_NOT_FOUND
+    SessionNotFound:
+      description: No such session, or the session is not visible to the caller (a hidden session looks exactly like a missing one)
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorEnvelope'
+          example:
+            success: false
+            message: Class session not found
+            code: SESSION_NOT_FOUND
+    ScheduleConflict:
+      description: |
+        The change collides with existing data. `code` is one of `SLOT_CONFLICT`, `SESSION_CONFLICT`,
+        `COACH_CONFLICT` (coach double-booked, unqualified or on leave), `SESSION_VERSION_CONFLICT`
+        (another user changed the session first), `SESSION_NOT_CANCELLED`, `SESSION_PAST_IMMUTABLE`
+        or `CLASS_INACTIVE`. `details.conflicts[]` lists what collided where that applies.
+      content:
+        application/json:
+          schema:
+            allOf:
+              - $ref: '#/components/schemas/ErrorEnvelope'
+              - type: object
+                properties:
+                  details:
+                    type: object
+                    properties:
+                      conflicts:
+                        type: array
+                        items:
+                          type: object
+                          additionalProperties: true
+          example:
+            success: false
+            message: A session already exists at this start time for this class
+            code: SESSION_CONFLICT
+            details:
+              conflicts:
+                - type: SESSION_CONFLICT
+                  sessionId: 7b0c3a5e-2f0d-4f65-9a7f-1d3a9a0f2c11
+                  startAt: 2030-06-01T10:00:00.000Z
+                  endAt: 2030-06-01T11:00:00.000Z
+    CafeItemBadRequest:
+      description: |
+        Validation failed (all failing fields together), a stock rule was broken, or the `categoryId` in the body does not exist.
+        `code` is `VALIDATION_ERROR`, `ITEM_TRACKED_STOCK_REQUIRED` (tracked item without `stockQuantity` and `unitCost`, or either set to `null`), `ITEM_SOLD_OUT_ZERO_STOCK` (`available` requested with zero stock) or `CATEGORY_NOT_FOUND` (the `categoryId` in the body does not exist; the category routes, which address the category by path, answer 404 with the same code).
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorEnvelope'
+          examples:
+            validation:
+              value:
+                success: false
+                message: Validation failed
+                code: VALIDATION_ERROR
+                errors:
+                  - field: priceAed
+                    message: Price must be greater than 0
+            fieldNotEditableHere:
+              summary: PATCH /items/{itemId} with availability or visibility
+              value:
+                success: false
+                message: Validation failed
+                code: VALIDATION_ERROR
+                errors:
+                  - field: availability
+                    message: Availability and visibility cannot be updated on this endpoint, use dedicated endpoints
+            categoryNotFoundInBody:
+              value:
+                success: false
+                message: Category not found
+                code: CATEGORY_NOT_FOUND
+            trackedStockRequired:
+              value:
+                success: false
+                message: Tracked items require stockQuantity and unitCost
+                code: ITEM_TRACKED_STOCK_REQUIRED
+            soldOutZeroStock:
+              value:
+                success: false
+                message: Cannot mark item as available when stock quantity is 0
+                code: ITEM_SOLD_OUT_ZERO_STOCK
 
   schemas:
     SuccessEnvelope:
@@ -3354,6 +4979,8 @@ components:
           description: Endpoint-specific payload; may be null
         pagination:
           $ref: '#/components/schemas/Pagination'
+        counts:
+          $ref: '#/components/schemas/PlanSectionCounts'
 
     ErrorEnvelope:
       type: object
@@ -3366,7 +4993,7 @@ components:
           type: string
         code:
           type: string
-          description: Machine-readable error code when provided
+          description: Machine-readable error code (UPPER_SNAKE_CASE). Present on every error response.
         errors:
           type: array
           items:
@@ -3376,6 +5003,11 @@ components:
                 type: string
               message:
                 type: string
+          description: Per-field problems of a 400 `VALIDATION_ERROR`
+        details:
+          type: object
+          additionalProperties: true
+          description: Extra structured data for some errors (for example conflicts[] or allowed[])
 
     Gender:
       type: string
@@ -3897,7 +5529,7 @@ components:
     PlanCreditRefill:
       type: string
       nullable: true
-      enum: [monthly, once]
+      enum: [monthly, once, null]
 
     PlanValidityUnit:
       type: string
@@ -3996,6 +5628,8 @@ components:
         - visibility
         - status
         - activeClientCount
+        - membershipId
+        - membership
       properties:
         id:
           type: string
@@ -4032,39 +5666,19 @@ components:
           type: integer
           description: Placeholder, always 0
           example: 0
-
-    PlanListMeta:
-      type: object
-      required: [page, pageSize, total, counts]
-      properties:
-        page:
-          type: integer
-          example: 1
-        pageSize:
-          type: integer
-          example: 20
-        total:
-          type: integer
-          description: Plans matching the filters, across all pages
-          example: 60
-        counts:
-          type: object
-          description: Non-archived plans per section; ignores `q`, all filters and `status`
-          required: [class_membership, online_coaching]
-          properties:
-            class_membership:
-              type: integer
-              example: 53
-            online_coaching:
-              type: integer
-              example: 7
+        membershipId:
+          type: string
+          format: uuid
+          nullable: true
+        membership:
+          $ref: '#/components/schemas/PlanMembershipRef'
 
     UpdatePlanRequest:
       type: object
       minProperties: 1
       description: |
         Any of the editable fields. Fields not listed here (`id`, `section`, `status`, `version`,
-        `externalRef`, `createdAt`, `updatedAt`) are rejected with 422, as are unknown fields.
+        `externalRef`, `createdAt`, `updatedAt`) are rejected with 400, as are unknown fields.
         Enum values are case-insensitive.
       properties:
         name:
@@ -4150,6 +5764,13 @@ components:
         - section
         - creditSummary
         - activeClientCount
+        - creditNote
+        - membershipId
+        - membership
+        - term
+        - recurring
+        - periodMonths
+        - joiningFee
         - createdAt
         - updatedAt
       properties:
@@ -4212,12 +5833,52 @@ components:
         activeClientCount:
           type: integer
           example: 0
+        creditNote:
+          type: string
+          description: Same text as `creditSummary`
+          example: 15 class credits a month
+        membershipId:
+          type: string
+          format: uuid
+          nullable: true
+        membership:
+          $ref: '#/components/schemas/PlanMembershipRef'
+        term:
+          type: string
+          nullable: true
+          example: 12 months
+        recurring:
+          type: boolean
+          example: false
+        periodMonths:
+          type: integer
+          nullable: true
+          enum: [1, 3, 6, 12, null]
+        joiningFee:
+          type: number
+          example: 0
         createdAt:
           type: string
           format: date-time
         updatedAt:
           type: string
           format: date-time
+
+    PlanMembershipRef:
+      type: object
+      nullable: true
+      description: The membership the plan belongs to, or null
+      required: [id, name, description]
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+          example: Class Memberships
+        description:
+          type: string
+          nullable: true
 
     ClassCoachItem:
       type: object
@@ -4318,17 +5979,96 @@ components:
             type: string
             format: uuid
         scheduleSummary:
-          type: string
-          nullable: true
-          example: Mon, Wed, Fri 06:00
-        recurringSchedule:
+          type: object
+          description: Summary of the class's active weekly slots
+          required: [totalSlots, days, summaryText]
+          properties:
+            totalSlots:
+              type: integer
+              example: 3
+            days:
+              type: array
+              items:
+                type: string
+              example: [Monday, Wednesday, Friday]
+            summaryText:
+              type: string
+              example: Mon, Wed, Fri (3 slots/week)
+        eligiblePlans:
           type: array
+          description: Detail only. The plans whose members may book the class.
           items:
             type: object
+            required: [id, name]
+            properties:
+              id:
+                type: string
+                format: uuid
+              name:
+                type: string
+        recurringSchedule:
+          type: array
+          description: Detail only. The weekly slots of the class.
+          items:
+            type: object
+            required: [id, dayOfWeek, dayName, startTime, capacity, active, coaches]
+            properties:
+              id:
+                type: string
+                format: uuid
+              dayOfWeek:
+                type: integer
+                minimum: 1
+                maximum: 7
+              dayName:
+                type: string
+                example: Monday
+              startTime:
+                type: string
+                example: '06:00'
+              capacity:
+                type: integer
+                nullable: true
+              active:
+                type: boolean
+              coaches:
+                type: array
+                items:
+                  type: object
+                  required: [id, fullName]
+                  properties:
+                    id:
+                      type: string
+                      format: uuid
+                    fullName:
+                      type: string
         upcomingInstancesSummary:
-          type: string
-          nullable: true
-          example: Next session tomorrow 06:00
+          type: object
+          description: Detail only. The class's upcoming sessions.
+          required: [upcomingCount, nextSession]
+          properties:
+            upcomingCount:
+              type: integer
+              example: 4
+            nextSession:
+              type: object
+              nullable: true
+              required: [id, startAt, endAt, capacity, state]
+              properties:
+                id:
+                  type: string
+                  format: uuid
+                startAt:
+                  type: string
+                  format: date-time
+                endAt:
+                  type: string
+                  format: date-time
+                capacity:
+                  type: integer
+                state:
+                  type: string
+                  enum: [open, full, cancelled]
         createdAt:
           type: string
           format: date-time
@@ -4646,7 +6386,7 @@ components:
       type: object
       minProperties: 1
       description: |
-        Partial update. `availability` and `visibility` are rejected here (422); use the
+        Partial update. `availability` and `visibility` are rejected here (400); use the
         dedicated endpoints.
       properties:
         name:
@@ -4922,3 +6662,583 @@ components:
         updatedAt:
           type: string
           format: date-time
+    PlanSectionCounts:
+      type: object
+      description: Non-archived plans per section; ignores `q`, all filters and `status`
+      required:
+        - class_membership
+        - online_coaching
+      properties:
+        class_membership:
+          type: integer
+          example: 53
+        online_coaching:
+          type: integer
+          example: 7
+    CoachBrief:
+      type: object
+      required:
+        - id
+        - fullName
+        - profileImageUrl
+      properties:
+        id:
+          type: string
+          format: uuid
+        fullName:
+          type: string
+          example: Sara Khan
+        profileImageUrl:
+          type: string
+          nullable: true
+    Membership:
+      type: object
+      required:
+        - id
+        - name
+        - description
+        - createdAt
+        - planCount
+        - plans
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+          maxLength: 80
+          example: Class Memberships
+        description:
+          type: string
+          nullable: true
+          maxLength: 500
+        createdAt:
+          type: string
+          format: date-time
+        planCount:
+          type: integer
+          example: 3
+        plans:
+          type: array
+          description: The membership's plans (full plan view); empty for a new membership
+          items:
+            $ref: '#/components/schemas/PlanDetail'
+    CreateMembershipRequest:
+      type: object
+      required:
+        - name
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 80
+          description: Trimmed; unique, ignoring letter case
+          example: Class Memberships
+        description:
+          type: string
+          nullable: true
+          maxLength: 500
+    Slot:
+      type: object
+      required:
+        - id
+        - classId
+        - dayOfWeek
+        - dayName
+        - startDate
+        - startTime
+        - endTime
+        - capacity
+        - active
+        - coaches
+        - createdAt
+        - updatedAt
+      properties:
+        id:
+          type: string
+          format: uuid
+        classId:
+          type: string
+          format: uuid
+        dayOfWeek:
+          type: integer
+          minimum: 1
+          maximum: 7
+          description: 1 = Monday ... 7 = Sunday
+        dayName:
+          type: string
+          example: Monday
+        startDate:
+          type: string
+          format: date
+          description: First date the weekly slot applies (YYYY-MM-DD)
+          example: 2030-06-03
+        startTime:
+          type: string
+          description: Facility-local time, HH:mm
+          example: 09:00
+        endTime:
+          type: string
+          example: 10:00
+        capacity:
+          type: integer
+          nullable: true
+          description: Null means the class base capacity is used
+        active:
+          type: boolean
+        coaches:
+          type: array
+          items:
+            $ref: '#/components/schemas/CoachBrief'
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+    SlotTimeEntry:
+      type: object
+      required:
+        - startTime
+        - endTime
+      properties:
+        startTime:
+          type: string
+          pattern: ^([01]\d|2[0-3]):[0-5]\d$
+          example: 09:00
+        endTime:
+          type: string
+          pattern: ^([01]\d|2[0-3]):[0-5]\d$
+          description: Must be later than `startTime`
+          example: 10:00
+        coachIds:
+          type: array
+          description: No duplicates; each must be an active coach assigned to the class
+          items:
+            type: string
+            format: uuid
+          default: []
+        capacity:
+          type: integer
+          nullable: true
+          minimum: 1
+          maximum: 200
+    CreateSlotsRequest:
+      type: object
+      required:
+        - startDate
+        - days
+      properties:
+        startDate:
+          type: string
+          format: date
+          description: A real calendar date, YYYY-MM-DD; not in the past
+          example: 2030-06-03
+        days:
+          type: array
+          minItems: 1
+          maxItems: 7
+          description: One entry per weekday; a weekday may appear only once
+          items:
+            type: object
+            required:
+              - dayOfWeek
+              - times
+            properties:
+              dayOfWeek:
+                type: integer
+                minimum: 1
+                maximum: 7
+              times:
+                type: array
+                minItems: 1
+                description: Start times must be unique within the day
+                items:
+                  $ref: '#/components/schemas/SlotTimeEntry'
+    UpdateSlotRequest:
+      type: object
+      description: At least one field is required
+      properties:
+        dayOfWeek:
+          type: integer
+          minimum: 1
+          maximum: 7
+        startDate:
+          type: string
+          format: date
+        startTime:
+          type: string
+          example: 09:30
+        endTime:
+          type: string
+          example: 10:30
+        capacity:
+          type: integer
+          nullable: true
+          minimum: 1
+          maximum: 200
+        coachIds:
+          type: array
+          items:
+            type: string
+            format: uuid
+        active:
+          type: boolean
+    CreatedSlots:
+      type: object
+      required:
+        - slots
+        - reconciliation
+      properties:
+        slots:
+          type: array
+          items:
+            $ref: '#/components/schemas/Slot'
+        reconciliation:
+          type: object
+          description: Result of generating sessions for the rolling window after the slots were created
+          required:
+            - generatedCount
+            - conflictCount
+            - windowDays
+          properties:
+            generatedCount:
+              type: integer
+              example: 3
+            conflictCount:
+              type: integer
+              example: 0
+            windowDays:
+              type: integer
+              example: 21
+    DeletedSlot:
+      type: object
+      required:
+        - id
+        - active
+        - removedSessionsCount
+      properties:
+        id:
+          type: string
+          format: uuid
+        active:
+          type: boolean
+          example: false
+        removedSessionsCount:
+          type: integer
+          description: Future, unbooked, non-overridden generated sessions that were removed
+          example: 2
+    SessionClassSummary:
+      type: object
+      nullable: true
+      required:
+        - id
+        - name
+        - classType
+        - intensity
+        - durationMin
+        - baseCapacity
+        - colour
+        - photoUrl
+        - timezone
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        classType:
+          type: string
+          enum:
+            - onsite
+            - online
+        intensity:
+          type: integer
+          nullable: true
+        durationMin:
+          type: integer
+        baseCapacity:
+          type: integer
+        colour:
+          type: string
+          nullable: true
+        photoUrl:
+          type: string
+          nullable: true
+        timezone:
+          type: string
+          example: Asia/Dubai
+    Session:
+      type: object
+      description: A dated occurrence of a class. Times are ISO-8601 UTC; enums are lowercase.
+      required:
+        - id
+        - classId
+        - slotId
+        - className
+        - class
+        - startAt
+        - endAt
+        - durationMin
+        - capacity
+        - bookedCount
+        - waitlistCount
+        - state
+        - isPrivate
+        - intensity
+        - classType
+        - facility
+        - description
+        - image
+        - source
+        - overriddenFields
+        - overrideDetails
+        - cancelReason
+        - coaches
+        - version
+        - createdAt
+        - updatedAt
+      properties:
+        id:
+          type: string
+          format: uuid
+        classId:
+          type: string
+          format: uuid
+        slotId:
+          type: string
+          format: uuid
+          nullable: true
+          description: Null for a one-off session
+        className:
+          type: string
+        class:
+          $ref: '#/components/schemas/SessionClassSummary'
+        startAt:
+          type: string
+          format: date-time
+          example: 2030-06-01T10:00:00.000Z
+        endAt:
+          type: string
+          format: date-time
+        durationMin:
+          type: integer
+          example: 60
+        capacity:
+          type: integer
+        bookedCount:
+          type: integer
+          description: Always 0 until bookings exist
+        waitlistCount:
+          type: integer
+          description: Always 0 until bookings exist
+        state:
+          type: string
+          enum:
+            - open
+            - full
+            - cancelled
+        isPrivate:
+          type: boolean
+        intensity:
+          type: integer
+          nullable: true
+        classType:
+          type: string
+          enum:
+            - onsite
+            - online
+        facility:
+          type: string
+          nullable: true
+        description:
+          type: string
+          nullable: true
+        image:
+          type: string
+          nullable: true
+        source:
+          type: string
+          enum:
+            - generated
+            - one_off
+        overriddenFields:
+          type: array
+          items:
+            type: string
+        overrideDetails:
+          type: object
+          additionalProperties: true
+        cancelReason:
+          type: string
+          nullable: true
+        coaches:
+          type: array
+          items:
+            $ref: '#/components/schemas/CoachBrief'
+        version:
+          type: integer
+          description: Send back as `version` on PATCH to detect concurrent edits
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+    CreateSessionRequest:
+      type: object
+      required:
+        - classId
+        - startAt
+        - endAt
+      properties:
+        classId:
+          type: string
+          format: uuid
+        startAt:
+          type: string
+          format: date-time
+          description: ISO-8601; must be in the future
+        endAt:
+          type: string
+          format: date-time
+          description: Must be later than `startAt`
+        durationMin:
+          type: integer
+          minimum: 15
+          maximum: 240
+          description: Must equal the interval between `startAt` and `endAt`; defaults to the class duration
+        coachIds:
+          type: array
+          description: Defaults to the class coaches; no duplicates
+          items:
+            type: string
+            format: uuid
+        capacity:
+          type: integer
+          nullable: true
+          minimum: 1
+          maximum: 200
+        intensity:
+          type: integer
+          minimum: 1
+          maximum: 5
+        classType:
+          type: string
+          enum:
+            - onsite
+            - online
+        facility:
+          type: string
+          nullable: true
+          maxLength: 100
+        description:
+          type: string
+          nullable: true
+          maxLength: 1000
+        image:
+          type: string
+          nullable: true
+          maxLength: 2048
+        isPrivate:
+          type: boolean
+    PatchSessionRequest:
+      type: object
+      description: |
+        At least one field besides `version` and `overrideReasons` is required. Changing `coachIds`,
+        `startAt` or `endAt` needs a non-empty reason for that field in `overrideReasons`.
+        A COACH may change only `capacity`, and only on their own session.
+      properties:
+        capacity:
+          type: integer
+          minimum: 1
+          maximum: 200
+        startAt:
+          type: string
+          format: date-time
+        endAt:
+          type: string
+          format: date-time
+        durationMin:
+          type: integer
+          minimum: 15
+          maximum: 240
+        coachIds:
+          type: array
+          items:
+            type: string
+            format: uuid
+        intensity:
+          type: integer
+          minimum: 1
+          maximum: 5
+        classType:
+          type: string
+          enum:
+            - onsite
+            - online
+        facility:
+          type: string
+          nullable: true
+        description:
+          type: string
+          nullable: true
+        image:
+          type: string
+          nullable: true
+        isPrivate:
+          type: boolean
+        version:
+          type: integer
+          minimum: 1
+          description: The `version` you last read; a mismatch is 409 `SESSION_VERSION_CONFLICT`
+        overrideReasons:
+          type: object
+          additionalProperties:
+            type: string
+          example:
+            startAt: Moved for the holiday
+    CancelSessionRequest:
+      type: object
+      required:
+        - reason
+      properties:
+        reason:
+          type: string
+          minLength: 1
+          maxLength: 500
+          example: Coach is ill
+    CancelSessionResult:
+      type: object
+      required:
+        - id
+        - state
+        - outcome
+      properties:
+        id:
+          type: string
+          format: uuid
+        state:
+          type: string
+          enum:
+            - cancelled
+        outcome:
+          type: object
+          description: What happened to bookings, credits and the waitlist. All null until booking exists.
+          required:
+            - booking
+            - credit
+            - waitlist
+          properties:
+            booking:
+              nullable: true
+              type: object
+              additionalProperties: true
+            credit:
+              nullable: true
+              type: object
+              additionalProperties: true
+            waitlist:
+              nullable: true
+              type: object
+              additionalProperties: true

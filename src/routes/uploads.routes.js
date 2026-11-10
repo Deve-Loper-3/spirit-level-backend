@@ -1,7 +1,8 @@
 const { Router } = require('express');
 const { validateBody } = require('../middlewares/validate.middleware');
-const { createAuthLimiter } = require('../middlewares/rateLimiter.middleware');
+const { createAuthLimiter, profileLimiter } = require('../middlewares/rateLimiter.middleware');
 const { authenticate } = require('../middlewares/authenticate.middleware');
+const { methodNotAllowed } = require('../middlewares/methodNotAllowed.middleware');
 const {
   profileImageTokenSchema,
   updateProfileImageSchema,
@@ -23,8 +24,13 @@ router.post(
 router.patch(
   '/profile-image',
   authenticate,
+  profileLimiter,
   validateBody(updateProfileImageSchema),
   updateProfileImage,
 );
+
+// Any other method on these paths: 405 with an Allow header (not 404).
+router.all('/profile-image/token', methodNotAllowed(['POST']));
+router.all('/profile-image', methodNotAllowed(['PATCH']));
 
 module.exports = router;

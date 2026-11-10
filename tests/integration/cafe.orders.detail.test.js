@@ -112,22 +112,22 @@ describe('GET /api/v1/cafe/orders/:orderId', () => {
   });
 
   it.each(['userId', 'createdById', 'include'])(
-    'rejects the unknown `%s` query parameter with 422',
+    'rejects the unknown `%s` query parameter with 400',
     async (param) => {
       const res = await request(app)
         .get(url(orderA.id))
         .query({ [param]: coachB.id })
         .set('Authorization', bearerFor(coachB));
-      expect(res.status).toBe(422);
+      expect(res.status).toBe(400);
       expect(res.body.errors).toEqual([
         expect.objectContaining({ field: param, message: 'Unknown query parameter' }),
       ]);
     },
   );
 
-  it('returns 422 for a non-UUID id', async () => {
+  it('returns 400 for a non-UUID id', async () => {
     const res = await get(admin, 'not-a-uuid');
-    expect(res.status).toBe(422);
+    expect(res.status).toBe(400);
     expect(res.body.errors[0].field).toBe('orderId');
   });
 

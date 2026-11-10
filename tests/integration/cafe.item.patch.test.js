@@ -79,21 +79,21 @@ describe('Cafe Item PATCH Endpoints (Update, Availability, Visibility)', () => {
       expect(res.body.data.imageUrl).toBe('https://example.com/new.png');
     });
 
-    it('rejects availability or visibility in core PATCH (422)', async () => {
+    it('rejects availability or visibility in core PATCH (400)', async () => {
       const item = await createTestCafeItem(TEST_PREFIX, { categoryId: defaultCategory.id });
 
       const resAvail = await request(app)
         .patch(`/api/v1/cafe/items/${item.id}`)
         .set('Authorization', bearerFor(adminUser))
         .send({ availability: 'sold_out' });
-      expect(resAvail.status).toBe(422);
+      expect(resAvail.status).toBe(400);
       expect(resAvail.body.errors[0].message).toBe(Messages.ITEM_FIELD_NOT_EDITABLE_HERE);
 
       const resVis = await request(app)
         .patch(`/api/v1/cafe/items/${item.id}`)
         .set('Authorization', bearerFor(adminUser))
         .send({ visibility: 'staff_only' });
-      expect(resVis.status).toBe(422);
+      expect(resVis.status).toBe(400);
       expect(resVis.body.errors[0].message).toBe(Messages.ITEM_FIELD_NOT_EDITABLE_HERE);
     });
 
@@ -188,7 +188,7 @@ describe('Cafe Item PATCH Endpoints (Update, Availability, Visibility)', () => {
       expect(res.body.data.unitCost).toBeNull();
     });
 
-    it('returns 422 when updating with a non-existent categoryId', async () => {
+    it('returns 400 when updating with a non-existent categoryId', async () => {
       const item = await createTestCafeItem(TEST_PREFIX, { categoryId: defaultCategory.id });
       const fakeCatId = '00000000-0000-0000-0000-000000000000';
 
@@ -197,11 +197,11 @@ describe('Cafe Item PATCH Endpoints (Update, Availability, Visibility)', () => {
         .set('Authorization', bearerFor(adminUser))
         .send({ categoryId: fakeCatId });
 
-      expect(res.status).toBe(422);
+      expect(res.status).toBe(400);
       expect(res.body.code).toBe('CATEGORY_NOT_FOUND');
     });
 
-    it('rejects non-https imageUrl with 422', async () => {
+    it('rejects non-https imageUrl with 400', async () => {
       const item = await createTestCafeItem(TEST_PREFIX, { categoryId: defaultCategory.id });
 
       const res = await request(app)
@@ -209,10 +209,10 @@ describe('Cafe Item PATCH Endpoints (Update, Availability, Visibility)', () => {
         .set('Authorization', bearerFor(adminUser))
         .send({ imageUrl: 'http://insecure.com/pic.png' });
 
-      expect(res.status).toBe(422);
+      expect(res.status).toBe(400);
     });
 
-    it('rejects empty body with 422', async () => {
+    it('rejects empty body with 400', async () => {
       const item = await createTestCafeItem(TEST_PREFIX, { categoryId: defaultCategory.id });
 
       const res = await request(app)
@@ -220,7 +220,7 @@ describe('Cafe Item PATCH Endpoints (Update, Availability, Visibility)', () => {
         .set('Authorization', bearerFor(adminUser))
         .send({});
 
-      expect(res.status).toBe(422);
+      expect(res.status).toBe(400);
     });
 
     it('returns 404 for non-existent itemId', async () => {
@@ -391,4 +391,3 @@ describe('Cafe Item PATCH Endpoints (Update, Availability, Visibility)', () => {
     });
   });
 });
-

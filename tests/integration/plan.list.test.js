@@ -48,7 +48,7 @@ describe('GET /api/v1/plans', () => {
     request(app).get('/api/v1/plans').set('Authorization', bearerFor(user)).query(query);
 
   const listAll = async (query = {}) => {
-    const res = await getAs(ownerUser, { pageSize: 100, ...query });
+    const res = await getAs(ownerUser, { limit: 100, ...query });
     expect(res.status).toBe(200);
     return res.body;
   };
@@ -125,7 +125,7 @@ describe('GET /api/v1/plans', () => {
   });
 
   describe('Response shape', () => {
-    it('returns the short list item and { page, pageSize, total, counts }', async () => {
+    it('returns the short list item and pagination and counts', async () => {
       const body = await listAll({ q: 'Priciest' });
 
       expect(body.data).toHaveLength(1);
@@ -158,30 +158,29 @@ describe('GET /api/v1/plans', () => {
         status: 'active',
         activeClientCount: 0,
       });
-      expect(body.meta).toEqual({
-        page: 1,
-        pageSize: 100,
-        total: 1,
-        counts: expect.objectContaining({
+      expect(body.pagination).toEqual({ page: 1, limit: 100, total: 1, totalPages: 1 });
+      expect(body.counts).toEqual(
+        expect.objectContaining({
           class_membership: expect.any(Number),
           online_coaching: 7,
         }),
-      });
+      );
+      expect(body).not.toHaveProperty('meta');
     });
 
     it('defaults to page 1, 20 items per page', async () => {
       const res = await getAs(ownerUser);
-      expect(res.body.meta.page).toBe(1);
-      expect(res.body.meta.pageSize).toBe(20);
+      expect(res.body.pagination.page).toBe(1);
+      expect(res.body.pagination.limit).toBe(20);
       expect(res.body.data).toHaveLength(20);
-      expect(res.body.meta.total).toBeGreaterThan(60);
+      expect(res.body.pagination.total).toBeGreaterThan(60);
     });
   });
 
   describe('Section filter', () => {
     it('online_coaching gives 7 plans and no class plan', async () => {
       const body = await listAll({ section: 'online_coaching' });
-      expect(body.meta.total).toBe(7);
+      expect(body.pagination.total).toBe(7);
       expect(body.data).toHaveLength(7);
       body.data.forEach((plan) => {
         expect(plan.section).toBe('online_coaching');
@@ -191,7 +190,7 @@ describe('GET /api/v1/plans', () => {
 
     it('class_membership gives no coaching plan', async () => {
       const body = await listAll({ section: 'class_membership' });
-      expect(body.meta.total).toBeGreaterThanOrEqual(53);
+      expect(body.pagination.total).toBeGreaterThanOrEqual(53);
       body.data.forEach((plan) => {
         expect(plan.section).toBe('class_membership');
         expect(plan.creditType).not.toBe('time');
@@ -207,7 +206,7 @@ describe('GET /api/v1/plans', () => {
     it('section and a conflicting creditType give an empty page, not an error', async () => {
       const body = await listAll({ section: 'online_coaching', creditType: 'class' });
       expect(body.data).toEqual([]);
-      expect(body.meta.total).toBe(0);
+      expect(body.pagination.total).toBe(0);
     });
   });
 
@@ -232,7 +231,7 @@ describe('GET /api/v1/plans', () => {
 
     it('accepts filters in any letter case and ignores blank ones', async () => {
       const body = await listAll({ section: 'ONLINE_COACHING', kind: '', status: '' });
-      expect(body.meta.total).toBe(7);
+      expect(body.pagination.total).toBe(7);
     });
   });
 
@@ -271,12 +270,12 @@ describe('GET /api/v1/plans', () => {
         'Hyrox Personalised Programming + Nutrition',
         'Nutrition Coaching',
       ]);
-      expect(body.meta.total).toBe(2);
+      expect(body.pagination.total).toBe(2);
     });
 
     it('is case-insensitive', async () => {
       const body = await listAll({ q: 'NUTRITION' });
-      expect(body.meta.total).toBe(2);
+      expect(body.pagination.total).toBe(2);
     });
 
     it('searches the description', async () => {
@@ -306,7 +305,7 @@ describe('GET /api/v1/plans', () => {
     it('returns an empty page when nothing matches', async () => {
       const body = await listAll({ q: 'zzz-no-such-plan' });
       expect(body.data).toEqual([]);
-      expect(body.meta.total).toBe(0);
+      expect(body.pagination.total).toBe(0);
     });
   });
 
@@ -353,12 +352,12 @@ describe('GET /api/v1/plans', () => {
     it.each(['name', '-name', 'price', '-createdAt'])(
       'pages through every plan exactly once with sort=%s',
       async (sort) => {
-        const first = await getAs(ownerUser, { sort, pageSize: 25, page: 1 });
-        const { total } = first.body.meta;
+        const first = await getAs(ownerUser, { sort, limit: 25, page: 1 });
+        const { total } = first.body.pagination;
         const ids = [];
         for (let page = 1; page <= Math.ceil(total / 25); page += 1) {
-          const res = await getAs(ownerUser, { sort, pageSize: 25, page });
-          expect(res.body.meta.page).toBe(page);
+          const res = await getAs(ownerUser, { sort, limit: 25, page });
+          expect(res.body.pagination.page).toBe(page);
           ids.push(...res.body.data.map((plan) => plan.id));
         }
         expect(ids).toHaveLength(total);
@@ -367,10 +366,10 @@ describe('GET /api/v1/plans', () => {
     );
 
     it('returns an empty page, with the real total, past the last page', async () => {
-      const res = await getAs(ownerUser, { page: 99, pageSize: 20 });
+      const res = await getAs(ownerUser, { page: 99, limit: 20 });
       expect(res.status).toBe(200);
       expect(res.body.data).toEqual([]);
-      expect(res.body.meta.total).toBeGreaterThan(60);
+      expect(res.body.pagination.total).toBeGreaterThan(60);
     });
   });
 
@@ -393,16 +392,16 @@ describe('GET /api/v1/plans', () => {
         const byName = await listAll({ ...filters, sort: 'name' });
         const byPrice = await listAll({ ...filters, sort: 'price' });
 
-        expect(byName.meta.total).toBe(byPrice.meta.total);
+        expect(byName.pagination.total).toBe(byPrice.pagination.total);
         expect(byName.data.map((plan) => plan.id).sort()).toEqual(
           byPrice.data.map((plan) => plan.id).sort(),
         );
-        expect(byName.meta.counts).toEqual(byPrice.meta.counts);
+        expect(byName.counts).toEqual(byPrice.counts);
       },
     );
   });
 
-  describe('meta.counts', () => {
+  describe('counts', () => {
     it('counts all non-archived plans per section', async () => {
       const body = await listAll();
       const counts = await prisma.membershipPlan.groupBy({
@@ -412,11 +411,11 @@ describe('GET /api/v1/plans', () => {
       });
       const online = counts.find((c) => c.creditType === 'TIME')._count._all;
       const total = counts.reduce((sum, c) => sum + c._count._all, 0);
-      expect(body.meta.counts).toEqual({
+      expect(body.counts).toEqual({
         class_membership: total - online,
         online_coaching: online,
       });
-      expect(body.meta.counts.online_coaching).toBe(7);
+      expect(body.counts.online_coaching).toBe(7);
     });
 
     it.each([
@@ -426,16 +425,16 @@ describe('GET /api/v1/plans', () => {
       { status: 'inactive' },
       { section: 'online_coaching' },
       { kind: 'trial', visibility: 'public', creditType: 'class' },
-      { page: 3, pageSize: 5 },
+      { page: 3, limit: 5 },
     ])('stay unchanged with %j', async (query) => {
-      const baseline = (await listAll()).meta.counts;
+      const baseline = (await listAll()).counts;
       const res = await getAs(ownerUser, query);
       expect(res.status).toBe(200);
-      expect(res.body.meta.counts).toEqual(baseline);
+      expect(res.body.counts).toEqual(baseline);
     });
   });
 
-  describe('Validation (422)', () => {
+  describe('Validation (400)', () => {
     it.each([
       ['section', { section: 'both' }],
       ['kind', { kind: 'gift' }],
@@ -444,31 +443,31 @@ describe('GET /api/v1/plans', () => {
       ['status', { status: 'active,deleted' }],
       ['sort', { sort: 'email' }],
       ['page', { page: 0 }],
-      ['pageSize', { pageSize: 101 }],
+      ['limit', { limit: 101 }],
       ['q', { q: 'a'.repeat(101) }],
     ])('rejects a bad %s', async (field, query) => {
       const res = await getAs(ownerUser, query);
-      expect(res.status).toBe(422);
+      expect(res.status).toBe(400);
       expect(res.body.success).toBe(false);
       expect(res.body.code).toBe('VALIDATION_ERROR');
       expect(res.body.errors.map((e) => e.field)).toEqual([field]);
     });
 
     it('returns every failing field together', async () => {
-      const res = await getAs(ownerUser, { section: 'x', pageSize: 0, sort: 'y' });
-      expect(res.status).toBe(422);
-      expect(res.body.errors.map((e) => e.field).sort()).toEqual(['pageSize', 'section', 'sort']);
+      const res = await getAs(ownerUser, { section: 'x', limit: 0, sort: 'y' });
+      expect(res.status).toBe(400);
+      expect(res.body.errors.map((e) => e.field).sort()).toEqual(['limit', 'section', 'sort']);
     });
 
     it('ignores unknown params and still applies the known ones', async () => {
       const res = await getAs(ownerUser, {
         section: 'online_coaching',
-        pageSize: 100,
+        limit: 100,
         platform: 'android',
         foo: 'bar',
       });
       expect(res.status).toBe(200);
-      expect(res.body.meta.total).toBe(7);
+      expect(res.body.pagination.total).toBe(7);
     });
 
     it('checks the role before the query: a Member with a bad query gets 403', async () => {
@@ -545,15 +544,15 @@ describe('GET /api/v1/plans', () => {
         for (let probe = 0; probe < 5; probe += 1) probes.push(await timeMs(ping));
         const rtt = median(probes);
 
-        await getAs(ownerUser, { sort, pageSize: 100 }); // warm up
+        await getAs(ownerUser, { sort, limit: 100 }); // warm up
         const timings = [];
         for (let run = 0; run < 7; run += 1) {
           let res;
           timings.push(
-            await timeMs(async () => (res = await getAs(ownerUser, { sort, pageSize: 100 }))),
+            await timeMs(async () => (res = await getAs(ownerUser, { sort, limit: 100 }))),
           );
           expect(res.status).toBe(200);
-          expect(res.body.meta.total).toBeGreaterThanOrEqual(60);
+          expect(res.body.pagination.total).toBeGreaterThanOrEqual(60);
         }
 
         const budget = 300 + SEQUENTIAL_CALLS[sort] * rtt;

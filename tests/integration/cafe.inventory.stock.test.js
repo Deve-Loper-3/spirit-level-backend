@@ -85,7 +85,7 @@ describe('PATCH /api/v1/cafe/items/:itemId/stock', () => {
     });
   });
 
-  describe('validation (422)', () => {
+  describe('validation (400)', () => {
     it.each([
       ['missing quantity', {}],
       ['decimal quantity', { quantity: 2.5 }],
@@ -99,7 +99,7 @@ describe('PATCH /api/v1/cafe/items/:itemId/stock', () => {
         .set('Authorization', bearerFor(adminUser))
         .send(body);
 
-      expect(res.status).toBe(422);
+      expect(res.status).toBe(400);
       expect(res.body.code).toBe('VALIDATION_ERROR');
       expect(res.body.errors).toEqual(
         expect.arrayContaining([expect.objectContaining({ field: 'quantity' })]),
@@ -113,7 +113,7 @@ describe('PATCH /api/v1/cafe/items/:itemId/stock', () => {
         .set('Authorization', bearerFor(adminUser))
         .send({ quantity: 5 });
 
-      expect(res.status).toBe(422);
+      expect(res.status).toBe(400);
       expect(res.body.code).toBe('VALIDATION_ERROR');
     });
   });

@@ -1,3 +1,4 @@
+const crypto = require('crypto');
 const request = require('supertest');
 const { createApp } = require('../../src/app');
 const prisma = require('../../src/config/prisma');
@@ -30,7 +31,10 @@ describe('BE-SCH-1 & BE-SCH-3: Session Endpoints', () => {
 
     adminUser = await testData.createUser({ role: Role.ADMIN, fullName: 'Admin Session Tester' });
     ownerUser = await testData.createUser({ role: Role.OWNER, fullName: 'Owner Session Tester' });
-    memberUser = await testData.createUser({ role: Role.MEMBER, fullName: 'Member Session Tester' });
+    memberUser = await testData.createUser({
+      role: Role.MEMBER,
+      fullName: 'Member Session Tester',
+    });
 
     const coach1 = await testData.createCoach({ user: { fullName: 'Primary Coach' } });
     coachUser = coach1.user;
@@ -92,7 +96,7 @@ describe('BE-SCH-1 & BE-SCH-3: Session Endpoints', () => {
       expect(res.body.data.coaches[0].id).toBe(primaryCoach.id);
     });
 
-    it('rejects past one-off session creation with 422', async () => {
+    it('rejects past one-off session creation with 400', async () => {
       const res = await request(app)
         .post('/api/v1/sessions')
         .set('Authorization', bearerFor(adminUser))
@@ -102,7 +106,7 @@ describe('BE-SCH-1 & BE-SCH-3: Session Endpoints', () => {
           endAt: '2020-01-01T11:00:00.000Z',
         });
 
-      expect(res.status).toBe(422);
+      expect(res.status).toBe(400);
     });
 
     it('rejects same-class same-startAt collision with 409 SESSION_CONFLICT', async () => {
@@ -179,6 +183,70 @@ describe('BE-SCH-1 & BE-SCH-3: Session Endpoints', () => {
       expect(session.bookedCount).toBe(0);
       expect(session.waitlistCount).toBe(0);
     });
+
+    it('uses the shared list envelope: pagination with the default limit of 20, no meta', async () => {
+      const res = await request(app)
+        .get('/api/v1/sessions?from=2030-06-01T00:00:00.000Z&to=2030-06-02T00:00:00.000Z')
+        .set('Authorization', bearerFor(memberUser));
+
+      expect(res.status).toBe(200);
+      expect(res.body.pagination).toMatchObject({ page: 1, limit: 20 });
+      expect(res.body.pagination.total).toBe(res.body.data.length);
+      expect(res.body).not.toHaveProperty('meta');
+    });
+
+    it('rejects the old pageSize name and an out-of-range limit with 400', async () => {
+      const range = 'from=2030-06-01T00:00:00.000Z&to=2030-06-02T00:00:00.000Z';
+      const res = await request(app)
+        .get(`/api/v1/sessions?${range}&limit=101`)
+        .set('Authorization', bearerFor(memberUser));
+
+      expect(res.status).toBe(400);
+      expect(res.body.errors[0].field).toBe('limit');
+    });
+  });
+
+  describe('GET /api/v1/sessions/:id visibility', () => {
+    let privateSessionId;
+
+    beforeAll(async () => {
+      const created = await prisma.classSession.create({
+        data: {
+          id: crypto.randomUUID(),
+          classId: primaryClass.id,
+          startAt: new Date('2030-09-15T08:00:00.000Z'),
+          endAt: new Date('2030-09-15T09:00:00.000Z'),
+          durationMin: 60,
+          capacity: 12,
+          state: 'OPEN',
+          isPrivate: true,
+          version: 1,
+        },
+      });
+      privateSessionId = created.id;
+    });
+
+    it('hides a private session from a MEMBER: 404 SESSION_NOT_FOUND, same as a missing one', async () => {
+      const hidden = await request(app)
+        .get(`/api/v1/sessions/${privateSessionId}`)
+        .set('Authorization', bearerFor(memberUser));
+      const missing = await request(app)
+        .get(`/api/v1/sessions/${crypto.randomUUID()}`)
+        .set('Authorization', bearerFor(memberUser));
+
+      expect(hidden.status).toBe(404);
+      expect(hidden.body).toEqual(missing.body);
+      expect(hidden.body.code).toBe('SESSION_NOT_FOUND');
+    });
+
+    it('still shows the private session to an ADMIN', async () => {
+      const res = await request(app)
+        .get(`/api/v1/sessions/${privateSessionId}`)
+        .set('Authorization', bearerFor(adminUser));
+
+      expect(res.status).toBe(200);
+      expect(res.body.data.id).toBe(privateSessionId);
+    });
   });
 
   describe('PATCH /api/v1/sessions/:id', () => {
@@ -187,7 +255,7 @@ describe('BE-SCH-1 & BE-SCH-3: Session Endpoints', () => {
     beforeAll(async () => {
       const created = await prisma.classSession.create({
         data: {
-          id: 'test-sess-patch-' + Date.now(),
+          id: crypto.randomUUID(),
           classId: primaryClass.id,
           startAt: new Date('2030-07-01T08:00:00.000Z'),
           endAt: new Date('2030-07-01T09:00:00.000Z'),
@@ -213,7 +281,7 @@ describe('BE-SCH-1 & BE-SCH-3: Session Endpoints', () => {
           // Missing overrideReasons.startAt
         });
 
-      expect(res.status).toBe(422);
+      expect(res.status).toBe(400);
     });
 
     it('updates session and tracks overrideDetails when reason is supplied', async () => {
@@ -230,7 +298,9 @@ describe('BE-SCH-1 & BE-SCH-3: Session Endpoints', () => {
       expect(res.status).toBe(200);
       expect(res.body.data.capacity).toBe(18);
       expect(res.body.data.overriddenFields).toContain('capacity');
-      expect(res.body.data.overrideDetails.capacity.reason).toBe('Adding spots for summer workshop');
+      expect(res.body.data.overrideDetails.capacity.reason).toBe(
+        'Adding spots for summer workshop',
+      );
     });
 
     it('denies COACH from modifying non-capacity fields with 403', async () => {
@@ -251,7 +321,7 @@ describe('BE-SCH-1 & BE-SCH-3: Session Endpoints', () => {
     beforeAll(async () => {
       const created = await prisma.classSession.create({
         data: {
-          id: 'test-sess-cancel-' + Date.now(),
+          id: crypto.randomUUID(),
           classId: primaryClass.id,
           startAt: new Date('2030-08-01T08:00:00.000Z'),
           endAt: new Date('2030-08-01T09:00:00.000Z'),
@@ -267,13 +337,13 @@ describe('BE-SCH-1 & BE-SCH-3: Session Endpoints', () => {
       cancelSessionId = created.id;
     });
 
-    it('requires cancel reason with 422 if empty', async () => {
+    it('requires cancel reason with 400 if empty', async () => {
       const res = await request(app)
         .post(`/api/v1/sessions/${cancelSessionId}/cancel`)
         .set('Authorization', bearerFor(adminUser))
         .send({ reason: '' });
 
-      expect(res.status).toBe(422);
+      expect(res.status).toBe(400);
     });
 
     it('cancels session, sets state=cancelled, returns outcome', async () => {

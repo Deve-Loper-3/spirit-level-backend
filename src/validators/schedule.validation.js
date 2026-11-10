@@ -1,10 +1,8 @@
 const z = require('zod');
+const { Messages } = require('../constants/messages');
 const { sendValidationFailed } = require('../utils/validationError.util');
-const { pageField, buildSizeField } = require('./pagination.validation');
-const {
-  SESSION_CAPACITY_MIN,
-  SESSION_CAPACITY_MAX,
-} = require('../constants/session');
+const { paginationQueryFields } = require('./pagination.validation');
+const { SESSION_CAPACITY_MIN, SESSION_CAPACITY_MAX } = require('../constants/session');
 
 const TIME_REGEX = /^([01]\d|2[0-3]):[0-5]\d$/;
 const DATE_REGEX = /^\d{4}-\d{2}-\d{2}$/;
@@ -29,20 +27,20 @@ const isValidIsoDateTime = (str) => {
 const slotTimeEntrySchema = z
   .object({
     startTime: z
-      .string({ error: 'startTime is required' })
-      .regex(TIME_REGEX, 'startTime must be in HH:mm format (00:00 to 23:59)'),
+      .string({ error: Messages.SLOT_START_TIME_REQUIRED })
+      .regex(TIME_REGEX, Messages.SLOT_START_TIME_INVALID),
     endTime: z
-      .string({ error: 'endTime is required' })
-      .regex(TIME_REGEX, 'endTime must be in HH:mm format (00:00 to 23:59)'),
+      .string({ error: Messages.SLOT_END_TIME_REQUIRED })
+      .regex(TIME_REGEX, Messages.SLOT_END_TIME_INVALID),
     coachIds: z
-      .array(z.string().regex(UUID_REGEX, 'Each coachId must be a valid UUID'))
+      .array(z.string().regex(UUID_REGEX, Messages.COACH_IDS_ITEM_INVALID))
       .optional()
       .default([]),
     capacity: z
       .number()
-      .int('capacity must be an integer')
-      .min(SESSION_CAPACITY_MIN, `capacity must be at least ${SESSION_CAPACITY_MIN}`)
-      .max(SESSION_CAPACITY_MAX, `capacity must be at most ${SESSION_CAPACITY_MAX}`)
+      .int(Messages.SESSION_CAPACITY_INTEGER)
+      .min(SESSION_CAPACITY_MIN, Messages.SESSION_CAPACITY_MIN_MSG(SESSION_CAPACITY_MIN))
+      .max(SESSION_CAPACITY_MAX, Messages.SESSION_CAPACITY_MAX_MSG(SESSION_CAPACITY_MAX))
       .nullable()
       .optional(),
   })
@@ -51,7 +49,7 @@ const slotTimeEntrySchema = z
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
         path: ['endTime'],
-        message: 'endTime must be later than startTime',
+        message: Messages.SLOT_END_BEFORE_START,
       });
     }
     if (Array.isArray(data.coachIds)) {
@@ -60,7 +58,7 @@ const slotTimeEntrySchema = z
         ctx.addIssue({
           code: z.ZodIssueCode.custom,
           path: ['coachIds'],
-          message: 'coachIds cannot contain duplicate IDs',
+          message: Messages.COACH_IDS_DUPLICATE,
         });
       }
     }
@@ -69,13 +67,11 @@ const slotTimeEntrySchema = z
 const slotDayEntrySchema = z
   .object({
     dayOfWeek: z
-      .number({ error: 'dayOfWeek is required' })
-      .int('dayOfWeek must be an integer')
-      .min(1, 'dayOfWeek must be between 1 (Monday) and 7 (Sunday)')
-      .max(7, 'dayOfWeek must be between 1 (Monday) and 7 (Sunday)'),
-    times: z
-      .array(slotTimeEntrySchema)
-      .min(1, 'times array must contain at least one time entry'),
+      .number({ error: Messages.DAY_OF_WEEK_REQUIRED })
+      .int(Messages.DAY_OF_WEEK_INTEGER)
+      .min(1, Messages.DAY_OF_WEEK_RANGE_DAYS)
+      .max(7, Messages.DAY_OF_WEEK_RANGE_DAYS),
+    times: z.array(slotTimeEntrySchema).min(1, Messages.SLOT_TIMES_REQUIRED),
   })
   .superRefine((data, ctx) => {
     const startTimes = new Set();
@@ -84,7 +80,7 @@ const slotDayEntrySchema = z
         ctx.addIssue({
           code: z.ZodIssueCode.custom,
           path: ['times', idx, 'startTime'],
-          message: `Duplicate startTime '${t.startTime}' on dayOfWeek ${data.dayOfWeek}`,
+          message: Messages.SLOT_START_TIME_DUPLICATE(t.startTime, data.dayOfWeek),
         });
       }
       startTimes.add(t.startTime);
@@ -94,12 +90,12 @@ const slotDayEntrySchema = z
 const createSlotsBodySchema = z
   .object({
     startDate: z
-      .string({ error: 'startDate is required' })
-      .refine(isValidDateString, 'startDate must be a valid calendar date in YYYY-MM-DD format'),
+      .string({ error: Messages.START_DATE_REQUIRED })
+      .refine(isValidDateString, Messages.START_DATE_INVALID),
     days: z
       .array(slotDayEntrySchema)
-      .min(1, 'days array must contain at least one day entry')
-      .max(7, 'days array cannot contain more than 7 entries'),
+      .min(1, Messages.SLOT_DAYS_REQUIRED)
+      .max(7, Messages.SLOT_DAYS_MAX),
   })
   .superRefine((data, ctx) => {
     const daysSeen = new Set();
@@ -108,7 +104,7 @@ const createSlotsBodySchema = z
         ctx.addIssue({
           code: z.ZodIssueCode.custom,
           path: ['days', idx, 'dayOfWeek'],
-          message: `Duplicate dayOfWeek '${d.dayOfWeek}' in request body`,
+          message: Messages.SLOT_DAY_DUPLICATE(d.dayOfWeek),
         });
       }
       daysSeen.add(d.dayOfWeek);
@@ -120,15 +116,12 @@ const updateSlotBodySchema = z
     dayOfWeek: z
       .number()
       .int()
-      .min(1, 'dayOfWeek must be between 1 and 7')
-      .max(7, 'dayOfWeek must be between 1 and 7')
+      .min(1, Messages.DAY_OF_WEEK_RANGE)
+      .max(7, Messages.DAY_OF_WEEK_RANGE)
       .optional(),
-    startDate: z
-      .string()
-      .refine(isValidDateString, 'startDate must be a valid calendar date in YYYY-MM-DD format')
-      .optional(),
-    startTime: z.string().regex(TIME_REGEX, 'startTime must be in HH:mm format').optional(),
-    endTime: z.string().regex(TIME_REGEX, 'endTime must be in HH:mm format').optional(),
+    startDate: z.string().refine(isValidDateString, Messages.START_DATE_INVALID).optional(),
+    startTime: z.string().regex(TIME_REGEX, Messages.SLOT_START_TIME_FORMAT).optional(),
+    endTime: z.string().regex(TIME_REGEX, Messages.SLOT_END_TIME_FORMAT).optional(),
     capacity: z
       .number()
       .int()
@@ -136,9 +129,7 @@ const updateSlotBodySchema = z
       .max(SESSION_CAPACITY_MAX)
       .nullable()
       .optional(),
-    coachIds: z
-      .array(z.string().regex(UUID_REGEX, 'Each coachId must be a valid UUID'))
-      .optional(),
+    coachIds: z.array(z.string().regex(UUID_REGEX, Messages.COACH_IDS_ITEM_INVALID)).optional(),
     active: z.boolean().optional(),
   })
   .superRefine((data, ctx) => {
@@ -147,14 +138,14 @@ const updateSlotBodySchema = z
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
         path: [],
-        message: 'Provide at least one field to update',
+        message: Messages.SLOT_UPDATE_EMPTY,
       });
     }
     if (data.startTime && data.endTime && data.endTime <= data.startTime) {
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
         path: ['endTime'],
-        message: 'endTime must be later than startTime',
+        message: Messages.SLOT_END_BEFORE_START,
       });
     }
     if (Array.isArray(data.coachIds)) {
@@ -163,7 +154,7 @@ const updateSlotBodySchema = z
         ctx.addIssue({
           code: z.ZodIssueCode.custom,
           path: ['coachIds'],
-          message: 'coachIds cannot contain duplicate IDs',
+          message: Messages.COACH_IDS_DUPLICATE,
         });
       }
     }
@@ -171,7 +162,10 @@ const updateSlotBodySchema = z
 
 const listSlotsQuerySchema = z.object({
   includeInactive: z
-    .preprocess((v) => (typeof v === 'string' ? v.trim().toLowerCase() : v), z.enum(['true', 'false']))
+    .preprocess(
+      (v) => (typeof v === 'string' ? v.trim().toLowerCase() : v),
+      z.enum(['true', 'false']),
+    )
     .optional(),
 });
 
@@ -182,25 +176,26 @@ const listSlotsQuerySchema = z.object({
 const listSessionsQuerySchema = z
   .object({
     from: z
-      .string({ error: 'from query parameter is required' })
-      .refine(isValidIsoDateTime, 'from must be a valid ISO-8601 date string'),
+      .string({ error: Messages.SESSION_FROM_REQUIRED })
+      .refine(isValidIsoDateTime, Messages.SESSION_FROM_INVALID),
     to: z
-      .string({ error: 'to query parameter is required' })
-      .refine(isValidIsoDateTime, 'to must be a valid ISO-8601 date string'),
-    classId: z.string().regex(UUID_REGEX, 'classId must be a valid UUID').optional(),
-    coachId: z.string().regex(UUID_REGEX, 'coachId must be a valid UUID').optional(),
+      .string({ error: Messages.SESSION_TO_REQUIRED })
+      .refine(isValidIsoDateTime, Messages.SESSION_TO_INVALID),
+    classId: z.string().regex(UUID_REGEX, Messages.SESSION_CLASS_ID_FILTER_INVALID).optional(),
+    coachId: z.string().regex(UUID_REGEX, Messages.SESSION_COACH_ID_FILTER_INVALID).optional(),
     state: z
-      .preprocess((v) => (typeof v === 'string' ? v.trim().toLowerCase() : v), z.enum(['open', 'full', 'cancelled']))
+      .preprocess(
+        (v) => (typeof v === 'string' ? v.trim().toLowerCase() : v),
+        z.enum(['open', 'full', 'cancelled']),
+      )
       .optional(),
     isPrivate: z
-      .preprocess((v) => (typeof v === 'string' ? v.trim().toLowerCase() === 'true' : v), z.boolean())
+      .preprocess(
+        (v) => (typeof v === 'string' ? v.trim().toLowerCase() === 'true' : v),
+        z.boolean(),
+      )
       .optional(),
-    page: pageField,
-    pageSize: buildSizeField({
-      message: 'Page size must be a whole number between 1 and 100',
-      max: 100,
-      defaultValue: 100,
-    }),
+    ...paginationQueryFields,
   })
   .superRefine((data, ctx) => {
     const fromDate = new Date(data.from);
@@ -210,7 +205,7 @@ const listSessionsQuerySchema = z
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
         path: ['to'],
-        message: 'to date must be greater than or equal to from date',
+        message: Messages.SESSION_RANGE_INVALID,
       });
     }
 
@@ -219,7 +214,7 @@ const listSessionsQuerySchema = z
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
         path: ['to'],
-        message: 'The date range between from and to cannot exceed 92 days',
+        message: Messages.SESSION_RANGE_TOO_LONG,
       });
     }
   });
@@ -227,33 +222,34 @@ const listSessionsQuerySchema = z
 const createSessionBodySchema = z
   .object({
     classId: z
-      .string({ error: 'classId is required' })
-      .regex(UUID_REGEX, 'classId must be a valid UUID'),
+      .string({ error: Messages.SESSION_CLASS_ID_REQUIRED })
+      .regex(UUID_REGEX, Messages.SESSION_CLASS_ID_FILTER_INVALID),
     startAt: z
-      .string({ error: 'startAt is required' })
-      .refine(isValidIsoDateTime, 'startAt must be a valid ISO-8601 date string'),
+      .string({ error: Messages.SESSION_START_REQUIRED })
+      .refine(isValidIsoDateTime, Messages.SESSION_START_INVALID),
     endAt: z
-      .string({ error: 'endAt is required' })
-      .refine(isValidIsoDateTime, 'endAt must be a valid ISO-8601 date string'),
+      .string({ error: Messages.SESSION_END_REQUIRED })
+      .refine(isValidIsoDateTime, Messages.SESSION_END_INVALID),
     durationMin: z
       .number()
-      .int('durationMin must be an integer')
-      .min(15, 'durationMin must be at least 15')
-      .max(240, 'durationMin must be at most 240')
+      .int(Messages.SESSION_DURATION_INTEGER)
+      .min(15, Messages.SESSION_DURATION_MIN)
+      .max(240, Messages.SESSION_DURATION_MAX)
       .optional(),
-    coachIds: z
-      .array(z.string().regex(UUID_REGEX, 'Each coachId must be a valid UUID'))
-      .optional(),
+    coachIds: z.array(z.string().regex(UUID_REGEX, Messages.COACH_IDS_ITEM_INVALID)).optional(),
     capacity: z
       .number()
-      .int('capacity must be an integer')
-      .min(SESSION_CAPACITY_MIN, `capacity must be at least ${SESSION_CAPACITY_MIN}`)
-      .max(SESSION_CAPACITY_MAX, `capacity must be at most ${SESSION_CAPACITY_MAX}`)
+      .int(Messages.SESSION_CAPACITY_INTEGER)
+      .min(SESSION_CAPACITY_MIN, Messages.SESSION_CAPACITY_MIN_MSG(SESSION_CAPACITY_MIN))
+      .max(SESSION_CAPACITY_MAX, Messages.SESSION_CAPACITY_MAX_MSG(SESSION_CAPACITY_MAX))
       .nullable()
       .optional(),
     intensity: z.number().int().min(1).max(5).optional(),
     classType: z
-      .preprocess((v) => (typeof v === 'string' ? v.trim().toLowerCase() : v), z.enum(['onsite', 'online']))
+      .preprocess(
+        (v) => (typeof v === 'string' ? v.trim().toLowerCase() : v),
+        z.enum(['onsite', 'online']),
+      )
       .optional(),
     facility: z.string().trim().max(100).optional().nullable(),
     description: z.string().trim().max(1000).optional().nullable(),
@@ -267,7 +263,7 @@ const createSessionBodySchema = z
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
         path: ['endAt'],
-        message: 'endAt must be later than startAt',
+        message: Messages.SESSION_END_BEFORE_START,
       });
     }
     if (Array.isArray(data.coachIds)) {
@@ -276,7 +272,7 @@ const createSessionBodySchema = z
         ctx.addIssue({
           code: z.ZodIssueCode.custom,
           path: ['coachIds'],
-          message: 'coachIds cannot contain duplicate IDs',
+          message: Messages.COACH_IDS_DUPLICATE,
         });
       }
     }
@@ -284,27 +280,17 @@ const createSessionBodySchema = z
 
 const patchSessionBodySchema = z
   .object({
-    capacity: z
-      .number()
-      .int()
-      .min(SESSION_CAPACITY_MIN)
-      .max(SESSION_CAPACITY_MAX)
-      .optional(),
-    startAt: z
-      .string()
-      .refine(isValidIsoDateTime, 'startAt must be a valid ISO-8601 date string')
-      .optional(),
-    endAt: z
-      .string()
-      .refine(isValidIsoDateTime, 'endAt must be a valid ISO-8601 date string')
-      .optional(),
+    capacity: z.number().int().min(SESSION_CAPACITY_MIN).max(SESSION_CAPACITY_MAX).optional(),
+    startAt: z.string().refine(isValidIsoDateTime, Messages.SESSION_START_INVALID).optional(),
+    endAt: z.string().refine(isValidIsoDateTime, Messages.SESSION_END_INVALID).optional(),
     durationMin: z.number().int().min(15).max(240).optional(),
-    coachIds: z
-      .array(z.string().regex(UUID_REGEX, 'Each coachId must be a valid UUID'))
-      .optional(),
+    coachIds: z.array(z.string().regex(UUID_REGEX, Messages.COACH_IDS_ITEM_INVALID)).optional(),
     intensity: z.number().int().min(1).max(5).optional(),
     classType: z
-      .preprocess((v) => (typeof v === 'string' ? v.trim().toLowerCase() : v), z.enum(['onsite', 'online']))
+      .preprocess(
+        (v) => (typeof v === 'string' ? v.trim().toLowerCase() : v),
+        z.enum(['onsite', 'online']),
+      )
       .optional(),
     facility: z.string().trim().max(100).optional().nullable(),
     description: z.string().trim().max(1000).optional().nullable(),
@@ -321,7 +307,7 @@ const patchSessionBodySchema = z
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
         path: [],
-        message: 'Provide at least one field to update',
+        message: Messages.SESSION_UPDATE_EMPTY,
       });
     }
     if (data.startAt && data.endAt) {
@@ -331,7 +317,7 @@ const patchSessionBodySchema = z
         ctx.addIssue({
           code: z.ZodIssueCode.custom,
           path: ['endAt'],
-          message: 'endAt must be later than startAt',
+          message: Messages.SESSION_END_BEFORE_START,
         });
       }
     }
@@ -339,10 +325,10 @@ const patchSessionBodySchema = z
 
 const cancelSessionBodySchema = z.object({
   reason: z
-    .string({ error: 'reason is required' })
+    .string({ error: Messages.SESSION_CANCEL_REASON_FIELD_REQUIRED })
     .trim()
-    .min(1, 'Cancellation reason cannot be empty')
-    .max(500, 'Cancellation reason must be at most 500 characters'),
+    .min(1, Messages.SESSION_CANCEL_REASON_EMPTY)
+    .max(500, Messages.SESSION_CANCEL_REASON_TOO_LONG),
 });
 
 // Middleware Functions

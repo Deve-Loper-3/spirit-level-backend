@@ -69,11 +69,11 @@ const deleteSlot = async (req, res, next) => {
 // Session Controllers
 const listSessions = async (req, res, next) => {
   try {
-    const { sessions, meta } = await scheduleService.listSessions({
+    const { sessions, pagination } = await scheduleService.listSessions({
       user: req.user,
       query: req.validatedQuery,
     });
-    return sendSuccess(res, { data: sessions, meta });
+    return sendSuccess(res, { data: sessions, pagination });
   } catch (err) {
     return next(err);
   }

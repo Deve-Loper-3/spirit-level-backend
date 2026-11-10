@@ -17,7 +17,6 @@ const createMembership = async (req, res, next) => {
       payload: req.validatedBody || req.body,
     });
 
-    res.setHeader('Location', `/api/v1/memberships/${membership.id}`);
     return sendSuccess(res, {
       statusCode: 201,
       message: Messages.MEMBERSHIP_CREATED_SUCCESS,

@@ -1,11 +1,7 @@
 const { isUniqueConstraintError } = require('../utils/prismaError.util');
 const { createAppError } = require('../errors/AppError');
 const { AppErrors } = require('../constants/errors');
-const {
-  findByName,
-  create,
-  listWithPlans,
-} = require('../repositories/membership.repository');
+const { findByName, create, listWithPlans } = require('../repositories/membership.repository');
 const { toMembershipPlanResponse } = require('../repositories/membershipPlan.mapper');
 
 const isMembershipNameUniqueError = (err) => {

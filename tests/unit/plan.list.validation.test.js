@@ -7,10 +7,10 @@ const parse = (query) => listPlansQuerySchema.safeParse(query);
 const fieldsOf = (result) => result.error.issues.map((issue) => issue.path.join('.'));
 
 describe('listPlansQuerySchema', () => {
-  it('applies the defaults: page 1, pageSize 20, sort by name', () => {
+  it('applies the defaults: page 1, limit 20, sort by name', () => {
     expect(parse({}).data).toEqual({
       page: 1,
-      pageSize: 20,
+      limit: 20,
       sort: { field: 'name', direction: 'asc' },
     });
   });
@@ -24,7 +24,7 @@ describe('listPlansQuerySchema', () => {
       q: '  nutrition ',
       sort: '-price',
       page: '2',
-      pageSize: '5',
+      limit: '5',
     });
     expect(data).toEqual({
       section: 'online_coaching',
@@ -34,7 +34,7 @@ describe('listPlansQuerySchema', () => {
       q: 'nutrition',
       sort: { field: 'price', direction: 'desc' },
       page: 2,
-      pageSize: 5,
+      limit: 5,
     });
   });
 
@@ -73,7 +73,7 @@ describe('listPlansQuerySchema', () => {
       status: 'active,bogus',
       sort: 'email',
       page: '0',
-      pageSize: '101',
+      limit: '101',
       q: 'a'.repeat(101),
     });
     expect(result.success).toBe(false);
@@ -86,7 +86,7 @@ describe('listPlansQuerySchema', () => {
         'status',
         'sort',
         'page',
-        'pageSize',
+        'limit',
         'q',
       ].sort(),
     );
@@ -112,13 +112,13 @@ describe('validateListPlansQuery', () => {
     expect(req.validatedQuery.section).toBe('class_membership');
   });
 
-  it('answers 422 with every failing field', () => {
-    const { res, next } = run({ section: 'x', pageSize: '0' });
+  it('answers 400 with every failing field', () => {
+    const { res, next } = run({ section: 'x', limit: '0' });
     expect(next).not.toHaveBeenCalled();
-    expect(res.status).toHaveBeenCalledWith(422);
+    expect(res.status).toHaveBeenCalledWith(400);
     const body = res.json.mock.calls[0][0];
     expect(body.success).toBe(false);
     expect(body.code).toBe('VALIDATION_ERROR');
-    expect(body.errors.map((e) => e.field).sort()).toEqual(['pageSize', 'section']);
+    expect(body.errors.map((e) => e.field).sort()).toEqual(['limit', 'section']);
   });
 });

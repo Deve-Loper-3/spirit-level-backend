@@ -108,57 +108,57 @@ describe('PATCH /api/v1/classes/:id', () => {
   });
 
   describe('Validation & Endpoint Rules', () => {
-    it('returns 422 for empty update body', async () => {
+    it('returns 400 for empty update body', async () => {
       const res = await request(app)
         .patch(`/api/v1/classes/${targetClass.id}`)
         .set('Authorization', bearerFor(adminUser))
         .send({});
 
-      expect(res.status).toBe(422);
+      expect(res.status).toBe(400);
     });
 
-    it('returns 422 when trying to update eligiblePlanIds', async () => {
+    it('returns 400 when trying to update eligiblePlanIds', async () => {
       const res = await request(app)
         .patch(`/api/v1/classes/${targetClass.id}`)
         .set('Authorization', bearerFor(adminUser))
         .send({ eligiblePlanIds: [plan.id] });
 
-      expect(res.status).toBe(422);
+      expect(res.status).toBe(400);
       expect(res.body.errors[0].field).toBe('eligiblePlanIds');
     });
 
-    it('returns 422 when trying to update active', async () => {
+    it('returns 400 when trying to update active', async () => {
       const res = await request(app)
         .patch(`/api/v1/classes/${targetClass.id}`)
         .set('Authorization', bearerFor(adminUser))
         .send({ active: false });
 
-      expect(res.status).toBe(422);
+      expect(res.status).toBe(400);
       expect(res.body.errors[0].field).toBe('active');
     });
 
-    it('returns 422 when trying to update non-editable or unknown field', async () => {
+    it('returns 400 when trying to update non-editable or unknown field', async () => {
       const res = await request(app)
         .patch(`/api/v1/classes/${targetClass.id}`)
         .set('Authorization', bearerFor(adminUser))
         .send({ externalRef: 'ext-123' });
 
-      expect(res.status).toBe(422);
+      expect(res.status).toBe(400);
       expect(res.body.errors[0].field).toBe('externalRef');
     });
 
-    it('returns 422 when intensity is explicitly null or 0', async () => {
+    it('returns 400 when intensity is explicitly null or 0', async () => {
       const res1 = await request(app)
         .patch(`/api/v1/classes/${targetClass.id}`)
         .set('Authorization', bearerFor(adminUser))
         .send({ intensity: null });
-      expect(res1.status).toBe(422);
+      expect(res1.status).toBe(400);
 
       const res2 = await request(app)
         .patch(`/api/v1/classes/${targetClass.id}`)
         .set('Authorization', bearerFor(adminUser))
         .send({ intensity: 0 });
-      expect(res2.status).toBe(422);
+      expect(res2.status).toBe(400);
     });
 
     it('leaves intensity unchanged when omitted in PATCH', async () => {
@@ -172,33 +172,33 @@ describe('PATCH /api/v1/classes/:id', () => {
       expect(res.body.data.description).toBe('Updated existing intensity class');
     });
 
-    it('returns 422 when merged classpassSpots > baseCapacity', async () => {
+    it('returns 400 when merged classpassSpots > baseCapacity', async () => {
       const res = await request(app)
         .patch(`/api/v1/classes/${targetClass.id}`)
         .set('Authorization', bearerFor(adminUser))
         .send({ baseCapacity: 10, classpassSpots: 15 });
 
-      expect(res.status).toBe(422);
+      expect(res.status).toBe(400);
       expect(res.body.errors[0].field).toBe('classpassSpots');
     });
 
-    it('returns 422 when classPassEnabled=false but classpassSpots > 0', async () => {
+    it('returns 400 when classPassEnabled=false but classpassSpots > 0', async () => {
       const res = await request(app)
         .patch(`/api/v1/classes/${targetClass.id}`)
         .set('Authorization', bearerFor(adminUser))
         .send({ classPassEnabled: false, classpassSpots: 3 });
 
-      expect(res.status).toBe(422);
+      expect(res.status).toBe(400);
       expect(res.body.errors[0].field).toBe('classpassSpots');
     });
 
-    it('returns 422 when private class with 0 plans changes visibility to public', async () => {
+    it('returns 400 when private class with 0 plans changes visibility to public', async () => {
       const res = await request(app)
         .patch(`/api/v1/classes/${privateClassNoPlans.id}`)
         .set('Authorization', bearerFor(adminUser))
         .send({ visibility: 'public' });
 
-      expect(res.status).toBe(422);
+      expect(res.status).toBe(400);
       expect(res.body.errors[0].field).toBe('visibility');
     });
   });

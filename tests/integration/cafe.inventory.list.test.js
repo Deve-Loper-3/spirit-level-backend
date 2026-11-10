@@ -256,7 +256,7 @@ describe('GET /api/v1/cafe/inventory', () => {
     });
   });
 
-  describe('validation (422)', () => {
+  describe('validation (400)', () => {
     it.each([
       ['page 0', { page: 0 }],
       ['non-numeric page', { page: 'abc' }],
@@ -266,7 +266,7 @@ describe('GET /api/v1/cafe/inventory', () => {
     ])('rejects %s', async (_label, query) => {
       const res = await getInventory(query);
 
-      expect(res.status).toBe(422);
+      expect(res.status).toBe(400);
       expect(res.body.code).toBe('VALIDATION_ERROR');
       expect(res.body.errors.length).toBeGreaterThan(0);
     });

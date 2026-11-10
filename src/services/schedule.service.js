@@ -12,6 +12,8 @@ const { Messages } = require('../constants/messages');
 const { AppErrors } = require('../constants/errors');
 const { createAppError } = require('../errors/AppError');
 const { isUniqueConstraintError } = require('../utils/prismaError.util');
+const { DEFAULT_PAGE, DEFAULT_LIMIT } = require('../constants/pagination');
+const { toSkipTake, buildPagination } = require('../utils/pagination.util');
 
 const scheduleRepository = require('../repositories/schedule.repository');
 const classRepository = require('../repositories/class.repository');
@@ -57,7 +59,14 @@ const localDateTimeToUtc = (dateStr, timeStr, timeZone = 'Asia/Dubai') => {
   if (targetHour === 24) targetHour = 0;
   const targetMinute = parseInt(getPart('minute'), 10);
 
-  const formattedAsUtc = Date.UTC(targetYear, targetMonth - 1, targetDay, targetHour, targetMinute, 0);
+  const formattedAsUtc = Date.UTC(
+    targetYear,
+    targetMonth - 1,
+    targetDay,
+    targetHour,
+    targetMinute,
+    0,
+  );
   const offsetMs = formattedAsUtc - utcGuess.getTime();
   return new Date(utcGuess.getTime() - offsetMs);
 };
@@ -85,8 +94,9 @@ const getIsoDayOfWeek = (dateStr) => {
   return day === 0 ? 7 : day;
 };
 
-// Visibility Enforcement Helper
-const assertClassReadableByUser = (classRecord, user) => {
+// Visibility Enforcement Helper. What the caller may not see is reported as not found (404, with the
+// resource's own error), never 403, so a hidden class or session looks the same as a missing one.
+const assertClassReadableByUser = (classRecord, user, notFound = AppErrors.CLASS_NOT_FOUND) => {
   if (!classRecord) {
     throw createAppError(AppErrors.CLASS_NOT_FOUND);
   }
@@ -96,17 +106,17 @@ const assertClassReadableByUser = (classRecord, user) => {
 
   if (user.role === Role.MEMBER) {
     if (!isActive || !isPublic) {
-      throw createAppError(AppErrors.FORBIDDEN);
+      throw createAppError(notFound);
     }
   } else if (user.role === Role.COACH) {
     const isAssigned =
       Array.isArray(classRecord.coaches) &&
       classRecord.coaches.some(
-        (cc) => (cc.coach?.userId === user.id) || (cc.coachId && user.coachId === cc.coachId),
+        (cc) => cc.coach?.userId === user.id || (cc.coachId && user.coachId === cc.coachId),
       );
 
     if (!isPublic && !isAssigned) {
-      throw createAppError(AppErrors.FORBIDDEN);
+      throw createAppError(notFound);
     }
   }
 };
@@ -132,10 +142,10 @@ const validateCoachesForInterval = async ({
     const coach = coachMap.get(coachId);
     if (!coach || coach.status !== 'ACTIVE' || coach.user?.status === 'DISABLED') {
       throw createAppError(
-        422,
-        `Coach ${coachId} does not exist or is not active`,
+        400,
+        Messages.SESSION_COACH_NOT_ACTIVE(coachId),
         AppErrors.VALIDATION_ERROR.code,
-        [{ field: 'coachIds', message: `Coach ${coachId} is inactive or not found` }],
+        [{ field: 'coachIds', message: Messages.SESSION_COACH_NOT_ACTIVE_FIELD(coachId) }],
       );
     }
   }
@@ -148,10 +158,15 @@ const validateCoachesForInterval = async ({
     for (const coachId of dedupedIds) {
       if (!classCoachIds.has(coachId)) {
         throw createAppError(
-          422,
-          `Coach ${coachId} is not assigned to class ${classRecord.name || classRecord.id}`,
+          400,
+          Messages.SESSION_COACH_NOT_ASSIGNED(coachId, classRecord.name || classRecord.id),
           AppErrors.VALIDATION_ERROR.code,
-          [{ field: 'coachIds', message: `Coach ${coachId} is not assigned to this class template` }],
+          [
+            {
+              field: 'coachIds',
+              message: Messages.SESSION_COACH_NOT_ASSIGNED_FIELD(coachId),
+            },
+          ],
         );
       }
     }
@@ -163,7 +178,7 @@ const validateCoachesForInterval = async ({
     if (!qualified) {
       throw createAppError(
         AppErrors.COACH_CONFLICT,
-        `Coach ${coachId} is not qualified for this class`,
+        Messages.SESSION_COACH_NOT_QUALIFIED(coachId),
         AppErrors.COACH_CONFLICT.code,
         {
           conflicts: [
@@ -183,7 +198,7 @@ const validateCoachesForInterval = async ({
     if (onLeave) {
       throw createAppError(
         AppErrors.COACH_CONFLICT,
-        `Coach ${coachId} is on approved leave during this time`,
+        Messages.SESSION_COACH_ON_LEAVE(coachId),
         AppErrors.COACH_CONFLICT.code,
         {
           conflicts: [
@@ -272,7 +287,9 @@ const generateSessionsForWindow = async ({
   // 2. Batch preload coaches across all active slots
   const allCoachIds = Array.from(
     new Set(
-      activeSlots.flatMap((s) => (s.coaches || []).map((c) => c.coachId || c.coach?.id).filter(Boolean)),
+      activeSlots.flatMap((s) =>
+        (s.coaches || []).map((c) => c.coachId || c.coach?.id).filter(Boolean),
+      ),
     ),
   );
   const coaches = await scheduleRepository.findCoachesByIdsWithDetails(allCoachIds, client);
@@ -506,10 +523,10 @@ const createSlots = async ({ classId, payload, user: _user }) => {
 
     if (startDate < todayStr) {
       throw createAppError(
-        422,
-        `startDate (${startDate}) cannot be in the past (today is ${todayStr})`,
+        400,
+        Messages.SLOT_START_DATE_IN_PAST(startDate, todayStr),
         AppErrors.VALIDATION_ERROR.code,
-        [{ field: 'startDate', message: 'startDate cannot be in the past' }],
+        [{ field: 'startDate', message: Messages.SLOT_START_DATE_PAST_FIELD }],
       );
     }
 
@@ -639,7 +656,8 @@ const updateSlot = async ({ slotId, classId, payload, user: _user }) => {
     // Validate coaches if updated
     if (coachIds !== undefined && coachIds !== null && coachIds.length > 0) {
       const timezone = classRecord.timezone || env.FACILITY_TIMEZONE || 'Asia/Dubai';
-      const targetStartDate = startDate !== undefined ? startDate : formatDateYYYYMMDD(slot.startDate);
+      const targetStartDate =
+        startDate !== undefined ? startDate : formatDateYYYYMMDD(slot.startDate);
       const targetEndTime = endTime !== undefined ? endTime : formatTimeHHMM(slot.endTime);
       const sampleStart = localDateTimeToUtc(targetStartDate, targetStartTime, timezone);
       const sampleEnd = localDateTimeToUtc(targetStartDate, targetEndTime, timezone);
@@ -724,7 +742,16 @@ const deleteSlot = async ({ slotId, classId, user: _user }) => {
 // ==========================================
 
 const listSessions = async ({ user, query }) => {
-  const { from, to, classId, coachId, state, isPrivate, page = 1, pageSize = 100 } = query;
+  const {
+    from,
+    to,
+    classId,
+    coachId,
+    state,
+    isPrivate,
+    page = DEFAULT_PAGE,
+    limit = DEFAULT_LIMIT,
+  } = query;
 
   const fromDate = new Date(from);
   const toDate = new Date(to);
@@ -738,8 +765,7 @@ const listSessions = async ({ user, query }) => {
     coachId,
     state,
     isPrivate,
-    page,
-    pageSize,
+    ...toSkipTake({ page, limit }),
   });
 
   // Apply RBAC filtering on results
@@ -748,11 +774,16 @@ const listSessions = async ({ user, query }) => {
     if (!classRecord) return false;
 
     if (user.role === Role.MEMBER) {
-      return classRecord.status === 'ACTIVE' && classRecord.visibility === ClassVisibility.PUBLIC && !session.isPrivate;
+      return (
+        classRecord.status === 'ACTIVE' &&
+        classRecord.visibility === ClassVisibility.PUBLIC &&
+        !session.isPrivate
+      );
     }
 
     if (user.role === Role.COACH) {
-      const isPublic = classRecord.status === 'ACTIVE' && classRecord.visibility === ClassVisibility.PUBLIC;
+      const isPublic =
+        classRecord.status === 'ACTIVE' && classRecord.visibility === ClassVisibility.PUBLIC;
       const isAssigned =
         session.coaches.some((c) => c.coach?.userId === user.id || c.coachId === user.coachId) ||
         classRecord.coaches.some((c) => c.coachId === user.coachId);
@@ -771,11 +802,7 @@ const listSessions = async ({ user, query }) => {
 
   return {
     sessions: sessionResponses,
-    meta: {
-      page: Number(page),
-      pageSize: Number(pageSize),
-      total: visibleSessions.length,
-    },
+    pagination: buildPagination({ page, limit, total: visibleSessions.length }),
   };
 };
 
@@ -785,10 +812,10 @@ const getSession = async ({ sessionId, user }) => {
     throw createAppError(AppErrors.SESSION_NOT_FOUND);
   }
 
-  assertClassReadableByUser(session.class, user);
+  assertClassReadableByUser(session.class, user, AppErrors.SESSION_NOT_FOUND);
 
   if (user.role === Role.MEMBER && session.isPrivate) {
-    throw createAppError(AppErrors.FORBIDDEN);
+    throw createAppError(AppErrors.SESSION_NOT_FOUND);
   }
 
   const stats = await getBookingStats(sessionId);
@@ -796,7 +823,20 @@ const getSession = async ({ sessionId, user }) => {
 };
 
 const createSession = async ({ payload, user: _user }) => {
-  const { classId, startAt, endAt, durationMin, coachIds, capacity, intensity, classType, facility, description, image, isPrivate } = payload;
+  const {
+    classId,
+    startAt,
+    endAt,
+    durationMin,
+    coachIds,
+    capacity,
+    intensity,
+    classType,
+    facility,
+    description,
+    image,
+    isPrivate,
+  } = payload;
 
   const startUtc = new Date(startAt);
   const endUtc = new Date(endAt);
@@ -814,20 +854,17 @@ const createSession = async ({ payload, user: _user }) => {
 
     // startAt must be future
     if (startUtc <= new Date()) {
-      throw createAppError(
-        422,
-        'Session startAt must be in the future',
-        AppErrors.VALIDATION_ERROR.code,
-        [{ field: 'startAt', message: 'startAt must be in the future' }],
-      );
+      throw createAppError(400, Messages.SESSION_START_IN_PAST, AppErrors.VALIDATION_ERROR.code, [
+        { field: 'startAt', message: Messages.SESSION_START_IN_PAST_FIELD },
+      ]);
     }
 
     if (endUtc <= startUtc) {
       throw createAppError(
-        422,
-        'Session endAt must be greater than startAt',
+        400,
+        Messages.SESSION_END_NOT_AFTER_START,
         AppErrors.VALIDATION_ERROR.code,
-        [{ field: 'endAt', message: 'endAt must be greater than startAt' }],
+        [{ field: 'endAt', message: Messages.SESSION_END_NOT_AFTER_START_FIELD }],
       );
     }
 
@@ -836,15 +873,25 @@ const createSession = async ({ payload, user: _user }) => {
     const finalDuration = durationMin !== undefined ? durationMin : classRecord.durationMin;
     if (calculatedDuration !== finalDuration) {
       throw createAppError(
-        422,
-        `durationMin (${finalDuration}) does not match interval (${calculatedDuration} minutes)`,
+        400,
+        Messages.SESSION_DURATION_MISMATCH(finalDuration, calculatedDuration),
         AppErrors.VALIDATION_ERROR.code,
-        [{ field: 'durationMin', message: 'durationMin must equal the interval between startAt and endAt' }],
+        [
+          {
+            field: 'durationMin',
+            message: Messages.SESSION_DURATION_MISMATCH_FIELD,
+          },
+        ],
       );
     }
 
     // Same-class same-startAt check (never allow duplicate sessions for the same class at the same start time)
-    const existingAtStart = await scheduleRepository.findSessionAtStartTime(classId, startUtc, null, tx);
+    const existingAtStart = await scheduleRepository.findSessionAtStartTime(
+      classId,
+      startUtc,
+      null,
+      tx,
+    );
     if (existingAtStart) {
       throw createAppError(
         AppErrors.SESSION_CONFLICT,
@@ -864,7 +911,9 @@ const createSession = async ({ payload, user: _user }) => {
     }
 
     // Final coaches list inherits from template if omitted
-    const templateCoachIds = (classRecord.coaches || []).map((c) => c.coachId || c.coach?.id).filter(Boolean);
+    const templateCoachIds = (classRecord.coaches || [])
+      .map((c) => c.coachId || c.coach?.id)
+      .filter(Boolean);
     const targetCoachIds = coachIds !== undefined ? coachIds : templateCoachIds;
 
     // Validate coaches
@@ -891,7 +940,8 @@ const createSession = async ({ payload, user: _user }) => {
         description: description !== undefined ? description : classRecord.description,
         image: image !== undefined ? image : classRecord.photoUrl,
         state: SessionState.OPEN,
-        isPrivate: isPrivate !== undefined ? isPrivate : classRecord.visibility === ClassVisibility.PRIVATE,
+        isPrivate:
+          isPrivate !== undefined ? isPrivate : classRecord.visibility === ClassVisibility.PRIVATE,
         source: SessionSource.ONE_OFF,
         overriddenFields: [],
         overrideDetails: {},
@@ -932,11 +982,13 @@ const patchSession = async ({ sessionId, payload, user }) => {
         throw createAppError(AppErrors.FORBIDDEN);
       }
 
-      const payloadKeys = Object.keys(payload).filter((k) => k !== 'overrideReasons' && k !== 'version');
+      const payloadKeys = Object.keys(payload).filter(
+        (k) => k !== 'overrideReasons' && k !== 'version',
+      );
       if (payloadKeys.length !== 1 || payloadKeys[0] !== 'capacity') {
         throw createAppError(
           AppErrors.FORBIDDEN,
-          'Coaches are only permitted to update capacity on their own sessions',
+          Messages.SESSION_COACH_CAPACITY_ONLY,
           AppErrors.FORBIDDEN.code,
         );
       }
@@ -971,19 +1023,16 @@ const patchSession = async ({ sessionId, payload, user }) => {
 
     if (startAt || endAt) {
       if (targetStartAt <= new Date()) {
-        throw createAppError(
-          422,
-          'Session startAt must be in the future',
-          AppErrors.VALIDATION_ERROR.code,
-          [{ field: 'startAt', message: 'startAt must be in the future' }],
-        );
+        throw createAppError(400, Messages.SESSION_START_IN_PAST, AppErrors.VALIDATION_ERROR.code, [
+          { field: 'startAt', message: Messages.SESSION_START_IN_PAST_FIELD },
+        ]);
       }
       if (targetEndAt <= targetStartAt) {
         throw createAppError(
-          422,
-          'Session endAt must be greater than startAt',
+          400,
+          Messages.SESSION_END_NOT_AFTER_START,
           AppErrors.VALIDATION_ERROR.code,
-          [{ field: 'endAt', message: 'endAt must be greater than startAt' }],
+          [{ field: 'endAt', message: Messages.SESSION_END_NOT_AFTER_START_FIELD }],
         );
       }
 
@@ -1037,10 +1086,15 @@ const patchSession = async ({ sessionId, payload, user }) => {
         const reason = overrideReasons[mandatoryField];
         if (!reason || typeof reason !== 'string' || reason.trim() === '') {
           throw createAppError(
-            422,
-            `Override reason is required when modifying ${mandatoryField}`,
+            400,
+            Messages.SESSION_OVERRIDE_REASON_REQUIRED(mandatoryField),
             AppErrors.VALIDATION_ERROR.code,
-            [{ field: `overrideReasons.${mandatoryField}`, message: 'Reason is required' }],
+            [
+              {
+                field: `overrideReasons.${mandatoryField}`,
+                message: Messages.SESSION_OVERRIDE_REASON_FIELD,
+              },
+            ],
           );
         }
       }

@@ -62,7 +62,8 @@ describe('Cafe Category Endpoints', () => {
       expect(res.body.data.name).toBe(name);
       expect(res.body.data.description).toBe('Fresh smoothies');
       expect(res.body.data.itemCount).toBe(0);
-      expect(res.headers.location).toBe(`/api/v1/cafe/categories/${res.body.data.id}`);
+      // There is no GET /categories/:id, so no Location header is sent.
+      expect(res.headers.location).toBeUndefined();
     });
 
     it('trims whitespace from name and description', async () => {
@@ -91,23 +92,23 @@ describe('Cafe Category Endpoints', () => {
       expect(res.body.code).toBe(AppErrors.CATEGORY_EXISTS.code);
     });
 
-    it('rejects empty or whitespace name with 422', async () => {
+    it('rejects empty or whitespace name with 400', async () => {
       const res = await request(app)
         .post('/api/v1/cafe/categories')
         .set('Authorization', bearerFor(adminUser))
         .send({ name: '   ' });
 
-      expect(res.status).toBe(422);
+      expect(res.status).toBe(400);
       expect(res.body.code).toBe(AppErrors.VALIDATION_ERROR.code);
     });
 
-    it('rejects name exceeding 80 characters with 422', async () => {
+    it('rejects name exceeding 80 characters with 400', async () => {
       const res = await request(app)
         .post('/api/v1/cafe/categories')
         .set('Authorization', bearerFor(adminUser))
         .send({ name: 'A'.repeat(81) });
 
-      expect(res.status).toBe(422);
+      expect(res.status).toBe(400);
     });
 
     it('rejects unauthorized roles (COACH, MEMBER) with 403', async () => {
@@ -224,14 +225,14 @@ describe('Cafe Category Endpoints', () => {
       expect(res.body.code).toBe(AppErrors.CATEGORY_NOT_FOUND.code);
     });
 
-    it('rejects empty body with 422', async () => {
+    it('rejects empty body with 400', async () => {
       const cat = await createTestCafeCategory(TEST_PREFIX);
       const res = await request(app)
         .patch(`/api/v1/cafe/categories/${cat.id}`)
         .set('Authorization', bearerFor(adminUser))
         .send({});
 
-      expect(res.status).toBe(422);
+      expect(res.status).toBe(400);
     });
 
     it('rejects unauthorized roles (COACH, MEMBER) with 403', async () => {

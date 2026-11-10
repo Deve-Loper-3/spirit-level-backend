@@ -44,9 +44,7 @@ const mapCoachItem = (coachJoin) => {
 const toSlotResponse = (slot) => {
   if (!slot) return null;
 
-  const coaches = Array.isArray(slot.coaches)
-    ? slot.coaches.map(mapCoachItem).filter(Boolean)
-    : [];
+  const coaches = Array.isArray(slot.coaches) ? slot.coaches.map(mapCoachItem).filter(Boolean) : [];
 
   return {
     id: slot.id,
@@ -90,13 +88,13 @@ const toSessionResponse = (session, stats = { bookedCount: 0, waitlistCount: 0 }
       }
     : null;
 
-  const overriddenFields = Array.isArray(session.overriddenFields)
-    ? session.overriddenFields
-    : [];
+  const overriddenFields = Array.isArray(session.overriddenFields) ? session.overriddenFields : [];
 
   const rawOverrideDetails = session.overrideDetails;
   const overrideDetails =
-    rawOverrideDetails && typeof rawOverrideDetails === 'object' && !Array.isArray(rawOverrideDetails)
+    rawOverrideDetails &&
+    typeof rawOverrideDetails === 'object' &&
+    !Array.isArray(rawOverrideDetails)
       ? rawOverrideDetails
       : {};
 
@@ -125,8 +123,10 @@ const toSessionResponse = (session, stats = { bookedCount: 0, waitlistCount: 0 }
     cancelReason: session.cancelReason ?? null,
     coaches,
     version: session.version,
-    createdAt: session.createdAt instanceof Date ? session.createdAt.toISOString() : session.createdAt,
-    updatedAt: session.updatedAt instanceof Date ? session.updatedAt.toISOString() : session.updatedAt,
+    createdAt:
+      session.createdAt instanceof Date ? session.createdAt.toISOString() : session.createdAt,
+    updatedAt:
+      session.updatedAt instanceof Date ? session.updatedAt.toISOString() : session.updatedAt,
   };
 };
 

@@ -36,9 +36,7 @@ describe('POST /api/v1/cafe/uploads/image/token', () => {
   });
 
   it('returns 401 when unauthenticated', async () => {
-    const res = await request(app)
-      .post(UPLOAD_TOKEN_URL)
-      .send({ contentType: 'image/png' });
+    const res = await request(app).post(UPLOAD_TOKEN_URL).send({ contentType: 'image/png' });
 
     expect(res.status).toBe(401);
     expect(res.body.success).toBe(false);
@@ -59,14 +57,14 @@ describe('POST /api/v1/cafe/uploads/image/token', () => {
   });
 
   it.each([['text/plain'], ['image/gif'], [''], [123], [undefined]])(
-    'rejects invalid contentType %p with 422',
+    'rejects invalid contentType %p with 400',
     async (contentType) => {
       const res = await request(app)
         .post(UPLOAD_TOKEN_URL)
         .set('Authorization', bearerFor(adminUser))
         .send({ contentType });
 
-      expect(res.status).toBe(422);
+      expect(res.status).toBe(400);
       expect(res.body.success).toBe(false);
       expect(res.body.errors).toEqual(
         expect.arrayContaining([
@@ -89,8 +87,7 @@ describe('POST /api/v1/cafe/uploads/image/token', () => {
     expect(res.body.success).toBe(true);
     expect(res.body.message).toBe(Messages.IMAGE_UPLOAD_TOKEN_ISSUED);
 
-    const { clientToken, expiresAt, maxSizeBytes, allowedContentTypes, upload } =
-      res.body.data;
+    const { clientToken, expiresAt, maxSizeBytes, allowedContentTypes, upload } = res.body.data;
     expect(clientToken).toMatch(/^vercel_blob_client_teststore_/);
     expect(maxSizeBytes).toBe(MAX_IMAGE_SIZE_BYTES);
     expect(allowedContentTypes).toEqual(['image/jpeg', 'image/png', 'image/webp']);
@@ -127,4 +124,3 @@ describe('POST /api/v1/cafe/uploads/image/token', () => {
     expect(getRes.headers.allow).toBe('POST');
   });
 });
-

@@ -47,6 +47,16 @@ const classReadLimiter = createPlanLimiter();
 const cafeLimiter = createPlanLimiter();
 const cafeReadLimiter = createPlanLimiter();
 
+const staffLimiter = createPlanLimiter();
+const coachLimiter = createPlanLimiter();
+const coachReadLimiter = createPlanLimiter();
+// Own profile reads and profile-image updates: any signed-in role.
+const profileLimiter = createPlanLimiter();
+
+// Endpoints with no signed-in user (readiness probe, API docs, 404 fallback, 405 handlers):
+// IP only. One shared counter, so scanning unknown URLs cannot hide behind many different paths.
+const publicLimiter = createAuthLimiter();
+
 module.exports = {
   createAuthLimiter,
   authLimiter,
@@ -57,4 +67,9 @@ module.exports = {
   classReadLimiter,
   cafeLimiter,
   cafeReadLimiter,
+  staffLimiter,
+  coachLimiter,
+  coachReadLimiter,
+  profileLimiter,
+  publicLimiter,
 };

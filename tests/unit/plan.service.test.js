@@ -121,7 +121,7 @@ describe('plan.service - createPlan', () => {
     expect(typeof result.price).toBe('number');
   });
 
-  it('throws 409 duplicate_name when active plan with same name already exists', async () => {
+  it('throws 409 PLAN_DUPLICATE_NAME when active plan with same name already exists', async () => {
     membershipPlanRepository.findActiveByName.mockResolvedValue({ id: 'existing-id' });
 
     await expect(
@@ -132,13 +132,13 @@ describe('plan.service - createPlan', () => {
       }),
     ).rejects.toMatchObject({
       statusCode: 409,
-      code: 'duplicate_name',
+      code: 'PLAN_DUPLICATE_NAME',
     });
 
     expect(membershipPlanRepository.createPlanWithAudit).not.toHaveBeenCalled();
   });
 
-  it('maps DB P2002 race condition on partial unique index to 409 duplicate_name', async () => {
+  it('maps DB P2002 race condition on partial unique index to 409 PLAN_DUPLICATE_NAME', async () => {
     membershipPlanRepository.findActiveByName.mockResolvedValue(null);
 
     const p2002Error = new Error('Unique constraint failed on the fields: (lower(name))');
@@ -155,7 +155,7 @@ describe('plan.service - createPlan', () => {
       }),
     ).rejects.toMatchObject({
       statusCode: 409,
-      code: 'duplicate_name',
+      code: 'PLAN_DUPLICATE_NAME',
     });
   });
 

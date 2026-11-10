@@ -6,10 +6,7 @@ const { Messages } = require('../../src/constants/messages');
 const { AppErrors } = require('../../src/constants/errors');
 const { createTestData } = require('../helpers/testData.helper');
 const { bearerFor } = require('../helpers/auth.helper');
-const {
-  deleteTestMemberships,
-  deleteTestPlans,
-} = require('../helpers/membershipPlan.helper');
+const { deleteTestMemberships, deleteTestPlans } = require('../helpers/membershipPlan.helper');
 
 jest.setTimeout(35000);
 
@@ -70,7 +67,8 @@ describe('POST /api/v1/memberships', () => {
       });
       expect(res.body.data.id).toBeDefined();
       expect(res.body.data.createdAt).toBeDefined();
-      expect(res.headers.location).toBe(`/api/v1/memberships/${res.body.data.id}`);
+      // There is no GET /memberships/:id, so no Location header is sent.
+      expect(res.headers.location).toBeUndefined();
     });
 
     it('trims name and allows description to be omitted', async () => {
@@ -98,31 +96,31 @@ describe('POST /api/v1/memberships', () => {
   });
 
   describe('Validation & duplicates', () => {
-    it('rejects missing or empty name with 422 VALIDATION_ERROR', async () => {
+    it('rejects missing or empty name with 400 VALIDATION_ERROR', async () => {
       const missingRes = await postMembership({});
-      expect(missingRes.status).toBe(422);
+      expect(missingRes.status).toBe(400);
       expect(missingRes.body).toMatchObject({
         success: false,
         code: AppErrors.VALIDATION_ERROR.code,
       });
 
       const emptyRes = await postMembership({ name: '   ' });
-      expect(emptyRes.status).toBe(422);
+      expect(emptyRes.status).toBe(400);
       expect(emptyRes.body.code).toBe(AppErrors.VALIDATION_ERROR.code);
     });
 
-    it('rejects name exceeding 80 characters with 422', async () => {
+    it('rejects name exceeding 80 characters with 400', async () => {
       const res = await postMembership({ name: 'A'.repeat(81) });
-      expect(res.status).toBe(422);
+      expect(res.status).toBe(400);
       expect(res.body.code).toBe(AppErrors.VALIDATION_ERROR.code);
     });
 
-    it('rejects description exceeding 500 characters with 422', async () => {
+    it('rejects description exceeding 500 characters with 400', async () => {
       const res = await postMembership({
         name: `${TEST_PREFIX}LongDesc`,
         description: 'D'.repeat(501),
       });
-      expect(res.status).toBe(422);
+      expect(res.status).toBe(400);
       expect(res.body.code).toBe(AppErrors.VALIDATION_ERROR.code);
     });
 

@@ -1,7 +1,8 @@
-const sendSuccess = (res, { statusCode = 200, message, data, pagination, meta }) => {
+// `pagination` is the shared page envelope of every list; `counts` is extra tab badges (plans only).
+const sendSuccess = (res, { statusCode = 200, message, data, pagination, counts }) => {
   const body = { success: true, message, data };
   if (pagination) body.pagination = pagination;
-  if (meta) body.meta = meta;
+  if (counts) body.counts = counts;
   return res.status(statusCode).json(body);
 };
 

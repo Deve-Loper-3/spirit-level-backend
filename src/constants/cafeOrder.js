@@ -43,9 +43,6 @@ const ORDER_READ_ROLES = Object.freeze([Role.OWNER, Role.ADMIN, Role.COACH]);
 const ORDER_ADMIN_ROLES = Object.freeze([Role.OWNER, Role.ADMIN]);
 
 const ORDER_SEARCH_MAX_LENGTH = 100;
-const ORDER_DEFAULT_PAGE = 1;
-const ORDER_DEFAULT_LIMIT = 20;
-const ORDER_MAX_LIMIT = 100;
 
 module.exports = Object.freeze({
   CafeOrderStatus,
@@ -58,7 +55,4 @@ module.exports = Object.freeze({
   ORDER_READ_ROLES,
   ORDER_ADMIN_ROLES,
   ORDER_SEARCH_MAX_LENGTH,
-  ORDER_DEFAULT_PAGE,
-  ORDER_DEFAULT_LIMIT,
-  ORDER_MAX_LIMIT,
 });

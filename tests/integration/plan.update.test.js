@@ -152,27 +152,28 @@ describe('PATCH /api/v1/plans/:id', () => {
   });
 
   describe('Not found and archived', () => {
-    it('returns 404 PLAN_NOT_FOUND for an unknown or malformed id', async () => {
+    it('returns 404 PLAN_NOT_FOUND for an unknown id and 400 for a malformed one', async () => {
       const unknown = await patchAs(users.admin, crypto.randomUUID(), { price: 1 });
       const malformed = await patchAs(users.admin, 'not-a-uuid', { price: 1 });
 
       expect(unknown.status).toBe(404);
       expect(unknown.body.code).toBe('PLAN_NOT_FOUND');
-      expect(malformed.status).toBe(404);
+      expect(malformed.status).toBe(400);
+      expect(malformed.body.code).toBe('VALIDATION_ERROR');
     });
 
-    it('returns 409 plan_archived for an archived plan and changes nothing', async () => {
+    it('returns 409 PLAN_ARCHIVED for an archived plan and changes nothing', async () => {
       const plan = await createTestPlan(PREFIX, { status: 'ARCHIVED' });
 
       const res = await patchAs(users.admin, plan.id, { price: 999 });
 
       expect(res.status).toBe(409);
-      expect(res.body).toMatchObject({ success: false, code: 'plan_archived' });
+      expect(res.body).toMatchObject({ success: false, code: 'PLAN_ARCHIVED' });
       expect((await reload(plan.id)).price.toNumber()).toBe(100);
     });
   });
 
-  describe('Fields that cannot be edited (422)', () => {
+  describe('Fields that cannot be edited (400)', () => {
     it.each([
       ['id', crypto.randomUUID()],
       ['section', 'online_coaching'],
@@ -186,7 +187,7 @@ describe('PATCH /api/v1/plans/:id', () => {
 
       const res = await patchAs(users.admin, plan.id, { description: 'x', [field]: value });
 
-      expect(res.status).toBe(422);
+      expect(res.status).toBe(400);
       expect(res.body.code).toBe('VALIDATION_ERROR');
       expect(res.body.errors).toEqual([{ field, message: 'This field cannot be edited' }]);
       expect((await reload(plan.id)).description).toBe('original description');
@@ -197,7 +198,7 @@ describe('PATCH /api/v1/plans/:id', () => {
 
       const res = await patchAs(users.admin, plan.id, { status: 'archived' });
 
-      expect(res.status).toBe(422);
+      expect(res.status).toBe(400);
       expect(res.body.errors[0].field).toBe('status');
       expect(res.body.errors[0].message).toContain('PATCH /api/v1/plans/:id/status');
       expect((await reload(plan.id)).status).toBe('ACTIVE');
@@ -208,15 +209,15 @@ describe('PATCH /api/v1/plans/:id', () => {
       const unknown = await patchAs(users.admin, plan.id, { colour: 'red' });
       const empty = await patchAs(users.admin, plan.id, {});
 
-      expect(unknown.status).toBe(422);
-      expect(empty.status).toBe(422);
+      expect(unknown.status).toBe(400);
+      expect(empty.status).toBe(400);
     });
 
-    it('rejects membership object in body with 422', async () => {
+    it('rejects membership object in body with 400', async () => {
       const plan = await createTestPlan(PREFIX);
       const res = await patchAs(users.admin, plan.id, { membership: { name: 'New Membership' } });
 
-      expect(res.status).toBe(422);
+      expect(res.status).toBe(400);
       expect(res.body.code).toBe('VALIDATION_ERROR');
       expect(res.body.errors[0].field).toBe('membership');
     });
@@ -266,23 +267,23 @@ describe('PATCH /api/v1/plans/:id', () => {
       expect(res.body.data.membership.name).toBe(mem2.name);
     });
 
-    it('rejects a non-existent membershipId with 422', async () => {
+    it('rejects a non-existent membershipId with 400', async () => {
       const plan = await createTestPlan(PREFIX);
       const fakeId = crypto.randomUUID();
 
       const res = await patchAs(users.admin, plan.id, { membershipId: fakeId });
 
-      expect(res.status).toBe(422);
+      expect(res.status).toBe(400);
       expect(res.body.code).toBe('VALIDATION_ERROR');
       expect(res.body.errors[0].field).toBe('membershipId');
     });
 
-    it('rejects an invalid non-UUID membershipId string with 422', async () => {
+    it('rejects an invalid non-UUID membershipId string with 400', async () => {
       const plan = await createTestPlan(PREFIX);
 
       const res = await patchAs(users.admin, plan.id, { membershipId: 'not-a-valid-uuid' });
 
-      expect(res.status).toBe(422);
+      expect(res.status).toBe(400);
       expect(res.body.code).toBe('VALIDATION_ERROR');
       expect(res.body.errors[0].field).toBe('membershipId');
     });
@@ -300,13 +301,13 @@ describe('PATCH /api/v1/plans/:id', () => {
     });
   });
 
-  describe('Validation of the merged result (422)', () => {
+  describe('Validation of the merged result (400)', () => {
     it('applies the create rules to the merged plan', async () => {
       const plan = await createTestPlan(PREFIX);
 
       const res = await patchAs(users.admin, plan.id, { price: -5, kind: 'trial' });
 
-      expect(res.status).toBe(422);
+      expect(res.status).toBe(400);
       expect(res.body.errors.map((e) => e.field).sort()).toEqual(['billingCycle', 'price']);
       expect(res.body.errors.find((e) => e.field === 'billingCycle').message).toBe(
         'Only a membership renews monthly.',
@@ -318,7 +319,7 @@ describe('PATCH /api/v1/plans/:id', () => {
 
       const res = await patchAs(users.admin, plan.id, { creditType: 'time' });
 
-      expect(res.status).toBe(422);
+      expect(res.status).toBe(400);
       expect(res.body.errors.map((e) => e.field).sort()).toEqual([
         'creditRefill',
         'creditsIncluded',
@@ -329,7 +330,7 @@ describe('PATCH /api/v1/plans/:id', () => {
     it('rejects a lone field that breaks a rule against the stored values', async () => {
       const plan = await createTestPlan(PREFIX);
       const res = await patchAs(users.admin, plan.id, { billingCycle: 'year' });
-      expect(res.status).toBe(422);
+      expect(res.status).toBe(400);
       expect(res.body.errors.map((e) => e.field)).toEqual(['creditRefill']);
     });
   });
@@ -340,11 +341,11 @@ describe('PATCH /api/v1/plans/:id', () => {
       expect(res.status).toBe(404);
     });
 
-    it('plan_archived comes before body validation', async () => {
+    it('PLAN_ARCHIVED comes before body validation', async () => {
       const plan = await createTestPlan(PREFIX, { status: 'ARCHIVED' });
       const res = await patchAs(users.admin, plan.id, { id: 'x', price: -1 });
       expect(res.status).toBe(409);
-      expect(res.body.code).toBe('plan_archived');
+      expect(res.body.code).toBe('PLAN_ARCHIVED');
     });
 
     it('non-editable fields come before the merged validation', async () => {
@@ -353,15 +354,15 @@ describe('PATCH /api/v1/plans/:id', () => {
       expect(res.body.errors.map((e) => e.field)).toEqual(['version']);
     });
 
-    it('validation comes before duplicate_name', async () => {
+    it('validation comes before PLAN_DUPLICATE_NAME', async () => {
       const taken = await createTestPlan(PREFIX);
       const plan = await createTestPlan(PREFIX);
       const res = await patchAs(users.admin, plan.id, { name: taken.name, price: -1 });
-      expect(res.status).toBe(422);
+      expect(res.status).toBe(400);
     });
   });
 
-  describe('duplicate_name', () => {
+  describe('PLAN_DUPLICATE_NAME', () => {
     it('returns 409 when another plan has the name (case-insensitive)', async () => {
       const taken = await createTestPlan(PREFIX, { name: `${PREFIX}Taken Name` });
       const plan = await createTestPlan(PREFIX);
@@ -369,7 +370,7 @@ describe('PATCH /api/v1/plans/:id', () => {
       const res = await patchAs(users.admin, plan.id, { name: taken.name.toUpperCase() });
 
       expect(res.status).toBe(409);
-      expect(res.body).toMatchObject({ success: false, code: 'duplicate_name' });
+      expect(res.body).toMatchObject({ success: false, code: 'PLAN_DUPLICATE_NAME' });
       expect((await reload(plan.id)).name).toBe(plan.name);
     });
 

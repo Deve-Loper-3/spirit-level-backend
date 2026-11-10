@@ -222,17 +222,19 @@ describe('GET /api/v1/classes & GET /api/v1/classes/:id', () => {
       expect(ids).toContain(privateActiveClass.id);
     });
 
-    it('includes pagination meta in response', async () => {
+    it('includes the pagination envelope in the response', async () => {
       const res = await request(app)
-        .get('/api/v1/classes?page=1&pageSize=10')
+        .get('/api/v1/classes?page=1&limit=10')
         .set('Authorization', bearerFor(adminUser));
 
       expect(res.status).toBe(200);
-      expect(res.body.meta).toMatchObject({
+      expect(res.body.pagination).toMatchObject({
         page: 1,
-        pageSize: 10,
+        limit: 10,
         total: expect.any(Number),
+        totalPages: expect.any(Number),
       });
+      expect(res.body).not.toHaveProperty('meta');
     });
   });
 });

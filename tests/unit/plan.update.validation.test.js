@@ -54,12 +54,12 @@ describe('validateUpdatePlanBody', () => {
   });
 
   it.each(PLAN_NON_EDITABLE_FIELDS.filter((field) => field !== 'status'))(
-    'rejects %s with 422',
+    'rejects %s with 400',
     (field) => {
       const { res, next, errors } = run(validateUpdatePlanBody, { body: { [field]: 'x' } });
 
       expect(next).not.toHaveBeenCalled();
-      expect(res.status).toHaveBeenCalledWith(422);
+      expect(res.status).toHaveBeenCalledWith(400);
       expect(errors).toEqual([{ field, message: 'This field cannot be edited' }]);
     },
   );
@@ -67,7 +67,7 @@ describe('validateUpdatePlanBody', () => {
   it('rejects status and points to the status endpoint', () => {
     const { res, errors } = run(validateUpdatePlanBody, { body: { status: 'archived' } });
 
-    expect(res.status).toHaveBeenCalledWith(422);
+    expect(res.status).toHaveBeenCalledWith(400);
     expect(errors).toEqual([
       { field: 'status', message: expect.stringContaining('PATCH /api/v1/plans/:id/status') },
     ]);
@@ -77,8 +77,8 @@ describe('validateUpdatePlanBody', () => {
     expect(run(validateUpdatePlanBody, { body: { colour: 'red' } }).errors).toEqual([
       { field: 'colour', message: 'Unknown field' },
     ]);
-    expect(run(validateUpdatePlanBody, { body: {} }).res.status).toHaveBeenCalledWith(422);
-    expect(run(validateUpdatePlanBody, { body: undefined }).res.status).toHaveBeenCalledWith(422);
+    expect(run(validateUpdatePlanBody, { body: {} }).res.status).toHaveBeenCalledWith(400);
+    expect(run(validateUpdatePlanBody, { body: undefined }).res.status).toHaveBeenCalledWith(400);
   });
 
   it('reports non-editable fields before it validates the merged result', () => {
@@ -89,7 +89,7 @@ describe('validateUpdatePlanBody', () => {
   it('validates the merged result: a lone creditType change to time needs the time rules', () => {
     const { res, errors } = run(validateUpdatePlanBody, { body: { creditType: 'time' } });
 
-    expect(res.status).toHaveBeenCalledWith(422);
+    expect(res.status).toHaveBeenCalledWith(400);
     expect(fields(errors)).toEqual(['creditRefill', 'creditsIncluded']);
   });
 
@@ -156,7 +156,7 @@ describe('validatePlanStatusBody', () => {
     const { res, errors } = run(validatePlanStatusBody, {
       body: { status: 'active', reason: 'a'.repeat(201) },
     });
-    expect(res.status).toHaveBeenCalledWith(422);
+    expect(res.status).toHaveBeenCalledWith(400);
     expect(fields(errors)).toEqual(['reason']);
   });
 
@@ -166,15 +166,15 @@ describe('validatePlanStatusBody', () => {
     ['a number', { status: 1 }],
   ])('rejects a status that is %s', (_label, body) => {
     const { res, errors } = run(validatePlanStatusBody, { body });
-    expect(res.status).toHaveBeenCalledWith(422);
+    expect(res.status).toHaveBeenCalledWith(400);
     expect(fields(errors)).toEqual(['status']);
   });
 
   it('rejects other fields and a missing body', () => {
     expect(
       run(validatePlanStatusBody, { body: { status: 'active', price: 1 } }).res.status,
-    ).toHaveBeenCalledWith(422);
-    expect(run(validatePlanStatusBody, { body: undefined }).res.status).toHaveBeenCalledWith(422);
+    ).toHaveBeenCalledWith(400);
+    expect(run(validatePlanStatusBody, { body: undefined }).res.status).toHaveBeenCalledWith(400);
   });
 });
 
@@ -183,7 +183,9 @@ describe('methodNotAllowed', () => {
     const res = { set: jest.fn() };
     const next = jest.fn();
 
-    methodNotAllowed(['GET', 'PATCH'])({}, res, next);
+    const [limiter, handler] = methodNotAllowed(['GET', 'PATCH']);
+    expect(typeof limiter.resetKey).toBe('function');
+    handler({}, res, next);
 
     expect(res.set).toHaveBeenCalledWith('Allow', 'GET, PATCH');
     expect(next.mock.calls[0][0]).toMatchObject({ statusCode: 405, code: 'METHOD_NOT_ALLOWED' });

@@ -152,10 +152,11 @@ describe('GET /api/v1/plans/:id', () => {
     expect(res.body).toMatchObject({ success: false, code: 'PLAN_NOT_FOUND' });
   });
 
-  it('returns 404 for an id that is not a UUID', async () => {
+  it('returns 400 VALIDATION_ERROR for an id that is not a UUID', async () => {
     const res = await getAs(users.owner, 'not-a-uuid');
-    expect(res.status).toBe(404);
-    expect(res.body.code).toBe('PLAN_NOT_FOUND');
+    expect(res.status).toBe(400);
+    expect(res.body.code).toBe('VALIDATION_ERROR');
+    expect(res.body.errors).toEqual([{ field: 'id', message: 'Plan id must be a valid UUID' }]);
   });
 
   it('checks the role before it looks the plan up: a Member gets 403 even for an unknown id', async () => {

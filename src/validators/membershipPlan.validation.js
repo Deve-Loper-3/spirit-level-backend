@@ -22,12 +22,11 @@ const {
   PLAN_DESCRIPTION_MAX_LENGTH,
 } = require('../constants/membershipPlan');
 const { Messages } = require('../constants/messages');
-const { DEFAULT_PAGE_SIZE, MAX_PAGE_SIZE } = require('../constants/pagination');
 
 const { parseSort } = require('../utils/sort.util');
 const { sendValidationFailed } = require('../utils/validationError.util');
 const { toEditableFields } = require('../repositories/membershipPlan.mapper');
-const { pageField, buildSizeField } = require('./pagination.validation');
+const { paginationQueryFields } = require('./pagination.validation');
 
 const RECURRING_CYCLES = new Set([
   PlanBillingCycle.MONTH,
@@ -64,7 +63,7 @@ const priceField = z
     if (val > PLAN_PRICE_MAX) {
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
-        message: `Price must not exceed ${PLAN_PRICE_MAX}`,
+        message: Messages.PLAN_PRICE_MAX_EXCEEDED(PLAN_PRICE_MAX),
       });
     }
   });
@@ -106,28 +105,25 @@ const membershipPlanSchema = z
     externalRef: z.string().trim().nullable().optional(),
     term: z.string().trim().max(100).nullable().optional(),
     recurring: z.boolean().default(false),
-    periodMonths: z
-      .preprocess(
-        (val) => (val === null || val === undefined || val === '' ? null : Number(val)),
-        z
-          .number()
-          .int()
-          .refine((val) => [1, 3, 6, 12].includes(val), {
-            message: 'periodMonths must be 1, 3, 6, or 12',
-          })
-          .nullable()
-          .optional(),
-      ),
-    joiningFee: z
-      .preprocess(
-        (val) => (val === undefined || val === null || val === '' ? 0 : Number(val)),
-        z.number().min(0).default(0),
-      ),
-    membershipId: z
-      .preprocess(
-        (val) => (val === '' ? null : val),
-        z.string().uuid({ message: 'membershipId must be a valid UUID' }).nullable().optional(),
-      ),
+    periodMonths: z.preprocess(
+      (val) => (val === null || val === undefined || val === '' ? null : Number(val)),
+      z
+        .number()
+        .int()
+        .refine((val) => [1, 3, 6, 12].includes(val), {
+          message: Messages.PLAN_PERIOD_MONTHS_INVALID,
+        })
+        .nullable()
+        .optional(),
+    ),
+    joiningFee: z.preprocess(
+      (val) => (val === undefined || val === null || val === '' ? 0 : Number(val)),
+      z.number().min(0).default(0),
+    ),
+    membershipId: z.preprocess(
+      (val) => (val === '' ? null : val),
+      z.string().uuid({ message: Messages.PLAN_MEMBERSHIP_ID_INVALID }).nullable().optional(),
+    ),
     membership: z
       .object({
         name: z.string().trim().min(1, Messages.MEMBERSHIP_NAME_REQUIRED).max(80),
@@ -142,14 +138,14 @@ const membershipPlanSchema = z
       if (data.creditsIncluded !== undefined && data.creditsIncluded !== 0) {
         ctx.addIssue({
           code: z.ZodIssueCode.custom,
-          message: 'creditsIncluded must be 0 when creditType is TIME',
+          message: Messages.PLAN_CREDITS_TIME_NONZERO,
           path: ['creditsIncluded'],
         });
       }
       if (data.creditRefill !== null && data.creditRefill !== undefined) {
         ctx.addIssue({
           code: z.ZodIssueCode.custom,
-          message: 'creditRefill must be null when creditType is TIME',
+          message: Messages.PLAN_REFILL_TIME_NOT_NULL,
           path: ['creditRefill'],
         });
       }
@@ -162,7 +158,7 @@ const membershipPlanSchema = z
       ) {
         ctx.addIssue({
           code: z.ZodIssueCode.custom,
-          message: 'creditsIncluded must be at least 1 when creditType is not TIME',
+          message: Messages.PLAN_CREDITS_REQUIRED_NON_TIME,
           path: ['creditsIncluded'],
         });
       }
@@ -175,7 +171,7 @@ const membershipPlanSchema = z
     ) {
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
-        message: 'creditRefill can only be MONTHLY when billingCycle is MONTH',
+        message: Messages.PLAN_REFILL_MONTHLY_RESTRICTION,
         path: ['creditRefill'],
       });
     }
@@ -193,14 +189,14 @@ const membershipPlanSchema = z
     const hasMembershipId = Boolean(data.membershipId);
     const hasNewMembership = Boolean(
       data.membership &&
-        typeof data.membership === 'object' &&
-        data.membership.name &&
-        data.membership.name.trim(),
+      typeof data.membership === 'object' &&
+      data.membership.name &&
+      data.membership.name.trim(),
     );
     if (hasMembershipId && hasNewMembership) {
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
-        message: 'membershipId and membership are mutually exclusive',
+        message: Messages.PLAN_MEMBERSHIP_EXCLUSIVE,
         path: ['membershipId'],
       });
     }
@@ -293,12 +289,7 @@ const listPlansQuerySchema = z.object({
     .max(PLAN_SEARCH_MAX_LENGTH, Messages.PLAN_SEARCH_INVALID)
     .transform((value) => value || undefined)
     .optional(),
-  page: pageField,
-  pageSize: buildSizeField({
-    message: Messages.PAGE_SIZE_INVALID,
-    max: MAX_PAGE_SIZE,
-    defaultValue: DEFAULT_PAGE_SIZE,
-  }),
+  ...paginationQueryFields,
   sort: sortField,
 });
 

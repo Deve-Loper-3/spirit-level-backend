@@ -14,13 +14,11 @@ const {
   CLASS_CLASSPASS_SPOTS_MIN,
   CLASS_COLOUR_REGEX,
   CLASS_PHOTO_URL_MAX_LENGTH,
-  CLASS_DEFAULT_PAGE_SIZE,
-  CLASS_MAX_PAGE_SIZE,
   CLASS_EDITABLE_FIELDS,
 } = require('../constants/class');
 const { Messages } = require('../constants/messages');
 const { sendValidationFailed } = require('../utils/validationError.util');
-const { pageField, buildSizeField } = require('./pagination.validation');
+const { paginationQueryFields } = require('./pagination.validation');
 
 const toUpperEnum = (enumObj, errorMsg) =>
   z.preprocess(
@@ -60,7 +58,9 @@ const createClassSchema = z
       .min(INTENSITY_MIN, Messages.CLASS_INTENSITY_INVALID)
       .max(INTENSITY_MAX, Messages.CLASS_INTENSITY_INVALID),
     visibility: toUpperEnum(ClassVisibility, Messages.CLASS_VISIBILITY_INVALID),
-    classPassEnabled: z.boolean({ error: Messages.CLASS_CLASSPASS_ENABLED_REQUIRED }).default(false),
+    classPassEnabled: z
+      .boolean({ error: Messages.CLASS_CLASSPASS_ENABLED_REQUIRED })
+      .default(false),
     classpassSpots: z
       .preprocess(
         (val) => (val === undefined || val === null ? 0 : val),
@@ -90,9 +90,7 @@ const createClassSchema = z
         .nullable()
         .optional(),
     ),
-    coachIds: z
-      .array(z.string().uuid({ message: Messages.CLASS_COACH_NOT_FOUND }))
-      .optional(),
+    coachIds: z.array(z.string().uuid({ message: Messages.CLASS_COACH_NOT_FOUND })).optional(),
     eligiblePlanIds: z
       .array(z.string().uuid({ message: Messages.CLASS_PLAN_NOT_FOUND }))
       .optional(),
@@ -218,9 +216,7 @@ const patchFieldsSchema = z.object({
       .nullable()
       .optional(),
   ),
-  coachIds: z
-    .array(z.string().uuid({ message: Messages.CLASS_COACH_NOT_FOUND }))
-    .optional(),
+  coachIds: z.array(z.string().uuid({ message: Messages.CLASS_COACH_NOT_FOUND })).optional(),
   version: z.number().int().min(1).optional(),
 });
 
@@ -230,7 +226,7 @@ const validateUpdateClassBody = (req, res, next) => {
   const badKeys = findBadPatchKeys(body);
   if (badKeys.length > 0) return sendValidationFailed(res, { issues: badKeys });
 
-  // intensity rule: if explicit null or 0 was passed in body -> 422
+  // intensity rule: if explicit null or 0 was passed in body -> 400
   if ('intensity' in body && (body.intensity === null || body.intensity === 0)) {
     return sendValidationFailed(res, {
       issues: [{ path: ['intensity'], message: Messages.CLASS_INTENSITY_INVALID }],
@@ -313,9 +309,11 @@ const listClassesQuerySchema = z.object({
   ),
   status: z.preprocess(
     (v) => (typeof v === 'string' ? v.trim().toLowerCase() : v),
-    z.enum(['active', 'deactivated', 'archived', 'all'], {
-      error: Messages.CLASS_STATUS_INVALID,
-    }).optional(),
+    z
+      .enum(['active', 'deactivated', 'archived', 'all'], {
+        error: Messages.CLASS_STATUS_INVALID,
+      })
+      .optional(),
   ),
   active: z.preprocess(
     (v) => (typeof v === 'string' ? v.trim().toLowerCase() : v),
@@ -326,12 +324,7 @@ const listClassesQuerySchema = z.object({
     z.enum(['onsite', 'online']).optional(),
   ),
   search: z.string().trim().optional(),
-  page: pageField,
-  pageSize: buildSizeField({
-    message: 'Page size must be a whole number between 1 and 100',
-    max: CLASS_MAX_PAGE_SIZE,
-    defaultValue: CLASS_DEFAULT_PAGE_SIZE,
-  }),
+  ...paginationQueryFields,
 });
 
 const validateListClassesQuery = (req, res, next) => {

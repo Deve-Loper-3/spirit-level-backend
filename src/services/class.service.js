@@ -4,6 +4,8 @@ const { Messages } = require('../constants/messages');
 const { AppErrors } = require('../constants/errors');
 const { createAppError } = require('../errors/AppError');
 const { isUniqueConstraintError } = require('../utils/prismaError.util');
+const { DEFAULT_PAGE, DEFAULT_LIMIT } = require('../constants/pagination');
+const { toSkipTake, buildPagination } = require('../utils/pagination.util');
 const classRepository = require('../repositories/class.repository');
 const {
   findActiveByName,
@@ -93,25 +95,21 @@ const buildClassWhere = ({ user, query }) => {
 };
 
 const listClasses = async ({ user, query }) => {
-  const page = query.page || 1;
-  const pageSize = query.pageSize || 100;
+  const { page = DEFAULT_PAGE, limit = DEFAULT_LIMIT } = query;
   const where = buildClassWhere({ user, query });
 
-  const { classes, total } = await repositoryListClasses({ where, page, pageSize });
+  const { classes, total } = await repositoryListClasses({ where, ...toSkipTake({ page, limit }) });
 
   return {
     classes: classes.map(toClassResponse),
-    meta: {
-      page,
-      pageSize,
-      total,
-    },
+    pagination: buildPagination({ page, limit, total }),
   };
 };
 
 const getClass = async ({ user, classRecord }) => {
-  const isActive =
-    classRecord.status ? classRecord.status === 'ACTIVE' : Boolean(classRecord.active);
+  const isActive = classRecord.status
+    ? classRecord.status === 'ACTIVE'
+    : Boolean(classRecord.active);
 
   if (user.role === Role.MEMBER) {
     if (!isActive || classRecord.visibility !== ClassVisibility.PUBLIC) {
@@ -138,7 +136,7 @@ const createClass = async ({ payload }) => {
 
   if (data.visibility === ClassVisibility.PUBLIC && dedupedPlanIds.length === 0) {
     throw createAppError(
-      422,
+      400,
       Messages.CLASS_PUBLIC_REQUIRES_PLANS,
       AppErrors.VALIDATION_ERROR.code,
       [{ field: 'eligiblePlanIds', message: Messages.CLASS_PUBLIC_REQUIRES_PLANS }],
@@ -149,12 +147,12 @@ const createClass = async ({ payload }) => {
     const planCheck = await validatePlanIds(dedupedPlanIds);
     if (!planCheck.valid) {
       if (planCheck.unknownIds.length > 0) {
-        throw createAppError(422, Messages.CLASS_PLAN_NOT_FOUND, AppErrors.VALIDATION_ERROR.code, [
+        throw createAppError(400, Messages.CLASS_PLAN_NOT_FOUND, AppErrors.VALIDATION_ERROR.code, [
           { field: 'eligiblePlanIds', message: Messages.CLASS_PLAN_NOT_FOUND },
         ]);
       }
       if (planCheck.archivedIds.length > 0) {
-        throw createAppError(422, Messages.CLASS_PLAN_ARCHIVED, AppErrors.VALIDATION_ERROR.code, [
+        throw createAppError(400, Messages.CLASS_PLAN_ARCHIVED, AppErrors.VALIDATION_ERROR.code, [
           { field: 'eligiblePlanIds', message: Messages.CLASS_PLAN_ARCHIVED },
         ]);
       }
@@ -164,7 +162,7 @@ const createClass = async ({ payload }) => {
   if (dedupedCoachIds.length > 0) {
     const coachCheck = await validateCoachIds(dedupedCoachIds);
     if (!coachCheck.valid) {
-      throw createAppError(422, Messages.CLASS_COACH_NOT_FOUND, AppErrors.VALIDATION_ERROR.code, [
+      throw createAppError(400, Messages.CLASS_COACH_NOT_FOUND, AppErrors.VALIDATION_ERROR.code, [
         { field: 'coachIds', message: Messages.CLASS_COACH_NOT_FOUND },
       ]);
     }
@@ -214,7 +212,7 @@ const updateClass = async ({ classRecord, payload }) => {
   if (coachIds !== undefined && coachIds.length > 0) {
     const coachCheck = await validateCoachIds(coachIds);
     if (!coachCheck.valid) {
-      throw createAppError(422, Messages.CLASS_COACH_NOT_FOUND, AppErrors.VALIDATION_ERROR.code, [
+      throw createAppError(400, Messages.CLASS_COACH_NOT_FOUND, AppErrors.VALIDATION_ERROR.code, [
         { field: 'coachIds', message: Messages.CLASS_COACH_NOT_FOUND },
       ]);
     }
@@ -296,7 +294,7 @@ const updateClassEligibility = async ({ classRecord, planIds = [] }) => {
 
   if (classRecord.visibility === ClassVisibility.PUBLIC && dedupedPlanIds.length === 0) {
     throw createAppError(
-      422,
+      400,
       Messages.CLASS_PUBLIC_REQUIRES_PLANS,
       AppErrors.VALIDATION_ERROR.code,
       [{ field: 'planIds', message: Messages.CLASS_PUBLIC_REQUIRES_PLANS }],
@@ -307,12 +305,12 @@ const updateClassEligibility = async ({ classRecord, planIds = [] }) => {
     const planCheck = await validatePlanIds(dedupedPlanIds);
     if (!planCheck.valid) {
       if (planCheck.unknownIds.length > 0) {
-        throw createAppError(422, Messages.CLASS_PLAN_NOT_FOUND, AppErrors.VALIDATION_ERROR.code, [
+        throw createAppError(400, Messages.CLASS_PLAN_NOT_FOUND, AppErrors.VALIDATION_ERROR.code, [
           { field: 'planIds', message: Messages.CLASS_PLAN_NOT_FOUND },
         ]);
       }
       if (planCheck.archivedIds.length > 0) {
-        throw createAppError(422, Messages.CLASS_PLAN_ARCHIVED, AppErrors.VALIDATION_ERROR.code, [
+        throw createAppError(400, Messages.CLASS_PLAN_ARCHIVED, AppErrors.VALIDATION_ERROR.code, [
           { field: 'planIds', message: Messages.CLASS_PLAN_ARCHIVED },
         ]);
       }

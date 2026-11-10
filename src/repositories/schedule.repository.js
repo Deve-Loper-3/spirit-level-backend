@@ -113,7 +113,13 @@ const findSlotsByClassId = async (classId, { includeInactive = false } = {}, cli
   });
 };
 
-const findActiveSlotConflict = async (classId, dayOfWeek, startTime, excludeId = null, client = prisma) => {
+const findActiveSlotConflict = async (
+  classId,
+  dayOfWeek,
+  startTime,
+  excludeId = null,
+  client = prisma,
+) => {
   const parsedTime = parseTimeTo1970Date(startTime);
   const where = {
     classId,
@@ -130,7 +136,10 @@ const findActiveSlotConflict = async (classId, dayOfWeek, startTime, excludeId =
   });
 };
 
-const createSlotWithCoaches = async ({ classId, dayOfWeek, startDate, startTime, endTime, capacity, coachIds = [] }, client = prisma) => {
+const createSlotWithCoaches = async (
+  { classId, dayOfWeek, startDate, startTime, endTime, capacity, coachIds = [] },
+  client = prisma,
+) => {
   const id = crypto.randomUUID();
   const dedupedCoaches = Array.from(new Set(coachIds));
   const coachesCreate = dedupedCoaches.map((coachId) => ({ coachId }));
@@ -207,7 +216,10 @@ const findSessionById = async (id, client = prisma) => {
   });
 };
 
-const findSessions = async ({ from, to, classId, coachId, state, isPrivate, page = 1, pageSize = 100 }, client = prisma) => {
+const findSessions = async (
+  { from, to, classId, coachId, state, isPrivate, skip, take },
+  client = prisma,
+) => {
   const where = {};
 
   if (from || to) {
@@ -234,9 +246,6 @@ const findSessions = async ({ from, to, classId, coachId, state, isPrivate, page
     where.isPrivate = isPrivate;
   }
 
-  const skip = (page - 1) * pageSize;
-  const take = pageSize;
-
   const [sessions, total] = await Promise.all([
     client.classSession.findMany({
       where,
@@ -251,7 +260,12 @@ const findSessions = async ({ from, to, classId, coachId, state, isPrivate, page
   return { sessions, total };
 };
 
-const findSessionAtStartTime = async (classId, startAt, excludeSessionId = null, client = prisma) => {
+const findSessionAtStartTime = async (
+  classId,
+  startAt,
+  excludeSessionId = null,
+  client = prisma,
+) => {
   const where = {
     classId,
     startAt: startAt instanceof Date ? startAt : new Date(startAt),
@@ -271,7 +285,13 @@ const findSessionAtStartTime = async (classId, startAt, excludeSessionId = null,
  * session.startAt < newEndAt AND session.endAt > newStartAt
  * Cancelled sessions free up coach time and are excluded.
  */
-const findCoachOverlappingSessions = async (coachId, startAt, endAt, excludeSessionId = null, client = prisma) => {
+const findCoachOverlappingSessions = async (
+  coachId,
+  startAt,
+  endAt,
+  excludeSessionId = null,
+  client = prisma,
+) => {
   const start = startAt instanceof Date ? startAt : new Date(startAt);
   const end = endAt instanceof Date ? endAt : new Date(endAt);
 

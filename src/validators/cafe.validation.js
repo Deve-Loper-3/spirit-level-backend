@@ -15,11 +15,8 @@ const {
   CafeItemAvailability,
   CafeItemVisibility,
   CafeStockStatus,
-  DEFAULT_PAGE,
-  DEFAULT_LIMIT,
-  MAX_LIMIT,
 } = require('../constants/cafe');
-const { pageField, buildSizeField } = require('./pagination.validation');
+const { paginationQueryFields } = require('./pagination.validation');
 const { ALLOWED_IMAGE_MIME_TYPES } = require('../constants/upload');
 const { sendValidationFailed } = require('../utils/validationError.util');
 
@@ -35,7 +32,7 @@ const categoryIdParamSchema = z.object({
 });
 
 const itemIdParamSchema = z.object({
-  itemId: z.string().uuid({ message: Messages.ITEM_CATEGORY_INVALID }),
+  itemId: z.string().uuid({ message: Messages.ITEM_ID_INVALID }),
 });
 
 const createCategorySchema = z.object({
@@ -85,12 +82,7 @@ const listItemsQuerySchema = z.object({
     z.string().max(SEARCH_MAX_LENGTH, Messages.ITEM_SEARCH_MAX).optional(),
   ),
   categoryId: z.string().uuid({ message: Messages.ITEM_CATEGORY_INVALID }).optional(),
-  page: pageField.default(DEFAULT_PAGE),
-  limit: buildSizeField({
-    message: 'Limit must be a positive integer',
-    max: MAX_LIMIT,
-    defaultValue: DEFAULT_LIMIT,
-  }),
+  ...paginationQueryFields,
 });
 
 const listInventoryQuerySchema = listItemsQuerySchema.extend({

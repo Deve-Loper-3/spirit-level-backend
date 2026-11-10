@@ -3,9 +3,8 @@ const {
   CafeStockStatus,
   LOW_STOCK_THRESHOLD,
   DbCafeItemAvailability,
-  DEFAULT_PAGE,
-  DEFAULT_LIMIT,
 } = require('../constants/cafe');
+const { DEFAULT_PAGE, DEFAULT_LIMIT } = require('../constants/pagination');
 const { AppErrors } = require('../constants/errors');
 const { createAppError } = require('../errors/AppError');
 const { findById } = require('../repositories/cafeItem.repository');
@@ -21,7 +20,7 @@ const {
   toCafeStockUpdateResponse,
 } = require('../repositories/cafe.mapper');
 const { toSkipTake, buildPagination } = require('../utils/pagination.util');
-const { isRecordNotFoundError } = require('../utils/prismaError.util');
+const { orNotFound } = require('../utils/prismaError.util');
 
 const MINOR_UNITS_PER_AED = 100;
 
@@ -39,14 +38,8 @@ const updateStock = async ({ itemId, payload }) => {
   const data = { stockQuantity: payload.quantity };
   if (payload.quantity === 0) data.availability = DbCafeItemAvailability.SOLD_OUT;
 
-  let updated;
-  try {
-    // One write persists quantity and its zero-stock availability side effect together.
-    updated = await persistStock(itemId, data);
-  } catch (err) {
-    if (isRecordNotFoundError(err)) throw createAppError(AppErrors.ITEM_NOT_FOUND);
-    throw err;
-  }
+  // One write persists quantity and its zero-stock availability side effect together.
+  const updated = await orNotFound(() => persistStock(itemId, data), AppErrors.ITEM_NOT_FOUND);
 
   return toCafeStockUpdateResponse(updated, deriveStockStatus(updated.stockQuantity));
 };

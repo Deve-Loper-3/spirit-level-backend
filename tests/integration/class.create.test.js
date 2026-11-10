@@ -123,13 +123,13 @@ describe('POST /api/v1/classes', () => {
   });
 
   describe('Validation & Business Rules', () => {
-    it('returns 422 when public class has no eligible plans', async () => {
+    it('returns 400 when public class has no eligible plans', async () => {
       const res = await request(app)
         .post('/api/v1/classes')
         .set('Authorization', bearerFor(adminUser))
         .send(validPayload({ eligiblePlanIds: [] }));
 
-      expect(res.status).toBe(422);
+      expect(res.status).toBe(400);
       expect(res.body.code).toBe('VALIDATION_ERROR');
       expect(res.body.errors[0].field).toBe('eligiblePlanIds');
     });
@@ -150,34 +150,34 @@ describe('POST /api/v1/classes', () => {
       expect(res.body.data.eligiblePlanIds).toEqual([]);
     });
 
-    it('returns 422 when unknown plan ID is passed', async () => {
+    it('returns 400 when unknown plan ID is passed', async () => {
       const badId = 'c0000000-0000-4000-8000-000000000099';
       const res = await request(app)
         .post('/api/v1/classes')
         .set('Authorization', bearerFor(adminUser))
         .send(validPayload({ eligiblePlanIds: [badId] }));
 
-      expect(res.status).toBe(422);
+      expect(res.status).toBe(400);
       expect(res.body.errors[0].field).toBe('eligiblePlanIds');
     });
 
-    it('returns 422 when archived plan ID is passed', async () => {
+    it('returns 400 when archived plan ID is passed', async () => {
       const res = await request(app)
         .post('/api/v1/classes')
         .set('Authorization', bearerFor(adminUser))
         .send(validPayload({ eligiblePlanIds: [archivedPlan.id] }));
 
-      expect(res.status).toBe(422);
+      expect(res.status).toBe(400);
       expect(res.body.errors[0].field).toBe('eligiblePlanIds');
     });
 
-    it('returns 422 on boundary violations (intensity 0 or 6, durationMin 14, baseCapacity 0)', async () => {
+    it('returns 400 on boundary violations (intensity 0 or 6, durationMin 14, baseCapacity 0)', async () => {
       const res = await request(app)
         .post('/api/v1/classes')
         .set('Authorization', bearerFor(adminUser))
         .send(validPayload({ intensity: 6, durationMin: 14, baseCapacity: 0 }));
 
-      expect(res.status).toBe(422);
+      expect(res.status).toBe(400);
       expect(res.body.errors.length).toBeGreaterThanOrEqual(3);
     });
   });

@@ -41,11 +41,6 @@ const AppErrors = Object.freeze({
     message: Messages.USER_ALREADY_EXISTS,
     code: 'USER_ALREADY_EXISTS',
   }),
-  PHONE_ALREADY_EXISTS: Object.freeze({
-    statusCode: 409,
-    message: Messages.PHONE_ALREADY_EXISTS,
-    code: 'PHONE_ALREADY_EXISTS',
-  }),
   EMERGENCY_PHONE_SAME_AS_MEMBER: Object.freeze({
     statusCode: 400,
     message: Messages.EMERGENCY_PHONE_SAME_AS_MEMBER,
@@ -121,15 +116,10 @@ const AppErrors = Object.freeze({
     message: Messages.MEMBERSHIP_EXISTS,
     code: 'MEMBERSHIP_EXISTS',
   }),
-  MEMBERSHIP_NOT_FOUND: Object.freeze({
-    statusCode: 404,
-    message: Messages.MEMBERSHIP_NOT_FOUND,
-    code: 'MEMBERSHIP_NOT_FOUND',
-  }),
   PLAN_DUPLICATE_NAME: Object.freeze({
     statusCode: 409,
     message: Messages.PLAN_DUPLICATE_NAME,
-    code: 'duplicate_name',
+    code: 'PLAN_DUPLICATE_NAME',
   }),
   PLAN_NOT_FOUND: Object.freeze({
     statusCode: 404,
@@ -139,17 +129,17 @@ const AppErrors = Object.freeze({
   PLAN_ARCHIVED: Object.freeze({
     statusCode: 409,
     message: Messages.PLAN_ARCHIVED,
-    code: 'plan_archived',
+    code: 'PLAN_ARCHIVED',
   }),
   PLAN_IN_USE: Object.freeze({
     statusCode: 409,
     message: Messages.PLAN_IN_USE,
-    code: 'plan_in_use',
+    code: 'PLAN_IN_USE',
   }),
   PLAN_INVALID_TRANSITION: Object.freeze({
     statusCode: 409,
     message: Messages.PLAN_INVALID_TRANSITION,
-    code: 'invalid_transition',
+    code: 'PLAN_INVALID_TRANSITION',
   }),
   METHOD_NOT_ALLOWED: Object.freeze({
     statusCode: 405,
@@ -180,6 +170,26 @@ const AppErrors = Object.freeze({
     statusCode: 409,
     message: Messages.CLASS_HAS_FUTURE_BOOKINGS,
     code: 'CLASS_HAS_FUTURE_BOOKINGS',
+  }),
+  ROUTE_NOT_FOUND: Object.freeze({
+    statusCode: 404,
+    message: Messages.ROUTE_NOT_FOUND,
+    code: 'ROUTE_NOT_FOUND',
+  }),
+  RESOURCE_ALREADY_EXISTS: Object.freeze({
+    statusCode: 409,
+    message: Messages.RESOURCE_ALREADY_EXISTS,
+    code: 'RESOURCE_ALREADY_EXISTS',
+  }),
+  RESOURCE_NOT_FOUND: Object.freeze({
+    statusCode: 404,
+    message: Messages.RESOURCE_NOT_FOUND,
+    code: 'RESOURCE_NOT_FOUND',
+  }),
+  PAYLOAD_TOO_LARGE: Object.freeze({
+    statusCode: 413,
+    message: Messages.PAYLOAD_TOO_LARGE,
+    code: 'PAYLOAD_TOO_LARGE',
   }),
   RESOURCE_IN_USE: Object.freeze({
     statusCode: 409,
@@ -227,12 +237,12 @@ const AppErrors = Object.freeze({
     code: 'SESSION_NOT_CANCELLED',
   }),
   CAPACITY_BELOW_BOOKED: Object.freeze({
-    statusCode: 422,
+    statusCode: 400,
     message: Messages.CAPACITY_BELOW_BOOKED,
     code: 'CAPACITY_BELOW_BOOKED',
   }),
   CANCEL_REASON_REQUIRED: Object.freeze({
-    statusCode: 422,
+    statusCode: 400,
     message: Messages.CANCEL_REASON_REQUIRED,
     code: 'CANCEL_REASON_REQUIRED',
   }),
@@ -244,7 +254,7 @@ const AppErrors = Object.freeze({
     code: 'CATEGORY_NOT_FOUND',
   }),
   CATEGORY_NOT_FOUND_BODY: Object.freeze({
-    statusCode: 422,
+    statusCode: 400,
     message: Messages.CATEGORY_NOT_FOUND,
     code: 'CATEGORY_NOT_FOUND',
   }),
@@ -298,10 +308,10 @@ const AppErrors = Object.freeze({
     message: Messages.IMAGE_UPLOAD_NOT_CONFIGURED,
     code: 'IMAGE_UPLOAD_NOT_CONFIGURED',
   }),
-  IMAGE_UPLOAD_FAILED: Object.freeze({
+  IMAGE_UPLOAD_TOKEN_FAILED: Object.freeze({
     statusCode: 502,
     message: Messages.IMAGE_UPLOAD_TOKEN_FAILED,
-    code: 'IMAGE_UPLOAD_FAILED',
+    code: 'IMAGE_UPLOAD_TOKEN_FAILED',
   }),
 });
 

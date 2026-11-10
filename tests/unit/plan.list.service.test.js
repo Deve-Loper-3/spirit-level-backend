@@ -29,7 +29,7 @@ const planRow = (overrides = {}) => ({
 
 const query = (overrides = {}) => ({
   page: 1,
-  pageSize: 20,
+  limit: 20,
   sort: { field: 'name', direction: 'asc' },
   ...overrides,
 });
@@ -69,10 +69,10 @@ describe('plan.service - listPlans', () => {
     ]);
   });
 
-  it('returns short-form items and the meta with counts', async () => {
+  it('returns short-form items and the pagination and the counts', async () => {
     repository.listPlans.mockResolvedValue({ rows: [planRow()], total: 1 });
 
-    const { plans, meta } = await listPlans({ query: query({ q: 'nutrition' }) });
+    const { plans, pagination, counts } = await listPlans({ query: query({ q: 'nutrition' }) });
 
     expect(Object.keys(plans[0]).sort()).toEqual([...PLAN_LIST_ITEM_FIELDS].sort());
     expect(plans[0]).toMatchObject({
@@ -88,19 +88,15 @@ describe('plan.service - listPlans', () => {
       activeClientCount: 0,
     });
     expect(plans[0]).not.toHaveProperty('description');
-    expect(meta).toEqual({
-      page: 1,
-      pageSize: 20,
-      total: 1,
-      counts: { class_membership: 53, online_coaching: 7 },
-    });
+    expect(pagination).toEqual({ page: 1, limit: 20, total: 1, totalPages: 1 });
+    expect(counts).toEqual({ class_membership: 53, online_coaching: 7 });
   });
 
   it('passes the filters, sort and skip/take to the repository, and no filter to the counts', async () => {
     repository.listPlans.mockResolvedValue({ rows: [], total: 0 });
 
     await listPlans({
-      query: query({ page: 3, pageSize: 10, section: 'online_coaching', status: ['ARCHIVED'] }),
+      query: query({ page: 3, limit: 10, section: 'online_coaching', status: ['ARCHIVED'] }),
     });
 
     expect(repository.listPlans).toHaveBeenCalledWith({

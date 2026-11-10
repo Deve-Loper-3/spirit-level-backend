@@ -1397,6 +1397,136 @@ paths:
                 message: Method not allowed for this route
                 code: METHOD_NOT_ALLOWED
 
+  /api/v1/coaches/{coachId}/availability:
+    get:
+      tags: [Coaches]
+      summary: Get a coach's recurring weekly availability
+      description: |
+        ADMIN or OWNER for any coach. A COACH may read only their own week (another coach is 403).
+        A MEMBER is 403.
+
+        Always returns all 7 days in `dayOfWeek` order 1 (Monday) to 7 (Sunday). A weekday with no
+        saved row is `{ isAvailable: false, slots: [] }`. A coach whose hours were never saved still
+        returns 7 unavailable days, with `isConfigured: false` and `updatedAt: null`, so a client can show
+        "hours not set". Times are `HH:mm` 24h facility wall-clock in `timezone`. A coach with no saved
+        hours is not assignable to classes or appointments.
+      operationId: getCoachWeeklyAvailability
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/CoachId'
+      responses:
+        '200':
+          description: The recurring week
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/SuccessEnvelope'
+                  - type: object
+                    properties:
+                      data:
+                        $ref: '#/components/schemas/WeeklyAvailability'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/CoachNotFound'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+    put:
+      tags: [Coaches]
+      summary: Replace a coach's recurring weekly availability
+      description: |
+        ADMIN or OWNER only (a COACH or MEMBER is 403).
+
+        **PUT replaces the whole week; days must contain exactly 7 entries (dayOfWeek 1-7, each once). Unavailable day = { dayOfWeek, isAvailable: false, slots: [] }.**
+
+        Rules (400 `VALIDATION_ERROR`, `errors[].field` is the path, for example `days.3.slots.1.startTime`):
+        a wrong number of days, a missing or repeated `dayOfWeek`, times that are not `HH:mm` 24h, an
+        `endTime` that is not later than `startTime` (a range cannot cross midnight), more than 10 ranges
+        in a day, an available day with no range, an unavailable day with ranges, unknown fields, and
+        overlapping ranges in one day (the message names the day and both ranges). Ranges that only touch
+        (09:00-12:00 and 12:00-15:00) are allowed.
+
+        The old week is deleted and the new one inserted in one transaction, with an audit row
+        (`COACH_AVAILABILITY_UPDATED`). Saving changes no class template, class session, booking or
+        appointment: existing commitments stay scheduled. Slots in the response are sorted by start time.
+      operationId: saveCoachWeeklyAvailability
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/CoachId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SaveWeeklyAvailabilityRequest'
+            example:
+              days:
+                - dayOfWeek: 1
+                  isAvailable: true
+                  slots:
+                    - { startTime: '06:00', endTime: '12:00' }
+                    - { startTime: '16:00', endTime: '20:00' }
+                - { dayOfWeek: 2, isAvailable: true, slots: [{ startTime: '06:00', endTime: '12:00' }] }
+                - { dayOfWeek: 3, isAvailable: true, slots: [{ startTime: '06:00', endTime: '12:00' }] }
+                - { dayOfWeek: 4, isAvailable: true, slots: [{ startTime: '06:00', endTime: '12:00' }] }
+                - { dayOfWeek: 5, isAvailable: true, slots: [{ startTime: '06:00', endTime: '12:00' }] }
+                - { dayOfWeek: 6, isAvailable: false, slots: [] }
+                - { dayOfWeek: 7, isAvailable: false, slots: [] }
+      responses:
+        '200':
+          description: Saved. The body is the same shape as GET.
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/SuccessEnvelope'
+                  - type: object
+                    properties:
+                      message:
+                        example: Coach availability saved successfully
+                      data:
+                        $ref: '#/components/schemas/WeeklyAvailability'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/CoachNotFound'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+    post:
+      tags:
+        - Coaches
+      summary: Not supported
+      description: 'Every method other than GET, PUT answers 405 with `Allow: GET, PUT`.'
+      operationId: methodNotAllowed_api_v1_coaches__coachId_availability
+      responses:
+        '405':
+          description: 'Route exists but not for this method (`Allow: GET, PUT`)'
+          headers:
+            Allow:
+              description: Methods the route supports
+              schema:
+                type: string
+                example: GET, PUT
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+              example:
+                success: false
+                message: Method not allowed for this route
+                code: METHOD_NOT_ALLOWED
+
   /api/v1/plans:
     get:
       tags: [Plans]
@@ -5513,6 +5643,84 @@ components:
       properties:
         status:
           $ref: '#/components/schemas/CoachStatus'
+
+    AvailabilitySlot:
+      type: object
+      additionalProperties: false
+      required: [startTime, endTime]
+      properties:
+        startTime:
+          type: string
+          pattern: '^([01][0-9]|2[0-3]):[0-5][0-9]$'
+          example: '06:00'
+          description: 24h HH:mm facility wall-clock time
+        endTime:
+          type: string
+          pattern: '^([01][0-9]|2[0-3]):[0-5][0-9]$'
+          example: '12:00'
+          description: 24h HH:mm, later than startTime on the same day
+
+    AvailabilityDay:
+      type: object
+      additionalProperties: false
+      required: [dayOfWeek, isAvailable, slots]
+      properties:
+        dayOfWeek:
+          type: integer
+          minimum: 1
+          maximum: 7
+          description: ISO weekday, 1 = Monday ... 7 = Sunday
+        isAvailable:
+          type: boolean
+        slots:
+          type: array
+          maxItems: 10
+          description: Sorted by startTime. Empty when the day is unavailable; at least one range when available.
+          items:
+            $ref: '#/components/schemas/AvailabilitySlot'
+
+    SaveWeeklyAvailabilityRequest:
+      type: object
+      additionalProperties: false
+      required: [days]
+      description: |
+        PUT replaces the whole week; days must contain exactly 7 entries (dayOfWeek 1-7, each once).
+        Unavailable day = { dayOfWeek, isAvailable: false, slots: [] }.
+      properties:
+        days:
+          type: array
+          minItems: 7
+          maxItems: 7
+          items:
+            $ref: '#/components/schemas/AvailabilityDay'
+
+    WeeklyAvailability:
+      type: object
+      additionalProperties: false
+      required: [coachId, timezone, isConfigured, updatedAt, days]
+      properties:
+        coachId:
+          type: string
+          format: uuid
+        timezone:
+          type: string
+          example: Asia/Dubai
+          description: Facility timezone the HH:mm times are in
+        isConfigured:
+          type: boolean
+          description: false until hours were saved once (then "hours not set" can be shown)
+        updatedAt:
+          type: string
+          format: date-time
+          nullable: true
+          description: Time of the last save (ISO 8601 UTC); null if never saved
+        days:
+          type: array
+          minItems: 7
+          maxItems: 7
+          description: Always 7 entries in dayOfWeek order 1..7
+          items:
+            $ref: '#/components/schemas/AvailabilityDay'
 
     PlanKind:
       type: string

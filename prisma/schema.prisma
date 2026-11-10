@@ -54,6 +54,11 @@ enum AuditAction {
   PLAN_UPDATED
   PLAN_STATUS_CHANGED
   CAFE_ORDER_STATUS_CHANGED
+  COACH_AVAILABILITY_UPDATED
+  COACH_UNAVAILABILITY_CREATED
+  COACH_UNAVAILABILITY_UPDATED
+  COACH_UNAVAILABILITY_DELETED
+  SESSION_COACH_REPLACED
 }
 
 enum LoginFailureReason {
@@ -111,20 +116,73 @@ model EmergencyContact {
 }
 
 model Coach {
-  id        String              @id
-  userId    String              @unique
-  user      User                @relation(fields: [userId], references: [id], onDelete: Cascade)
-  coachType CoachType
-  bio       String?
-  status    CoachStatus         @default(ACTIVE)
-  classes   ClassCoach[]
-  slots     ClassSlotCoach[]
-  sessions  ClassSessionCoach[]
-  createdAt DateTime            @default(now())
-  updatedAt DateTime            @updatedAt
+  id                String                  @id
+  userId            String                  @unique
+  user              User                    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  coachType         CoachType
+  bio               String?
+  status            CoachStatus             @default(ACTIVE)
+  classes           ClassCoach[]
+  slots             ClassSlotCoach[]
+  sessions          ClassSessionCoach[]
+  availabilityDays  CoachAvailabilityDay[]
+  availabilitySlots CoachAvailabilitySlot[]
+  unavailability    CoachUnavailability[]
+  createdAt         DateTime                @default(now())
+  updatedAt         DateTime                @updatedAt
 
   @@index([status])
   @@index([coachType])
+}
+
+// Recurring weekly hours. One row per (coach, ISO weekday). `isAvailable = false` or a missing row means the
+// coach is not assignable on that weekday. Times are facility wall-clock (FACILITY_TIMEZONE), HH:mm, no midnight crossing.
+model CoachAvailabilityDay {
+  coachId     String
+  coach       Coach                   @relation(fields: [coachId], references: [id], onDelete: Cascade)
+  dayOfWeek   Int
+  isAvailable Boolean                 @default(true)
+  slots       CoachAvailabilitySlot[]
+  createdAt   DateTime                @default(now())
+  updatedAt   DateTime                @updatedAt
+
+  @@id([coachId, dayOfWeek])
+  @@map("coach_availability_days")
+}
+
+// CHECK constraints (dayOfWeek 1-7, endTime > startTime) and the composite FK live in the migration SQL.
+// Overlap between slots of one day is rejected by the service inside the replace-week transaction.
+model CoachAvailabilitySlot {
+  id        String               @id
+  coachId   String
+  coach     Coach                @relation(fields: [coachId], references: [id], onDelete: Cascade)
+  dayOfWeek Int
+  day       CoachAvailabilityDay @relation(fields: [coachId, dayOfWeek], references: [coachId, dayOfWeek], onDelete: Cascade)
+  startTime DateTime             @db.Time(0)
+  endTime   DateTime             @db.Time(0)
+  createdAt DateTime             @default(now())
+  updatedAt DateTime             @updatedAt
+
+  @@unique([coachId, dayOfWeek, startTime])
+  @@map("coach_availability_slots")
+}
+
+// Date-specific unavailability (leave). Inclusive facility-local dates. Overlap per coach is rejected by the service.
+// CHECKs (endDate >= startDate, reason not blank and <= 200, note <= 1000) live in the migration SQL.
+model CoachUnavailability {
+  id        String   @id
+  coachId   String
+  coach     Coach    @relation(fields: [coachId], references: [id], onDelete: Cascade)
+  startDate DateTime @db.Date
+  endDate   DateTime @db.Date
+  reason    String
+  note      String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([coachId, startDate, endDate])
+  @@index([startDate, endDate])
+  @@map("coach_unavailability")
 }
 
 model RefreshSession {

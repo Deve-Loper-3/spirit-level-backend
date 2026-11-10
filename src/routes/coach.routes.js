@@ -16,12 +16,19 @@ const {
   validateCoachStatusBody,
 } = require('../validators/coach.validation');
 const {
+  validateSaveWeeklyAvailabilityBody,
+} = require('../validators/coachAvailability.validation');
+const {
   listCoaches,
   getCoach,
   getMyCoach,
   createUpdateCoachHandler,
   setCoachStatus,
 } = require('../controllers/coach.controller');
+const {
+  getWeeklyAvailability,
+  saveWeeklyAvailability,
+} = require('../controllers/coachAvailability.controller');
 
 const router = Router();
 
@@ -63,10 +70,31 @@ router.patch(
   setCoachStatus,
 );
 
+// Weekly availability (SLAPP 66/111). Managers read and replace any coach's week; a coach reads
+// only their own (coach.access.assertCanViewAvailability) and can never save.
+router.get(
+  '/:coachId/availability',
+  authenticate,
+  authorize(...COACH_MANAGER_ROLES, Role.COACH),
+  coachReadLimiter,
+  validateCoachIdParam,
+  getWeeklyAvailability,
+);
+router.put(
+  '/:coachId/availability',
+  authenticate,
+  authorize(...COACH_MANAGER_ROLES),
+  coachLimiter,
+  validateCoachIdParam,
+  validateSaveWeeklyAvailabilityBody,
+  saveWeeklyAvailability,
+);
+
 // Any other method on these paths: 405 with an Allow header (not 404).
 router.all('/', methodNotAllowed(['GET']));
 router.all('/me', methodNotAllowed(['GET']));
 router.all('/:coachId', methodNotAllowed(['GET', 'PATCH']));
 router.all('/:coachId/status', methodNotAllowed(['PATCH']));
+router.all('/:coachId/availability', methodNotAllowed(['GET', 'PUT']));
 
 module.exports = router;

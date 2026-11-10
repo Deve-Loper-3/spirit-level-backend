@@ -304,6 +304,28 @@ const Messages = Object.freeze({
   START_DATE_REQUIRED: 'startDate is required',
   START_DATE_INVALID: 'startDate must be a valid calendar date in YYYY-MM-DD format',
   SLOT_DAYS_REQUIRED: 'days array must contain at least one day entry',
+
+  // Coach availability and unavailability (SLAPP 66/111)
+  AVAILABILITY_DAYS_INVALID:
+    'days must contain exactly 7 entries, one for each dayOfWeek from 1 (Monday) to 7 (Sunday)',
+  AVAILABILITY_DAYS_MISSING: (missing) => `days is missing dayOfWeek ${missing.join(', ')}`,
+  AVAILABILITY_DAY_DUPLICATE: 'dayOfWeek must be unique within days',
+  AVAILABILITY_IS_AVAILABLE_INVALID: 'isAvailable must be true or false',
+  AVAILABILITY_SLOTS_INVALID: (max) => `slots must be an array of at most ${max} time ranges`,
+  AVAILABILITY_SLOTS_REQUIRED: 'An available day needs at least one time range',
+  AVAILABILITY_SLOTS_NOT_ALLOWED: 'An unavailable day cannot have time ranges',
+  AVAILABILITY_SLOTS_OVERLAP: 'Time ranges on the same day must not overlap',
+  AVAILABILITY_SLOTS_OVERLAP_DETAIL: (dayLabel, first, second) =>
+    `${dayLabel}: ${first} overlaps ${second}. Time ranges on the same day must not overlap`,
+  COACH_AVAILABILITY_SAVED_SUCCESS: 'Coach availability saved successfully',
+  UNAVAILABILITY_END_DATE_REQUIRED: 'endDate is required',
+  UNAVAILABILITY_END_DATE_INVALID: 'endDate must be a valid calendar date in YYYY-MM-DD format',
+  UNAVAILABILITY_END_BEFORE_START: 'endDate must not be before startDate',
+  UNAVAILABILITY_REASON_REQUIRED: 'reason is required',
+  UNAVAILABILITY_REASON_INVALID: (max) => `reason must be 1 to ${max} characters`,
+  UNAVAILABILITY_NOTE_INVALID: (max) => `note must be at most ${max} characters`,
+  UNAVAILABILITY_UPDATE_EMPTY: 'Provide at least one field to update',
+  UNAVAILABILITY_ID_INVALID: 'Unavailability id must be a valid UUID',
   SLOT_DAYS_MAX: 'days array cannot contain more than 7 entries',
   SESSION_FROM_REQUIRED: 'from query parameter is required',
   SESSION_TO_REQUIRED: 'to query parameter is required',

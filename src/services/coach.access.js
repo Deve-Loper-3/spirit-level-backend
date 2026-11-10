@@ -52,6 +52,13 @@ const assertCanEdit = (caller, coach) => {
   if (!isOwnProfile(caller, coach)) throw createAppError(AppErrors.FORBIDDEN);
 };
 
+// Weekly availability is readable by managers and by the coach it belongs to. Another coach is a
+// 403 (the coach exists and is visible in the coach list, so there is nothing to hide with a 404).
+const assertCanViewAvailability = (caller, coach) => {
+  if (isCoachManager(caller.role) || isOwnProfile(caller, coach)) return;
+  throw createAppError(AppErrors.FORBIDDEN);
+};
+
 // Status changes are for managers only.
 const assertManager = (caller) => {
   if (!isCoachManager(caller.role)) throw createAppError(AppErrors.FORBIDDEN);
@@ -70,6 +77,7 @@ module.exports = {
   toFullView,
   assertCanSee,
   assertCanEdit,
+  assertCanViewAvailability,
   assertManager,
   editableFields,
 };

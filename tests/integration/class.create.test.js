@@ -8,6 +8,12 @@ const { createTestData } = require('../helpers/testData.helper');
 const { bearerFor } = require('../helpers/auth.helper');
 const { deleteTestClasses, createTestClass } = require('../helpers/class.helper');
 const { createTestPlan, deleteTestPlans } = require('../helpers/membershipPlan.helper');
+const {
+  snapshotBookingRules,
+  restoreBookingRules,
+  setTestRule,
+} = require('../helpers/bookingRule.helper');
+const { BookingRuleKey } = require('../../src/constants/bookingRule');
 
 jest.setTimeout(45000);
 
@@ -21,6 +27,7 @@ describe('POST /api/v1/classes', () => {
   let memberUser;
   let activePlan;
   let archivedPlan;
+  let bookingRulesSnapshot;
 
   const cleanup = async () => {
     await deleteTestClasses(PREFIX);
@@ -30,6 +37,9 @@ describe('POST /api/v1/classes', () => {
   beforeAll(async () => {
     app = createApp();
     await cleanup();
+    // The default payload below sends classPassEnabled: true, which needs the ClassPass rule on.
+    bookingRulesSnapshot = await snapshotBookingRules();
+    await setTestRule(BookingRuleKey.CLASSPASS_ACCEPT, { enabled: true });
     adminUser = await testData.createUser({ role: Role.ADMIN, fullName: 'Admin Class Tester' });
     ownerUser = await testData.createUser({ role: Role.OWNER, fullName: 'Owner Class Tester' });
     coachUser = await testData.createUser({ role: Role.COACH, fullName: 'Coach Class Tester' });
@@ -44,6 +54,7 @@ describe('POST /api/v1/classes', () => {
 
   afterAll(async () => {
     await cleanup();
+    await restoreBookingRules(bookingRulesSnapshot);
     await testData.cleanup();
     await prisma.$disconnect();
   });

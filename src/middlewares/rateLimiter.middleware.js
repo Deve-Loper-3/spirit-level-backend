@@ -47,6 +47,10 @@ const classReadLimiter = createPlanLimiter();
 const cafeLimiter = createPlanLimiter();
 const cafeReadLimiter = createPlanLimiter();
 
+// Studio settings (booking rules): reads and writes count separately.
+const settingsLimiter = createPlanLimiter();
+const settingsReadLimiter = createPlanLimiter();
+
 const staffLimiter = createPlanLimiter();
 const coachLimiter = createPlanLimiter();
 const coachReadLimiter = createPlanLimiter();
@@ -67,6 +71,8 @@ module.exports = {
   classReadLimiter,
   cafeLimiter,
   cafeReadLimiter,
+  settingsLimiter,
+  settingsReadLimiter,
   staffLimiter,
   coachLimiter,
   coachReadLimiter,

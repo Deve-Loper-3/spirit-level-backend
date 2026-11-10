@@ -6,6 +6,12 @@ const { Role } = require('../../src/constants/roles');
 const { createTestData } = require('../helpers/testData.helper');
 const { bearerFor } = require('../helpers/auth.helper');
 const { deleteTestClasses, createTestClass } = require('../helpers/class.helper');
+const {
+  snapshotBookingRules,
+  restoreBookingRules,
+  removeTestRule,
+} = require('../helpers/bookingRule.helper');
+const { BookingRuleKey } = require('../../src/constants/bookingRule');
 
 jest.setTimeout(45000);
 
@@ -20,6 +26,7 @@ describe('BE-SCH-1 & BE-SCH-3: Session Endpoints', () => {
   let primaryClass;
   let secondaryClass;
   let primaryCoach;
+  let bookingRulesSnapshot;
 
   const cleanup = async () => {
     await deleteTestClasses(PREFIX);
@@ -28,6 +35,9 @@ describe('BE-SCH-1 & BE-SCH-3: Session Endpoints', () => {
   beforeAll(async () => {
     app = createApp();
     await cleanup();
+    // Members read sessions in 2030 below; the 21-day member timetable cap would hide them.
+    bookingRulesSnapshot = await snapshotBookingRules();
+    await removeTestRule(BookingRuleKey.TIMETABLE_VISIBLE_AHEAD);
 
     adminUser = await testData.createUser({ role: Role.ADMIN, fullName: 'Admin Session Tester' });
     ownerUser = await testData.createUser({ role: Role.OWNER, fullName: 'Owner Session Tester' });
@@ -65,6 +75,7 @@ describe('BE-SCH-1 & BE-SCH-3: Session Endpoints', () => {
 
   afterAll(async () => {
     await cleanup();
+    await restoreBookingRules(bookingRulesSnapshot);
     await testData.cleanup();
     await prisma.$disconnect();
   });

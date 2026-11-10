@@ -18,7 +18,8 @@
     "prisma:seed": "node prisma/seed.js",
     "seed:membership-plans": "node prisma/seeds/membership-plans.seed.js",
     "seed:classes": "node prisma/seeds/classes.seed.js",
-    "seed:cafe": "node prisma/seeds/cafe.seed.js"
+    "seed:cafe": "node prisma/seeds/cafe.seed.js",
+    "seed:booking-rules": "node prisma/seeds/bookingRules.seed.js"
   },
   "repository": {
     "type": "git",

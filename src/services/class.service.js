@@ -21,6 +21,18 @@ const {
 } = classRepository;
 
 const { toClassResponse } = require('../repositories/class.mapper');
+const { BookingRuleKey } = require('../constants/bookingRule');
+const { isFeatureEnabled } = require('./bookingRule.service');
+
+// A class can only be switched to ClassPass while the studio accepts ClassPass (rule on). A class
+// that is already ClassPass keeps working when the rule is off, and turning ClassPass off is
+// always allowed.
+const assertClassPassAccepted = async ({ requested, current }) => {
+  if (requested !== true || current === true) return;
+  if (!(await isFeatureEnabled(BookingRuleKey.CLASSPASS_ACCEPT))) {
+    throw createAppError(AppErrors.CLASSPASS_NOT_ACCEPTED);
+  }
+};
 
 const buildClassWhere = ({ user, query }) => {
   const { visibility, active, status } = query;
@@ -168,6 +180,8 @@ const createClass = async ({ payload }) => {
     }
   }
 
+  await assertClassPassAccepted({ requested: data.classPassEnabled, current: false });
+
   const existing = await findActiveByName(data.name);
   if (existing) {
     throw createAppError(AppErrors.CLASS_DUPLICATE_NAME);
@@ -201,6 +215,11 @@ const updateClass = async ({ classRecord, payload }) => {
       throw createAppError(AppErrors.CLASS_VERSION_CONFLICT);
     }
   }
+
+  await assertClassPassAccepted({
+    requested: data.classPassEnabled,
+    current: classRecord.classPassEnabled,
+  });
 
   if (data.name && data.name.trim().toLowerCase() !== classRecord.name.trim().toLowerCase()) {
     const existing = await findActiveByName(data.name);

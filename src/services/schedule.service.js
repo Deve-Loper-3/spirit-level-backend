@@ -29,6 +29,9 @@ const {
   isCoachQualified,
   isCoachOnLeave,
 } = require('./schedule.adapters');
+const { BookingRuleKey } = require('../constants/bookingRule');
+const { getLimitValue } = require('./bookingRule.service');
+const { limitToVisibleDays } = require('./bookingRule.guards');
 
 const TX_OPTIONS = Object.freeze({ maxWait: 15000, timeout: 30000 });
 
@@ -753,14 +756,25 @@ const listSessions = async ({ user, query }) => {
     limit = DEFAULT_LIMIT,
   } = query;
 
-  const fromDate = new Date(from);
-  const toDate = new Date(to);
+  // A member only sees the timetable up to the visibility rule (read time only, so it applies to
+  // existing and future sessions alike). Staff and coaches are not capped.
+  const visibleDays =
+    user.role === Role.MEMBER ? await getLimitValue(BookingRuleKey.TIMETABLE_VISIBLE_AHEAD) : null;
+  const range = limitToVisibleDays({
+    from: new Date(from),
+    to: new Date(to),
+    now: new Date(),
+    days: visibleDays,
+  });
+  if (range === null) {
+    return { sessions: [], pagination: buildPagination({ page, limit, total: 0 }) };
+  }
 
   // If MEMBER: filter to public active classes
   // If COACH: filter to public active classes OR classes they are assigned to
   const { sessions } = await scheduleRepository.findSessions({
-    from: fromDate,
-    to: toDate,
+    from: range.from,
+    to: range.to,
     classId,
     coachId,
     state,

@@ -1163,6 +1163,121 @@ paths:
                 message: Method not allowed for this route
                 code: METHOD_NOT_ALLOWED
 
+  /api/v1/coaches/eligible:
+    get:
+      tags: [Coaches]
+      summary: Which coaches can take a time slot
+      description: |
+        ADMIN or OWNER only (COACH and MEMBER are 403). A coach picker: every ACTIVE coach, sorted by name,
+        with `eligible` and, when not eligible, the FIRST reason in `conflict`. Read only; the answer can be
+        stale by the time the caller saves, because the save checks again under the coach's lock.
+
+        Query: `startAt` (ISO 8601 with `Z` or a UTC offset) plus exactly one of `endAt` (then there are no
+        buffers) or `appointmentTypeId` (then the end is `startAt` plus the type's duration and the type's
+        buffers apply; an unknown type is 404, an inactive one 409). `excludeSessionId` /
+        `excludeAppointmentId` leave that class session / appointment out of the check, so an item can be
+        moved onto its own time. Unknown parameters are 400. There is no pagination.
+
+        Rules, first failing wins: weekly availability, leave, class sessions (raw time), appointments (with
+        buffers). See `CoachConflictType`. Cancelled sessions and appointments never block.
+      operationId: listEligibleCoaches
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: startAt
+          in: query
+          required: true
+          schema:
+            type: string
+            format: date-time
+        - name: endAt
+          in: query
+          description: Must be after `startAt`. Send this or `appointmentTypeId`, not both.
+          schema:
+            type: string
+            format: date-time
+        - name: appointmentTypeId
+          in: query
+          description: Send this or `endAt`, not both.
+          schema:
+            type: string
+            format: uuid
+        - name: excludeSessionId
+          in: query
+          schema:
+            type: string
+            format: uuid
+        - name: excludeAppointmentId
+          in: query
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Every active coach with their eligibility
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/SuccessEnvelope'
+                  - type: object
+                    properties:
+                      data:
+                        type: array
+                        items:
+                          $ref: '#/components/schemas/EligibleCoach'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          description: '`APPOINTMENT_TYPE_NOT_FOUND` - the `appointmentTypeId` does not exist'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+              example:
+                success: false
+                message: Appointment type not found
+                code: APPOINTMENT_TYPE_NOT_FOUND
+        '409':
+          description: '`APPOINTMENT_TYPE_INACTIVE` - the type exists but is inactive'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+              example:
+                success: false
+                message: This appointment type is inactive and cannot be booked
+                code: APPOINTMENT_TYPE_INACTIVE
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+    put:
+      tags:
+        - Coaches
+      summary: Not supported
+      description: 'Every method other than GET answers 405 with `Allow: GET`.'
+      operationId: methodNotAllowed_api_v1_coaches_eligible
+      responses:
+        '405':
+          description: 'Route exists but not for this method (`Allow: GET`)'
+          headers:
+            Allow:
+              description: Methods the route supports
+              schema:
+                type: string
+                example: GET
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+              example:
+                success: false
+                message: Method not allowed for this route
+                code: METHOD_NOT_ALLOWED
+
   /api/v1/coaches/me:
     get:
       tags: [Coaches]
@@ -5492,12 +5607,13 @@ paths:
         `MEMBER_NOT_FOUND`, `APPOINTMENT_TYPE_NOT_FOUND`); the coach is active, the member account is active
         and the type is active (409 `COACH_INACTIVE`, `MEMBER_NOT_ACTIVE`, `APPOINTMENT_TYPE_INACTIVE`).
 
-        The write runs in one transaction under a per-coach lock and calls the coach schedule check
-        (`assertIntervalAssignable`). **In this version that check only confirms the coach exists and is
-        active; availability, leave and overlap rules (409 `COACH_CONFLICT`) are added in a later release,
-        so clients must already handle a 409 `COACH_CONFLICT` here.** An audit row (`APPOINTMENT_CREATED`)
-        is written in the same transaction. Booking rules for appointments (opening window, limits) are not
-        applied.
+        The write runs in one transaction under a per-coach lock and runs the coach schedule check
+        (`assertIntervalAssignable`). The first rule that fails answers 409 `COACH_CONFLICT`, in this order:
+        weekly availability (`AVAILABILITY_NOT_SET`, `OUTSIDE_AVAILABILITY`), leave (`COACH_UNAVAILABLE`),
+        class sessions (`SESSION_OVERLAP`), appointments (`APPOINTMENT_OVERLAP`, `APPOINTMENT_BUFFER`).
+        See `CoachConflict` for the `details.conflicts[]` shape and `GET /api/v1/coaches/eligible` to find a
+        free coach first. An audit row (`APPOINTMENT_CREATED`) is written in the same transaction. Booking
+        rules for appointments (opening window, limits) are not applied.
       operationId: createAppointment
       security:
         - bearerAuth: []
@@ -5938,15 +6054,25 @@ components:
             code: MEMBER_NOT_FOUND
 
     AppointmentBookingConflict:
-      description: '`COACH_INACTIVE`, `MEMBER_NOT_ACTIVE` or `APPOINTMENT_TYPE_INACTIVE` - the coach, member or type exists but cannot be booked. `COACH_CONFLICT` (availability, leave or overlap) is reserved for a later release.'
+      description: '`COACH_INACTIVE`, `MEMBER_NOT_ACTIVE` or `APPOINTMENT_TYPE_INACTIVE` - the coach, member or type exists but cannot be booked. `COACH_CONFLICT` - the coach cannot take that time (see `details.conflicts[]`).'
       content:
         application/json:
           schema:
             $ref: '#/components/schemas/ErrorEnvelope'
           example:
             success: false
-            message: This coach is inactive and cannot be booked
-            code: COACH_INACTIVE
+            message: The coach is assigned to another class session at that time
+            code: COACH_CONFLICT
+            details:
+              conflicts:
+                - type: SESSION_OVERLAP
+                  coachId: 3f0e5f4e-8f3b-4c8a-9d52-1a2b3c4d5e6f
+                  message: The coach is assigned to another class session at that time
+                  conflictingItem:
+                    kind: SESSION
+                    id: 9a1b2c3d-0000-4000-8000-000000000001
+                    startAt: '2026-12-01T06:30:00.000Z'
+                    endAt: '2026-12-01T07:30:00.000Z'
 
     AppointmentCancelConflict:
       description: '`APPOINTMENT_ALREADY_CANCELLED` - already cancelled. `APPOINTMENT_PAST_IMMUTABLE` - the appointment has already started.'
@@ -9057,3 +9183,88 @@ components:
           type: string
           format: date-time
           description: ISO 8601 with `Z` or a UTC offset; must be in the future
+
+    CoachConflictType:
+      type: string
+      description: |
+        Why a coach cannot take an interval (first failing rule wins, in this order).
+        `AVAILABILITY_NOT_SET` - no hours saved for that weekday. `OUTSIDE_AVAILABILITY` - the interval does
+        not fit fully inside ONE saved slot of that facility day (touching slots count as one), the day is a
+        saved day off, or the interval crosses midnight. `COACH_UNAVAILABLE` - leave on any day the interval
+        touches. `SESSION_OVERLAP` - another not-cancelled class session of the coach overlaps (touching is
+        fine). `APPOINTMENT_OVERLAP` - a BOOKED appointment overlaps. `APPOINTMENT_BUFFER` - times do not
+        overlap but the buffers (before / after, of both sides) do.
+      enum:
+        - AVAILABILITY_NOT_SET
+        - OUTSIDE_AVAILABILITY
+        - COACH_UNAVAILABLE
+        - SESSION_OVERLAP
+        - APPOINTMENT_OVERLAP
+        - APPOINTMENT_BUFFER
+
+    CoachConflictItem:
+      type: object
+      additionalProperties: false
+      required: [kind, id, startAt, endAt]
+      description: The thing in the way. For `LEAVE`, `startAt` / `endAt` are the UTC bounds of the leave's facility days (`endAt` is the start of the day after the last leave day).
+      properties:
+        kind:
+          type: string
+          enum: [SESSION, APPOINTMENT, LEAVE]
+        id:
+          type: string
+          format: uuid
+        startAt:
+          type: string
+          format: date-time
+        endAt:
+          type: string
+          format: date-time
+
+    CoachConflict:
+      type: object
+      additionalProperties: false
+      required: [type, coachId, message, conflictingItem]
+      description: One entry of `details.conflicts[]` of a 409 `COACH_CONFLICT` raised by the coach schedule check. (Older class-session conflicts keep their own entry shape.)
+      properties:
+        type:
+          $ref: '#/components/schemas/CoachConflictType'
+        coachId:
+          type: string
+          format: uuid
+        message:
+          type: string
+        conflictingItem:
+          allOf:
+            - $ref: '#/components/schemas/CoachConflictItem'
+          nullable: true
+          description: Always present; null for availability conflicts
+
+    EligibleCoach:
+      type: object
+      additionalProperties: false
+      required: [coachId, fullName, eligible, conflict]
+      properties:
+        coachId:
+          type: string
+          format: uuid
+          description: Coach profile id (not the user id)
+        fullName:
+          type: string
+        eligible:
+          type: boolean
+        conflict:
+          type: object
+          nullable: true
+          additionalProperties: false
+          required: [type, message, conflictingItem]
+          description: Always present; null when `eligible` is true
+          properties:
+            type:
+              $ref: '#/components/schemas/CoachConflictType'
+            message:
+              type: string
+            conflictingItem:
+              allOf:
+                - $ref: '#/components/schemas/CoachConflictItem'
+              nullable: true

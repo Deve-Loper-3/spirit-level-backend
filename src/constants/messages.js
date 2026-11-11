@@ -340,6 +340,28 @@ const Messages = Object.freeze({
   UNAVAILABILITY_START_LOCKED:
     'startDate cannot be changed once the leave has started; only endDate, reason and note can be edited',
   UNAVAILABILITY_PAST_IMMUTABLE: 'A leave that has already ended cannot be changed or deleted',
+  // Coach schedule conflicts and eligible coaches (SLAPP 66/111 S7)
+  COACH_CONFLICT_AVAILABILITY_NOT_SET: (day) => `The coach has no available hours saved for ${day}`,
+  COACH_CONFLICT_DAY_OFF: (day) => `The coach is not available on ${day}`,
+  COACH_CONFLICT_OUTSIDE_AVAILABILITY: (day, from, to) =>
+    `${from}-${to} is outside the coach's available hours on ${day}`,
+  COACH_CONFLICT_CROSSES_MIDNIGHT: (day) =>
+    `The interval crosses midnight, but available hours cannot (${day})`,
+  COACH_CONFLICT_ON_LEAVE: (startDate, endDate) =>
+    `The coach is on leave from ${startDate} to ${endDate}`,
+  COACH_CONFLICT_SESSION_OVERLAP: 'The coach is assigned to another class session at that time',
+  COACH_CONFLICT_APPOINTMENT_OVERLAP: 'The coach has another appointment at that time',
+  COACH_CONFLICT_APPOINTMENT_BUFFER:
+    'The buffer time before or after an appointment of this coach collides with the interval',
+  ELIGIBLE_START_REQUIRED: 'startAt is required',
+  ELIGIBLE_START_INVALID: 'startAt must be an ISO 8601 date-time with a Z or UTC offset',
+  ELIGIBLE_END_INVALID: 'endAt must be an ISO 8601 date-time with a Z or UTC offset',
+  ELIGIBLE_END_BEFORE_START: 'endAt must be after startAt',
+  ELIGIBLE_END_OR_TYPE_REQUIRED: 'Provide endAt or appointmentTypeId',
+  ELIGIBLE_END_AND_TYPE: 'Provide either endAt or appointmentTypeId, not both',
+  ELIGIBLE_SESSION_ID_INVALID: 'excludeSessionId must be a valid UUID',
+  ELIGIBLE_APPOINTMENT_ID_INVALID: 'excludeAppointmentId must be a valid UUID',
+
   // Appointment types and appointments (SLAPP 66/111 S6)
   APPOINTMENT_TYPE_ID_INVALID: 'Appointment type id must be a valid UUID',
   APPOINTMENT_ID_INVALID: 'Appointment id must be a valid UUID',

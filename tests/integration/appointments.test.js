@@ -7,6 +7,7 @@ const { Role } = require('../../src/constants/roles');
 const { AuditAction } = require('../../src/constants/audit');
 const { createTestData } = require('../helpers/testData.helper');
 const { bearerFor } = require('../helpers/auth.helper');
+const { openAllWeek } = require('../helpers/coachSchedule.helper');
 const {
   createTestClass,
   createTestSession,
@@ -47,6 +48,10 @@ describe('appointments: /api/v1/appointments', () => {
     memberB = await testData.createUser({ role: Role.MEMBER, fullName: 'Member Bravo' });
     alpha = await testData.createCoach({ user: { fullName: 'Coach Alpha' } });
     bravo = await testData.createCoach({ user: { fullName: 'Coach Bravo' } });
+    // Strict availability (S7): both coaches work every day, all day, so these tests only meet the
+    // conflict rules they set up on purpose (the conflict cases live in coachSchedule.conflicts.test.js).
+    await openAllWeek(alpha.coach.id);
+    await openAllWeek(bravo.coach.id);
     type = await prisma.appointmentType.create({
       data: {
         id: crypto.randomUUID(),
@@ -227,7 +232,8 @@ describe('appointments: /api/v1/appointments', () => {
       });
       const before = await prisma.classSession.findUnique({ where: { id: session.id } });
 
-      await book({ startAt: inDays(7).toISOString() });
+      // Two hours after the session: it must not collide with it (S7), and must not change it.
+      await book({ startAt: inDays(7, 9).toISOString() });
 
       const after = await prisma.classSession.findUnique({ where: { id: session.id } });
       expect(after).toEqual(before);

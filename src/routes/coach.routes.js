@@ -22,6 +22,8 @@ const {
   validateUnavailabilityParams,
   validateListUnavailabilityQuery,
 } = require('../validators/coachAvailability.validation');
+const { validateEligibleCoachesQuery } = require('../validators/coachEligibility.validation');
+const { listEligibleCoaches } = require('../controllers/coachEligibility.controller');
 const {
   listCoaches,
   getCoach,
@@ -53,6 +55,16 @@ router.get(
 );
 // Declared before /:coachId, otherwise "me" would be read as a coach id.
 router.get('/me', authenticate, authorize(Role.COACH), coachReadLimiter, getMyCoach);
+// Coach picker for a time slot (SLAPP 66/111 S7), managers only. Declared before /:coachId, otherwise
+// "eligible" would be read as a coach id.
+router.get(
+  '/eligible',
+  authenticate,
+  authorize(...COACH_MANAGER_ROLES),
+  coachReadLimiter,
+  validateEligibleCoachesQuery,
+  listEligibleCoaches,
+);
 router.get(
   '/:coachId',
   authenticate,
@@ -141,6 +153,7 @@ router.delete(
 // Any other method on these paths: 405 with an Allow header (not 404).
 router.all('/', methodNotAllowed(['GET']));
 router.all('/me', methodNotAllowed(['GET']));
+router.all('/eligible', methodNotAllowed(['GET']));
 router.all('/:coachId', methodNotAllowed(['GET', 'PATCH']));
 router.all('/:coachId/status', methodNotAllowed(['PATCH']));
 router.all('/:coachId/availability', methodNotAllowed(['GET', 'PUT']));

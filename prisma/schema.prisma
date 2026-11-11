@@ -62,6 +62,15 @@ enum AuditAction {
   BOOKING_RULE_CREATED
   BOOKING_RULE_UPDATED
   BOOKING_RULE_DELETED
+  APPOINTMENT_TYPE_CREATED
+  APPOINTMENT_TYPE_UPDATED
+  APPOINTMENT_CREATED
+  APPOINTMENT_CANCELLED
+}
+
+enum AppointmentState {
+  BOOKED
+  CANCELLED
 }
 
 enum LoginFailureReason {
@@ -103,6 +112,7 @@ model User {
   auditLogs               AuditLog[]
   passwordResetOtps       PasswordResetOtp[]
   cafeOrders              CafeOrder[]
+  appointments            Appointment[]
   createdAt               DateTime           @default(now())
   updatedAt               DateTime           @updatedAt
 }
@@ -131,6 +141,7 @@ model Coach {
   availabilityDays  CoachAvailabilityDay[]
   availabilitySlots CoachAvailabilitySlot[]
   unavailability    CoachUnavailability[]
+  appointments      Appointment[]
   createdAt         DateTime                @default(now())
   updatedAt         DateTime                @updatedAt
 
@@ -186,6 +197,49 @@ model CoachUnavailability {
   @@index([coachId, startDate, endDate])
   @@index([startDate, endDate])
   @@map("coach_unavailability")
+}
+
+// Bookable one-to-one appointment (PT) type. Name is unique among ACTIVE types (case-insensitive, trimmed) through a
+// partial unique index in the migration SQL. CHECKs (name not blank, durationMin 1-480, buffers >= 0) are SQL only.
+model AppointmentType {
+  id              String        @id
+  name            String
+  durationMin     Int
+  bufferBeforeMin Int           @default(0)
+  bufferAfterMin  Int           @default(0)
+  isActive        Boolean       @default(true)
+  appointments    Appointment[]
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+
+  @@map("appointment_types")
+}
+
+// startAt / endAt are UTC instants. The buffer columns are snapshots of the type at booking time.
+// CHECK endAt > startAt and the partial index (coachId, startAt, endAt) WHERE state = 'BOOKED' live in the migration SQL.
+// Overlap between BOOKED appointments of one coach is enforced by the service (coachSchedule.service), not the DB.
+model Appointment {
+  id                String           @id
+  coachId           String
+  coach             Coach            @relation(fields: [coachId], references: [id], onDelete: Restrict)
+  memberId          String
+  member            User             @relation(fields: [memberId], references: [id], onDelete: Restrict)
+  appointmentTypeId String
+  appointmentType   AppointmentType  @relation(fields: [appointmentTypeId], references: [id], onDelete: Restrict)
+  startAt           DateTime         @db.Timestamptz(3)
+  endAt             DateTime         @db.Timestamptz(3)
+  bufferBeforeMin   Int
+  bufferAfterMin    Int
+  state             AppointmentState @default(BOOKED)
+  cancelledAt       DateTime?        @db.Timestamptz(3)
+  version           Int              @default(1)
+  createdAt         DateTime         @default(now())
+  updatedAt         DateTime         @updatedAt
+
+  @@index([coachId, startAt])
+  @@index([memberId, startAt])
+  @@index([appointmentTypeId])
+  @@map("appointments")
 }
 
 model RefreshSession {

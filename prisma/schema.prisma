@@ -59,6 +59,9 @@ enum AuditAction {
   COACH_UNAVAILABILITY_UPDATED
   COACH_UNAVAILABILITY_DELETED
   SESSION_COACH_REPLACED
+  BOOKING_RULE_CREATED
+  BOOKING_RULE_UPDATED
+  BOOKING_RULE_DELETED
 }
 
 enum LoginFailureReason {
@@ -572,4 +575,40 @@ model CafeOrderItem {
   @@index([orderId])
   @@index([itemName])
   @@map("cafe_order_items")
+}
+
+// SLAPP-104 (BE-SET-1): studio-wide booking rules. One row per rule in the business catalogue
+// (src/constants/bookingRule.js). A deleted row means the rule is not applied. The CHECK
+// constraints (value bounds per unit, unit and value set together) live in the migration SQL.
+enum BookingRuleCategory {
+  BOOKING_WINDOW
+  CANCELLATIONS
+  WAITLIST_GUESTS_CAPACITY
+  BOOKING_LIMIT
+  APPOINTMENTS
+  FACILITIES
+  MEMBERSHIPS_ACCOUNTS
+  CLASSPASS
+}
+
+enum BookingRuleUnit {
+  HOURS
+  DAYS
+  COUNT
+  PERCENT
+}
+
+model BookingRule {
+  id        String              @id
+  ruleKey   String              @unique
+  category  BookingRuleCategory
+  name      String
+  value     Int?
+  unit      BookingRuleUnit?
+  enabled   Boolean
+  createdAt DateTime            @default(now())
+  updatedAt DateTime            @updatedAt
+
+  @@index([category])
+  @@map("booking_rules")
 }

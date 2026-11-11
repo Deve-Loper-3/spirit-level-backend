@@ -338,6 +338,62 @@ const AppErrors = Object.freeze({
     message: Messages.IMAGE_UPLOAD_TOKEN_FAILED,
     code: 'IMAGE_UPLOAD_TOKEN_FAILED',
   }),
+  // Booking rules (SLAPP-104). The enforcement codes are for the booking, pause and credit APIs.
+  BOOKING_RULE_NOT_FOUND: Object.freeze({
+    statusCode: 404,
+    message: Messages.BOOKING_RULE_NOT_FOUND,
+    code: 'BOOKING_RULE_NOT_FOUND',
+  }),
+  BOOKING_RULE_ALREADY_EXISTS: Object.freeze({
+    statusCode: 409,
+    message: Messages.BOOKING_RULE_ALREADY_EXISTS,
+    code: 'BOOKING_RULE_ALREADY_EXISTS',
+  }),
+  BOOKING_WINDOW_NOT_OPEN: Object.freeze({
+    statusCode: 409,
+    message: Messages.BOOKING_WINDOW_NOT_OPEN,
+    code: 'BOOKING_WINDOW_NOT_OPEN',
+  }),
+  BOOKING_WINDOW_CLOSED: Object.freeze({
+    statusCode: 409,
+    message: Messages.BOOKING_WINDOW_CLOSED,
+    code: 'BOOKING_WINDOW_CLOSED',
+  }),
+  WAITLIST_FULL: Object.freeze({
+    statusCode: 409,
+    message: Messages.WAITLIST_FULL,
+    code: 'WAITLIST_FULL',
+  }),
+  GUEST_LIMIT_EXCEEDED: Object.freeze({
+    statusCode: 409,
+    message: Messages.GUEST_LIMIT_EXCEEDED,
+    code: 'GUEST_LIMIT_EXCEEDED',
+  }),
+  BOOKING_LIMIT_REACHED: Object.freeze({
+    statusCode: 409,
+    message: Messages.BOOKING_LIMIT_REACHED,
+    code: 'BOOKING_LIMIT_REACHED',
+  }),
+  BOOKING_SUSPENDED: Object.freeze({
+    statusCode: 409,
+    message: Messages.BOOKING_SUSPENDED,
+    code: 'BOOKING_SUSPENDED',
+  }),
+  CLIENT_PAUSE_NOT_ALLOWED: Object.freeze({
+    statusCode: 403,
+    message: Messages.CLIENT_PAUSE_NOT_ALLOWED,
+    code: 'CLIENT_PAUSE_NOT_ALLOWED',
+  }),
+  CREDIT_OVERDRAFT_NOT_ALLOWED: Object.freeze({
+    statusCode: 409,
+    message: Messages.CREDIT_OVERDRAFT_NOT_ALLOWED,
+    code: 'CREDIT_OVERDRAFT_NOT_ALLOWED',
+  }),
+  CLASSPASS_NOT_ACCEPTED: Object.freeze({
+    statusCode: 409,
+    message: Messages.CLASSPASS_NOT_ACCEPTED,
+    code: 'CLASSPASS_NOT_ACCEPTED',
+  }),
 });
 
 module.exports = { AppErrors };

@@ -397,6 +397,33 @@ const Messages = Object.freeze({
   SESSION_COACH_ON_LEAVE: (coachId) => `Coach ${coachId} is on approved leave during this time`,
   SESSION_COACH_CAPACITY_ONLY:
     'Coaches are only permitted to update capacity on their own sessions',
+
+  // Booking rules (SLAPP-104)
+  BOOKING_RULE_ID_INVALID: 'Booking rule ID must be a valid UUID',
+  BOOKING_RULE_KEY_INVALID: 'ruleKey must be the key of a booking rule',
+  BOOKING_RULE_ENABLED_INVALID: 'enabled must be true or false',
+  BOOKING_RULE_FIELD_UNKNOWN: 'Unknown field',
+  BOOKING_RULE_UPDATE_EMPTY: 'Send at least one of value or enabled',
+  BOOKING_RULE_VALUE_NOT_WHOLE: 'Value must be a whole number',
+  BOOKING_RULE_VALUE_OUT_OF_RANGE: (min, max, unit) =>
+    `Value must be between ${min} and ${max} ${unit}`,
+  BOOKING_RULE_PERCENT_OUT_OF_RANGE: (min, max) =>
+    `Value must be a whole percentage between ${min} and ${max}`,
+  BOOKING_RULE_FLAG_HAS_NO_VALUE: 'This rule is on or off only and takes no value',
+  BOOKING_RULE_NOT_FOUND: 'Booking rule not found',
+  BOOKING_RULE_ALREADY_EXISTS: 'This booking rule already exists',
+  BOOKING_RULE_CREATED_SUCCESS: 'Booking rule created successfully',
+  BOOKING_RULE_UPDATED_SUCCESS: 'Booking rule updated successfully',
+  BOOKING_RULE_DELETED_SUCCESS: 'Booking rule deleted successfully',
+  BOOKING_WINDOW_NOT_OPEN: 'Booking has not opened yet',
+  BOOKING_WINDOW_CLOSED: 'Booking is closed',
+  WAITLIST_FULL: 'The waitlist is full',
+  GUEST_LIMIT_EXCEEDED: 'The guest limit for this member has been reached',
+  BOOKING_LIMIT_REACHED: 'The weekly booking limit has been reached',
+  BOOKING_SUSPENDED: 'Booking is suspended until staff clear the strikes',
+  CLIENT_PAUSE_NOT_ALLOWED: 'Members cannot pause their own membership',
+  CREDIT_OVERDRAFT_NOT_ALLOWED: 'Credit balance cannot go below zero',
+  CLASSPASS_NOT_ACCEPTED: 'ClassPass is not accepted at this studio',
 });
 
 module.exports = { Messages };

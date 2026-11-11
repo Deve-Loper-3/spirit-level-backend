@@ -77,6 +77,8 @@ tags:
     description: Class templates, eligibility and recurring slots
   - name: Sessions
     description: 'Dated class sessions: calendar, create, update, cancel and restore'
+  - name: Settings
+    description: Studio-wide booking rules (read for OWNER / ADMIN, create, change and delete for OWNER only)
   - name: Docs
     description: This specification and Swagger UI
 
@@ -2350,6 +2352,10 @@ paths:
       description: |
         Available to OWNER, ADMIN.
         Public classes require >= 1 eligiblePlanIds. Private classes may have none.
+
+        Sending `classPassEnabled: true` needs the studio rule `CLASSPASS_ACCEPT` (see
+        `/settings/booking-rules`) to be on (it is on by default); otherwise 409
+        `CLASSPASS_NOT_ACCEPTED`.
       operationId: createClass
       security:
         - bearerAuth: []
@@ -2389,15 +2395,22 @@ paths:
         '403':
           $ref: '#/components/responses/Forbidden'
         '409':
-          description: Class with this name already exists
+          description: Class with this name already exists (`CLASS_DUPLICATE_NAME`), or ClassPass is not accepted (`CLASSPASS_NOT_ACCEPTED`)
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorEnvelope'
-              example:
-                success: false
-                message: A class with this name already exists
-                code: CLASS_DUPLICATE_NAME
+              examples:
+                duplicateName:
+                  value:
+                    success: false
+                    message: A class with this name already exists
+                    code: CLASS_DUPLICATE_NAME
+                classPassNotAccepted:
+                  value:
+                    success: false
+                    message: ClassPass is not accepted at this studio
+                    code: CLASSPASS_NOT_ACCEPTED
         '429':
           $ref: '#/components/responses/TooManyRequests'
     put:
@@ -2479,6 +2492,10 @@ paths:
         Available to OWNER, ADMIN.
         Supports optimistic locking if version is sent.
         Rejects active, eligiblePlanIds, externalRef with 400.
+
+        Changing a class that is not ClassPass to `classPassEnabled: true` needs the studio rule
+        `CLASSPASS_ACCEPT` to be on (it is on by default); otherwise 409 `CLASSPASS_NOT_ACCEPTED`.
+        Turning ClassPass off, or editing a class that is already ClassPass, is always allowed.
       operationId: updateClass
       security:
         - bearerAuth: []
@@ -2521,7 +2538,7 @@ paths:
         '404':
           $ref: '#/components/responses/ClassNotFound'
         '409':
-          description: Conflict (duplicate name, version mismatch, or inactive class)
+          description: Conflict (duplicate name, version mismatch, inactive class, or `CLASSPASS_NOT_ACCEPTED`)
           content:
             application/json:
               schema:
@@ -4555,6 +4572,11 @@ paths:
         **Known limitation:** the role filter runs after the page is cut, so for a MEMBER or COACH a
         page can hold fewer than `limit` items, and `pagination.total` is the number of visible
         sessions on this page, not across all pages. OWNER and ADMIN see every session.
+
+        **Timetable visibility (members only):** while the studio rule `TIMETABLE_VISIBLE_AHEAD` is
+        on (default 21 days), a MEMBER sees no session that starts later than that many days from
+        now. A range that lies wholly beyond it returns an empty list. COACH, ADMIN and OWNER are
+        not capped. If the rule is off or deleted there is no cap.
       operationId: listSessions
       security:
         - bearerAuth: []
@@ -4968,6 +4990,214 @@ paths:
         '429':
           $ref: '#/components/responses/TooManyRequests'
 
+  /api/v1/settings/booking-rules:
+    get:
+      tags: [Settings]
+      summary: List the studio booking rules, grouped by category
+      description: |
+        OWNER or ADMIN. Returns the 8 categories in a fixed order, each with its saved rules.
+        Every number carries an explicit `unit` (`hours`, `days`, `count` or `percent`); on/off
+        rules have `value: null` and `unit: null`. A deleted rule is not returned and is not
+        applied. No paging (21 rules at most).
+
+        Default rules: Booking Window: opens 504 h, closes 1 h, timetable visible 21 days.
+        Cancellations: free cancel 12 h, refunded credit expires after 90 days, strikes on,
+        3 strikes before suspension, late fee 10 percent (off). Waitlist, guests and capacity:
+        waitlist on, 4 per class, auto-book on, overbooking on, 1 guest per member. Booking
+        limit: 2 classes per week (off). Appointments: opens 336 h, closes 12 h, free cancel
+        12 h. Facilities: free cancel 1 h. Memberships and accounts: client self-pause off,
+        credit overdraft off. ClassPass: accept on.
+      operationId: listBookingRules
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: The rules grouped by category
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/SuccessEnvelope'
+                  - type: object
+                    properties:
+                      data:
+                        $ref: '#/components/schemas/BookingRuleList'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+    post:
+      tags: [Settings]
+      summary: Create a booking rule from the business-defined list
+      description: |
+        OWNER only (ADMIN gets 403). Creates the row for one of the 21 rule keys, using the
+        business default for `value` and `enabled` unless you send them. Use it to bring back a
+        rule that was deleted; a rule that already exists is 409 `BOOKING_RULE_ALREADY_EXISTS`.
+        Unknown keys, unknown fields (such as `name`, `category` or `unit`) and values that do not
+        fit the unit are 400.
+
+        **Check order:** 401/403, 429, 400, 409.
+      operationId: createBookingRule
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateBookingRuleRequest'
+      responses:
+        '201':
+          description: The created rule
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/SuccessEnvelope'
+                  - type: object
+                    properties:
+                      message:
+                        example: Booking rule created successfully
+                      data:
+                        $ref: '#/components/schemas/BookingRule'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '409':
+          $ref: '#/components/responses/BookingRuleExists'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+    put:
+      tags: [Settings]
+      summary: Not supported
+      description: 'Every method other than GET and POST answers 405 with `Allow: GET, POST`.'
+      operationId: bookingRulesMethodNotAllowed
+      responses:
+        '405':
+          description: 'Route exists but not for this method (`Allow: GET, POST`)'
+          headers:
+            Allow:
+              description: Methods the route supports
+              schema:
+                type: string
+                example: GET, POST
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+              example:
+                success: false
+                message: Method not allowed for this route
+                code: METHOD_NOT_ALLOWED
+
+  /api/v1/settings/booking-rules/{id}:
+    parameters:
+      - $ref: '#/components/parameters/BookingRuleId'
+    patch:
+      tags: [Settings]
+      summary: Change the value or the on/off state of a booking rule
+      description: |
+        OWNER only (ADMIN gets 403). Send `value` and/or `enabled`; an empty body is 400. The
+        name, category, unit and key cannot be changed. Changes apply at once to existing and
+        future classes and bookings. Sending what is already stored is a 200 that changes nothing.
+
+        **Check order:** 401/403, 429, 400 (id or body), 404, 400 (value against the unit).
+      operationId: updateBookingRule
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateBookingRuleRequest'
+      responses:
+        '200':
+          description: The rule after the change
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/SuccessEnvelope'
+                  - type: object
+                    properties:
+                      message:
+                        example: Booking rule updated successfully
+                      data:
+                        $ref: '#/components/schemas/BookingRule'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/BookingRuleNotFound'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+    delete:
+      tags: [Settings]
+      summary: Delete a booking rule
+      description: |
+        OWNER only (ADMIN gets 403). The rule is removed: it is no longer returned or applied, and
+        there is no fallback default. Create it again with `POST` to bring it back. Returns
+        `data: null`.
+      operationId: deleteBookingRule
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Rule deleted
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/SuccessEnvelope'
+                  - type: object
+                    properties:
+                      message:
+                        example: Booking rule deleted successfully
+                      data:
+                        nullable: true
+                        example: null
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/BookingRuleNotFound'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+    put:
+      tags: [Settings]
+      summary: Not supported
+      description: 'Every method other than PATCH and DELETE (including GET) answers 405 with `Allow: PATCH, DELETE`.'
+      operationId: bookingRuleMethodNotAllowed
+      responses:
+        '405':
+          description: 'Route exists but not for this method (`Allow: PATCH, DELETE`)'
+          headers:
+            Allow:
+              description: Methods the route supports
+              schema:
+                type: string
+                example: PATCH, DELETE
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+              example:
+                success: false
+                message: Method not allowed for this route
+                code: METHOD_NOT_ALLOWED
+
 components:
   securitySchemes:
     bearerAuth:
@@ -5011,6 +5241,15 @@ components:
         type: string
         format: uuid
       description: Cafe category id. A value that is not a UUID is 400 `VALIDATION_ERROR`; an unknown UUID is 404 `CATEGORY_NOT_FOUND`.
+
+    BookingRuleId:
+      name: id
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+      description: Booking rule id (from `GET /settings/booking-rules`). A value that is not a UUID is 400 `VALIDATION_ERROR`; an unknown UUID is 404 `BOOKING_RULE_NOT_FOUND`.
 
     CafeItemId:
       name: itemId
@@ -5190,6 +5429,28 @@ components:
             success: false
             message: Too many requests, please try again later
             code: TOO_MANY_REQUESTS
+
+    BookingRuleNotFound:
+      description: No booking rule with this id (it may have been deleted)
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorEnvelope'
+          example:
+            success: false
+            message: Booking rule not found
+            code: BOOKING_RULE_NOT_FOUND
+
+    BookingRuleExists:
+      description: This booking rule already exists (only a deleted rule can be created again)
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorEnvelope'
+          example:
+            success: false
+            message: This booking rule already exists
+            code: BOOKING_RULE_ALREADY_EXISTS
 
     CafeCategoryNotFound:
       description: No category with this id
@@ -6865,6 +7126,142 @@ components:
     CafeItemVisibility:
       type: string
       enum: [public, staff_only]
+
+    BookingRule:
+      type: object
+      required: [id, ruleKey, category, name, value, unit, enabled, updatedAt]
+      properties:
+        id:
+          type: string
+          format: uuid
+        ruleKey:
+          type: string
+          description: Stable key of the business-defined rule (one row per key).
+          enum:
+            - BOOKING_WINDOW_OPENS
+            - BOOKING_WINDOW_CLOSES
+            - TIMETABLE_VISIBLE_AHEAD
+            - FREE_CANCEL_BEFORE_CLASS
+            - REFUNDED_CREDIT_EXPIRY
+            - STRIKES_ENABLED
+            - STRIKES_BEFORE_SUSPENSION
+            - LATE_FEE
+            - WAITLIST_ENABLED
+            - WAITLIST_MAX_PER_CLASS
+            - WAITLIST_AUTO_BOOK
+            - OVERBOOKING_ENABLED
+            - MAX_GUESTS_PER_MEMBER
+            - MAX_CLASSES_PER_WEEK
+            - APPOINTMENT_OPENS
+            - APPOINTMENT_CLOSES
+            - APPOINTMENT_FREE_CANCEL
+            - FACILITY_FREE_CANCEL
+            - CLIENT_SELF_PAUSE
+            - CREDIT_OVERDRAFT
+            - CLASSPASS_ACCEPT
+        category:
+          $ref: '#/components/schemas/BookingRuleCategory'
+        name:
+          type: string
+        value:
+          type: integer
+          nullable: true
+          description: Whole number in `unit`. `null` for an on/off rule, which has no value.
+        unit:
+          type: string
+          nullable: true
+          enum: [hours, days, count, percent]
+          description: Unit of `value`. `null` for an on/off rule.
+        enabled:
+          type: boolean
+          description: |
+            For a limit rule (windows, cancel hours, expiry, strike threshold, late fee, waitlist
+            size, guests, weekly limit, appointments, facilities) off means no restriction. For an
+            on/off feature rule (strikes, waitlist, auto-book, overbooking, self-pause, overdraft,
+            ClassPass) off means the feature is off.
+        updatedAt:
+          type: string
+          format: date-time
+      example:
+        id: 3f2b8a4e-6f4e-4c61-9d0f-0c1f7f0a9b11
+        ruleKey: BOOKING_WINDOW_OPENS
+        category: booking_window
+        name: Booking opens before class
+        value: 504
+        unit: hours
+        enabled: true
+        updatedAt: '2026-11-10T08:00:00.000Z'
+
+    BookingRuleCategory:
+      type: string
+      enum:
+        - booking_window
+        - cancellations
+        - waitlist_guests_capacity
+        - booking_limit
+        - appointments
+        - facilities
+        - memberships_accounts
+        - classpass
+
+    BookingRuleCategoryGroup:
+      type: object
+      required: [category, label, rules]
+      properties:
+        category:
+          $ref: '#/components/schemas/BookingRuleCategory'
+        label:
+          type: string
+          example: Booking Window
+        rules:
+          type: array
+          description: Saved rules of this category, in catalogue order. Empty when all were deleted.
+          items:
+            $ref: '#/components/schemas/BookingRule'
+
+    BookingRuleList:
+      type: object
+      required: [categories]
+      properties:
+        categories:
+          type: array
+          description: Always all 8 categories, in a fixed order.
+          items:
+            $ref: '#/components/schemas/BookingRuleCategoryGroup'
+
+    CreateBookingRuleRequest:
+      type: object
+      additionalProperties: false
+      required: [ruleKey]
+      properties:
+        ruleKey:
+          $ref: '#/components/schemas/BookingRule/properties/ruleKey'
+        value:
+          type: integer
+          description: |
+            Optional; the business default is used when omitted. Must fit the unit of the rule:
+            hours 0-8760, days 0-365, count 0-1000, percent 1-100. Not allowed for an on/off rule.
+        enabled:
+          type: boolean
+          description: Optional; the business default is used when omitted.
+      example:
+        ruleKey: LATE_FEE
+
+    UpdateBookingRuleRequest:
+      type: object
+      additionalProperties: false
+      minProperties: 1
+      properties:
+        value:
+          type: integer
+          description: |
+            Must fit the unit of the rule: hours 0-8760, days 0-365, count 0-1000, percent 1-100.
+            Not allowed for an on/off rule. `null` is not allowed.
+        enabled:
+          type: boolean
+      example:
+        value: 6
+        enabled: true
 
     CafeCategory:
       type: object

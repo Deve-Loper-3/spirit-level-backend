@@ -90,9 +90,9 @@ enum CoachStatus {
 }
 
 model User {
-  id                      String             @id
+  id                      String                    @id
   fullName                String
-  email                   String             @unique
+  email                   String                    @unique
   phone                   String
   whatsappNumber          String?
   gender                  Gender
@@ -100,9 +100,9 @@ model User {
   birthMonth              Int?
   profileImageUrl         String?
   passwordHash            String
-  role                    Role               @default(MEMBER)
-  status                  AccountStatus      @default(PENDING)
-  mustChangePassword      Boolean            @default(false)
+  role                    Role                      @default(MEMBER)
+  status                  AccountStatus             @default(PENDING)
+  mustChangePassword      Boolean                   @default(false)
   waiverAcceptedAt        DateTime?
   registrationCompletedAt DateTime?
   lastLoginAt             DateTime?
@@ -113,8 +113,11 @@ model User {
   passwordResetOtps       PasswordResetOtp[]
   cafeOrders              CafeOrder[]
   appointments            Appointment[]
-  createdAt               DateTime           @default(now())
-  updatedAt               DateTime           @updatedAt
+  classBookings           ClassBooking[]
+  creditTransactions      MemberCreditTransaction[]
+  notifications           Notification[]
+  createdAt               DateTime                  @default(now())
+  updatedAt               DateTime                  @updatedAt
 }
 
 model EmergencyContact {
@@ -240,6 +243,74 @@ model Appointment {
   @@index([memberId, startAt])
   @@index([appointmentTypeId])
   @@map("appointments")
+}
+
+enum ClassBookingState {
+  BOOKED
+  CANCELLED
+}
+
+enum CreditReason {
+  CLASS_CANCELLED_REFUND
+  MANUAL_ADJUSTMENT
+}
+
+enum NotificationType {
+  CLASS_CANCELLED
+}
+
+// A member's booking of a class session (SLAPP 66/111 S10). Created by tests and, later, by the booking
+// ticket; there is no public booking endpoint yet. The partial unique index "one BOOKED booking per
+// (session, member)" is in the migration SQL.
+model ClassBooking {
+  id                 String                    @id
+  sessionId          String
+  session            ClassSession              @relation(fields: [sessionId], references: [id], onDelete: Restrict)
+  memberId           String
+  member             User                      @relation(fields: [memberId], references: [id], onDelete: Restrict)
+  state              ClassBookingState         @default(BOOKED)
+  cancelledAt        DateTime?                 @db.Timestamptz(3)
+  creditTransactions MemberCreditTransaction[]
+  createdAt          DateTime                  @default(now())
+  updatedAt          DateTime                  @updatedAt
+
+  @@index([sessionId, state])
+  @@index([memberId, createdAt])
+  @@map("class_bookings")
+}
+
+// Append-only credit ledger: rows are inserted, never updated or deleted. A member's balance change is
+// `delta` (never 0, CHECK in the migration SQL). A class-cancellation refund is unique per booking (partial
+// unique index in the migration SQL), which makes the refund idempotent.
+model MemberCreditTransaction {
+  id        String        @id
+  memberId  String
+  member    User          @relation(fields: [memberId], references: [id], onDelete: Restrict)
+  delta     Int
+  reason    CreditReason
+  bookingId String?
+  booking   ClassBooking? @relation(fields: [bookingId], references: [id], onDelete: Restrict)
+  createdAt DateTime      @default(now())
+
+  @@index([memberId, createdAt])
+  @@map("member_credit_transactions")
+}
+
+// In-app notification of one user (replaces push in this ticket). Non-blank title / body (CHECK) and the
+// partial index for unread counts (WHERE "readAt" IS NULL) are in the migration SQL.
+model Notification {
+  id        String           @id
+  userId    String
+  user      User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  type      NotificationType
+  title     String
+  body      String
+  data      Json             @default("{}")
+  readAt    DateTime?        @db.Timestamptz(3)
+  createdAt DateTime         @default(now())
+
+  @@index([userId, createdAt(sort: Desc)])
+  @@map("notifications")
 }
 
 model RefreshSession {
@@ -515,6 +586,7 @@ model ClassSession {
   image            String?
   overrideDetails  Json                @default("{}")
   coaches          ClassSessionCoach[]
+  bookings         ClassBooking[]
   createdAt        DateTime            @default(now())
   updatedAt        DateTime            @updatedAt
 

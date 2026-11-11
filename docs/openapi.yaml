@@ -5118,8 +5118,11 @@ paths:
         **Replacing a coach:** send the FINAL `coachIds` of this one session (plus `overrideReasons.coachIds`).
         It changes only this session, never the class template or the other occurrences, and writes the audit
         entry `SESSION_COACH_REPLACED` (previous and new coach ids). The replacement is manual; nothing is
-        chosen automatically. The final coach set is checked for the session interval; every coach must be
-        assignable to the class and free (`CoachConflict`). A PATCH that does not change the coach set or the
+        chosen automatically. Any ACTIVE coach may be chosen, including one who is not assigned to the class
+        (the ones `GET /api/v1/coaches/eligible` lists); an unknown or inactive coach is 400. Choosing a coach
+        does not add them to the class template and changes no other occurrence. The final coach set is checked
+        for the session interval and every coach must be free (`CoachConflict`); a coach the picker marks
+        ineligible gets 409 `COACH_CONFLICT` with the same reason. A PATCH that does not change the coach set or the
         time (other fields, or the same coaches sent again) is not checked against availability, leave or
         appointments, so unrelated edits keep working. Changing the time checks the existing coaches against
         the new time.

@@ -73,12 +73,17 @@ const assertClassReadableByUser = (classRecord, user, notFound = AppErrors.CLASS
 };
 
 // Coach Validation Helper
+// `requireClassAssignment` (default true) is the rule "every coach must be assigned to the class
+// template". Only the single-session PATCH turns it off: an admin may replace a coach of ONE session
+// instance with any active coach, and availability / leave / overlaps are then decided by the S7 engine.
+// Every other caller (create session, restore, class-slot create / update) keeps the rule.
 const validateCoachesForInterval = async ({
   coachIds = [],
   classRecord,
   startAt,
   endAt,
   excludeSessionId = null,
+  requireClassAssignment = true,
   client = prisma,
 }) => {
   if (!coachIds || coachIds.length === 0) return;
@@ -102,7 +107,7 @@ const validateCoachesForInterval = async ({
   }
 
   // 2. Verify coaches are assigned to the class template
-  if (classRecord && Array.isArray(classRecord.coaches)) {
+  if (requireClassAssignment && classRecord && Array.isArray(classRecord.coaches)) {
     const classCoachIds = new Set(
       classRecord.coaches.map((c) => c.coachId || c.coach?.id).filter(Boolean),
     );
@@ -1085,6 +1090,9 @@ const patchSession = async ({ sessionId, payload, user, meta = {} }) => {
         startAt: targetStartAt,
         endAt: targetEndAt,
         excludeSessionId: session.id,
+        // Replacement of one session instance: any active coach, not only the template's coaches.
+        // (Also keeps a time-only PATCH working for a session that already has such a coach.)
+        requireClassAssignment: false,
         client: tx,
       });
     }
@@ -1315,6 +1323,8 @@ const restoreSession = async ({ sessionId, user: _user }) => {
       startAt: session.startAt,
       endAt: session.endAt,
       excludeSessionId: session.id,
+      // The stored coaches may include an off-template replacement coach (single-session PATCH).
+      requireClassAssignment: false,
       client: tx,
     });
     // Availability, leave and appointments (S9): a restored session needs its coaches free again.

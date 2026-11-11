@@ -41,6 +41,8 @@ describe('coach schedule on the manual session paths + GET /sessions/coverage', 
   let bravo; // class coach, works all day
   let narrow; // class coach, works 09:00-12:00 only
   let unset; // class coach, no hours saved
+  let outsider; // NOT on the class template, works all day
+  let outsiderNoHours; // NOT on the class template, no hours saved
   let cls;
 
   beforeAll(async () => {
@@ -52,6 +54,9 @@ describe('coach schedule on the manual session paths + GET /sessions/coverage', 
     bravo = await testData.createCoach({ user: { fullName: 'Sess Bravo' } });
     narrow = await testData.createCoach({ user: { fullName: 'Sess Narrow' } });
     unset = await testData.createCoach({ user: { fullName: 'Sess Unset' } });
+    outsider = await testData.createCoach({ user: { fullName: 'Sess Outsider' } });
+    outsiderNoHours = await testData.createCoach({ user: { fullName: 'Sess OutsiderNoHours' } });
+    await openAllWeek(outsider.coach.id);
     await openAllWeek(alpha.coach.id);
     await openAllWeek(bravo.coach.id);
     await setCoachWeek(
@@ -65,7 +70,7 @@ describe('coach schedule on the manual session paths + GET /sessions/coverage', 
     });
   });
 
-  const coaches = () => [alpha, bravo, narrow, unset];
+  const coaches = () => [alpha, bravo, narrow, unset, outsider, outsiderNoHours];
   const coachIds = () => coaches().map((c) => c.coach.id);
   const userIds = () => [admin, owner, member, ...coaches().map((c) => c.user)].map((u) => u.id);
 
@@ -326,6 +331,111 @@ describe('coach schedule on the manual session paths + GET /sessions/coverage', 
     });
   });
 
+  describe('PATCH /sessions/:id: replacement by ANY active coach (not only the template coaches)', () => {
+    const reasons = { overrideReasons: { coachIds: 'Cover for the day' } };
+
+    it('a coach that is not on the class template is accepted: only that session changes, audit written', async () => {
+      const target = await insertSession('10:00', day(0), [alpha]);
+      const other = await insertSession('10:00', day(1), [alpha]);
+      const templateBefore = (await prisma.classCoach.findMany({ where: { classId: cls.id } }))
+        .map((r) => r.coachId)
+        .sort();
+      const otherBefore = await prisma.classSession.findUnique({ where: { id: other.id } });
+      expect(templateBefore).not.toContain(outsider.coach.id);
+
+      const res = await patch(admin, `${SESSIONS_URL}/${target.id}`, {
+        coachIds: [outsider.coach.id],
+        ...reasons,
+      });
+      expect(res.status).toBe(200);
+      expect(res.body.data.coaches.map((c) => c.id)).toEqual([outsider.coach.id]);
+
+      expect(await sessionCoachIds(target.id)).toEqual([outsider.coach.id]);
+      expect(await sessionCoachIds(other.id)).toEqual([alpha.coach.id]);
+      expect(await prisma.classSession.findUnique({ where: { id: other.id } })).toEqual(
+        otherBefore,
+      );
+      const templateAfter = (await prisma.classCoach.findMany({ where: { classId: cls.id } }))
+        .map((r) => r.coachId)
+        .sort();
+      expect(templateAfter).toEqual(templateBefore); // the coach was NOT added to the template
+      expect(await prisma.classSlotCoach.count({ where: { coachId: outsider.coach.id } })).toBe(0);
+
+      const audit = await prisma.auditLog.findMany({
+        where: { action: AuditAction.SESSION_COACH_REPLACED, actorId: admin.id },
+      });
+      expect(audit).toHaveLength(1);
+      expect(audit[0].details).toMatchObject({
+        sessionId: target.id,
+        previousCoachIds: [alpha.coach.id],
+        newCoachIds: [outsider.coach.id],
+      });
+    });
+
+    it('a coach the picker marks eligible is accepted; one it marks ineligible gets 409 COACH_CONFLICT', async () => {
+      const target = await insertSession('10:00', day(0), [alpha]);
+      const picker = await get(
+        admin,
+        `/api/v1/coaches/eligible?${new URLSearchParams({
+          startAt: iso('10:00', day(0)),
+          endAt: iso('11:00', day(0)),
+          excludeSessionId: target.id,
+        }).toString()}`,
+      );
+      expect(picker.status).toBe(200);
+      const row = (coach) => picker.body.data.find((r) => r.coachId === coach.coach.id);
+      expect(row(outsider).eligible).toBe(true);
+      expect(row(outsiderNoHours)).toMatchObject({
+        eligible: false,
+        conflict: { type: 'AVAILABILITY_NOT_SET' },
+      });
+
+      const rejected = await patch(admin, `${SESSIONS_URL}/${target.id}`, {
+        coachIds: [outsiderNoHours.coach.id],
+        ...reasons,
+      });
+      expect([rejected.status, rejected.body.code]).toEqual([409, 'COACH_CONFLICT']);
+      expect(conflictOf(rejected).type).toBe(row(outsiderNoHours).conflict.type); // same reason as the picker
+      expect(await sessionCoachIds(target.id)).toEqual([alpha.coach.id]);
+
+      const accepted = await patch(admin, `${SESSIONS_URL}/${target.id}`, {
+        coachIds: [outsider.coach.id],
+        ...reasons,
+      });
+      expect(accepted.status).toBe(200);
+    });
+
+    it('the S7 gate still applies to an off-template coach: leave and overlap are 409', async () => {
+      const target = await insertSession('10:00', day(0), [alpha]);
+      await insertLeave(outsider, day(0));
+      const onLeave = await patch(admin, `${SESSIONS_URL}/${target.id}`, {
+        coachIds: [outsider.coach.id],
+        ...reasons,
+      });
+      expect([onLeave.status, conflictOf(onLeave).type]).toEqual([409, 'COACH_UNAVAILABLE']);
+
+      await prisma.coachUnavailability.deleteMany({ where: { coachId: outsider.coach.id } });
+      await insertSession('10:30', day(2), [outsider]); // the outsider already teaches then
+      const t2 = await insertSession('10:00', day(2), [alpha]);
+      const overlap = await patch(admin, `${SESSIONS_URL}/${t2.id}`, {
+        coachIds: [outsider.coach.id],
+        ...reasons,
+      });
+      expect([overlap.status, overlap.body.code]).toEqual([409, 'COACH_CONFLICT']);
+    });
+
+    it('an unknown coach is still 400, and POST /sessions still requires a template coach', async () => {
+      const target = await insertSession('10:00', day(0), [alpha]);
+      const unknown = await patch(admin, `${SESSIONS_URL}/${target.id}`, {
+        coachIds: [crypto.randomUUID()],
+        ...reasons,
+      });
+      expect(unknown.status).toBe(400);
+      const create = await createSession('10:00', day(3), [outsider]);
+      expect(create.status).toBe(400); // create is unchanged: coaches must be on the template
+    });
+  });
+
   describe('POST /sessions/:id/restore', () => {
     it('is rejected while a coach is unavailable and accepted once they are free', async () => {
       const cancelled = await insertSession('10:00', day(0), [alpha], { state: 'CANCELLED' });
@@ -342,6 +452,29 @@ describe('coach schedule on the manual session paths + GET /sessions/coverage', 
       const ok = await post(admin, url, {});
       expect(ok.status).toBe(200);
       expect(ok.body.data.state).toBe('open');
+    });
+
+    it('a session whose coach was replaced by an off-template coach: cancel, restore = 200; an engine conflict is still 409', async () => {
+      const target = await insertSession('10:00', day(0), [alpha]);
+      const url = `${SESSIONS_URL}/${target.id}`;
+      const replaced = await patch(admin, url, {
+        coachIds: [outsider.coach.id],
+        overrideReasons: { coachIds: 'Cover' },
+      });
+      expect(replaced.status).toBe(200);
+      const cancelled = await post(admin, `${url}/cancel`, { reason: 'Room closed' });
+      expect(cancelled.status).toBe(200);
+
+      const leave = await insertLeave(outsider, day(0));
+      const blocked = await post(admin, `${url}/restore`, {});
+      expect([blocked.status, blocked.body.code]).toEqual([409, 'COACH_CONFLICT']);
+      expect(conflictOf(blocked).type).toBe('COACH_UNAVAILABLE');
+
+      await prisma.coachUnavailability.delete({ where: { id: leave.id } });
+      const restored = await post(admin, `${url}/restore`, {});
+      expect(restored.status).toBe(200);
+      expect(restored.body.data.state).toBe('open');
+      expect(await sessionCoachIds(target.id)).toEqual([outsider.coach.id]);
     });
 
     it('also meets the other S7 rules (no hours, appointment)', async () => {

@@ -333,6 +333,131 @@ describe('patchSession', () => {
   });
 });
 
+describe('patchSession: replacement with a coach that is NOT on the class template', () => {
+  // coach-3 is active but is not one of classRecord.coaches (coach-1, coach-2)
+  beforeEach(() => scheduleRepository.findSessionById.mockResolvedValue(sessionRecord()));
+  const replaceWith = (coachIds) =>
+    patchSession({
+      sessionId: 'session-1',
+      payload: { coachIds, overrideReasons: { coachIds: 'Covering coach' } },
+      user: admin,
+      meta: {},
+    });
+
+  it('passes the old validation, goes through the engine and is saved on that session only', async () => {
+    await replaceWith(['coach-3']);
+    expect(checkCoachesForInterval).toHaveBeenCalledWith(
+      { coachIds: ['coach-3'], startAt: START, endAt: END, excludeSessionId: 'session-1' },
+      mockTx,
+    );
+    expect(scheduleRepository.updateSession).toHaveBeenCalledWith(
+      'session-1',
+      expect.any(Object),
+      ['coach-3'],
+      mockTx,
+    );
+    expect(createAuditLog).toHaveBeenCalledWith(
+      mockTx,
+      expect.objectContaining({
+        action: AuditAction.SESSION_COACH_REPLACED,
+        details: expect.objectContaining({
+          previousCoachIds: ['coach-1'],
+          newCoachIds: ['coach-3'],
+        }),
+      }),
+    );
+  });
+
+  it('never touches the class template or other sessions: only updateSession of this session runs', async () => {
+    await replaceWith(['coach-3']);
+    expect(scheduleRepository.updateSession).toHaveBeenCalledTimes(1);
+    expect(scheduleRepository.replaceSessionCoaches).not.toHaveBeenCalled();
+    expect(classRepository.findById).toHaveBeenCalledTimes(0); // the template is not even read
+    expect(classRecord.coaches.map((c) => c.coachId)).toEqual(['coach-1', 'coach-2']);
+  });
+
+  it('an unknown or inactive coach is still rejected (400, nothing saved)', async () => {
+    scheduleRepository.findCoachesByIdsWithDetails.mockResolvedValue([]);
+    await expect(replaceWith(['coach-3'])).rejects.toMatchObject({
+      statusCode: 400,
+      code: 'VALIDATION_ERROR',
+    });
+    scheduleRepository.findCoachesByIdsWithDetails.mockResolvedValue([
+      { id: 'coach-3', status: 'INACTIVE', user: { status: 'ACTIVE' } },
+    ]);
+    await expect(replaceWith(['coach-3'])).rejects.toMatchObject({ statusCode: 400 });
+    scheduleRepository.findCoachesByIdsWithDetails.mockResolvedValue([
+      { id: 'coach-3', status: 'ACTIVE', user: { status: 'DISABLED' } },
+    ]);
+    await expect(replaceWith(['coach-3'])).rejects.toMatchObject({ statusCode: 400 });
+    expect(scheduleRepository.updateSession).not.toHaveBeenCalled();
+    expect(checkCoachesForInterval).not.toHaveBeenCalled();
+  });
+
+  it('the S7 engine is still the gate: a conflict is a 409 and nothing is saved or audited', async () => {
+    checkCoachesForInterval.mockResolvedValue(
+      new Map([['coach-3', conflict('coach-3', 'AVAILABILITY_NOT_SET')]]),
+    );
+    await expect(replaceWith(['coach-3'])).rejects.toMatchObject({
+      statusCode: 409,
+      code: 'COACH_CONFLICT',
+      details: { conflicts: [expect.objectContaining({ type: 'AVAILABILITY_NOT_SET' })] },
+    });
+    expect(scheduleRepository.updateSession).not.toHaveBeenCalled();
+    expect(createAuditLog).not.toHaveBeenCalled();
+  });
+
+  it('a qualification rule is still applied (isCoachQualified false is a 409)', async () => {
+    isCoachQualified.mockResolvedValue(false);
+    await expect(replaceWith(['coach-3'])).rejects.toMatchObject({
+      statusCode: 409,
+      code: 'COACH_CONFLICT',
+    });
+    expect(scheduleRepository.updateSession).not.toHaveBeenCalled();
+  });
+
+  it('a later time-only PATCH of that session keeps working (the stored coach is off-template)', async () => {
+    const offTemplate = sessionRecord({
+      coaches: [{ coachId: 'coach-3', coach: { id: 'coach-3', userId: 'u3' } }],
+    });
+    scheduleRepository.findSessionById.mockResolvedValue(offTemplate);
+    const newStart = new Date(START.getTime() + 2 * 60 * 60 * 1000);
+    await patchSession({
+      sessionId: 'session-1',
+      payload: {
+        startAt: newStart.toISOString(),
+        endAt: new Date(newStart.getTime() + 3600000).toISOString(),
+        overrideReasons: { startAt: 'Moved', endAt: 'Moved' },
+      },
+      user: admin,
+      meta: {},
+    });
+    expect(checkCoachesForInterval).toHaveBeenCalledWith(
+      expect.objectContaining({ coachIds: ['coach-3'] }),
+      mockTx,
+    );
+    expect(scheduleRepository.updateSession).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('the template rule still holds where it was not asked to change', () => {
+  it('createSession rejects a coach that is not on the class template (400)', async () => {
+    await expect(
+      createSession({
+        payload: {
+          classId: 'class-1',
+          startAt: START.toISOString(),
+          endAt: END.toISOString(),
+          coachIds: ['coach-3'],
+        },
+        user: admin,
+      }),
+    ).rejects.toMatchObject({ statusCode: 400, code: 'VALIDATION_ERROR' });
+    expect(checkCoachesForInterval).not.toHaveBeenCalled();
+    expect(scheduleRepository.createSession).not.toHaveBeenCalled();
+  });
+});
+
 describe('restoreSession', () => {
   const cancelled = () => sessionRecord({ state: 'CANCELLED', overriddenFields: ['cancel'] });
 
@@ -341,6 +466,22 @@ describe('restoreSession', () => {
     await restoreSession({ sessionId: 'session-1', user: admin });
     expect(checkCoachesForInterval).toHaveBeenCalledWith(
       { coachIds: ['coach-1'], startAt: START, endAt: END, excludeSessionId: 'session-1' },
+      mockTx,
+    );
+    expect(scheduleRepository.updateSession).toHaveBeenCalledTimes(1);
+  });
+
+  it('a stored coach that is not on the class template (a replacement) can be restored', async () => {
+    scheduleRepository.findSessionById.mockResolvedValue(
+      sessionRecord({
+        state: 'CANCELLED',
+        overriddenFields: ['cancel', 'coachIds'],
+        coaches: [{ coachId: 'coach-3', coach: { id: 'coach-3', userId: 'u3' } }],
+      }),
+    );
+    await restoreSession({ sessionId: 'session-1', user: admin });
+    expect(checkCoachesForInterval).toHaveBeenCalledWith(
+      expect.objectContaining({ coachIds: ['coach-3'], excludeSessionId: 'session-1' }),
       mockTx,
     );
     expect(scheduleRepository.updateSession).toHaveBeenCalledTimes(1);

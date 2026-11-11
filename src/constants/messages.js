@@ -326,6 +326,20 @@ const Messages = Object.freeze({
   UNAVAILABILITY_NOTE_INVALID: (max) => `note must be at most ${max} characters`,
   UNAVAILABILITY_UPDATE_EMPTY: 'Provide at least one field to update',
   UNAVAILABILITY_ID_INVALID: 'Unavailability id must be a valid UUID',
+  UNAVAILABILITY_CREATED_SUCCESS: 'Coach unavailability created successfully',
+  UNAVAILABILITY_UPDATED_SUCCESS: 'Coach unavailability updated successfully',
+  UNAVAILABILITY_DELETED_SUCCESS: 'Coach unavailability deleted successfully',
+  UNAVAILABILITY_NOT_FOUND: 'Coach unavailability not found',
+  UNAVAILABILITY_OVERLAP: 'The dates overlap existing leave of this coach',
+  UNAVAILABILITY_OVERLAP_DETAIL: (startDate, endDate) =>
+    `This coach already has leave from ${startDate} to ${endDate}, which overlaps the requested dates`,
+  UNAVAILABILITY_START_IN_PAST: (today) =>
+    `startDate cannot be in the past (today is ${today} in the facility timezone)`,
+  UNAVAILABILITY_END_IN_PAST: (today) =>
+    `endDate cannot be in the past (today is ${today} in the facility timezone)`,
+  UNAVAILABILITY_START_LOCKED:
+    'startDate cannot be changed once the leave has started; only endDate, reason and note can be edited',
+  UNAVAILABILITY_PAST_IMMUTABLE: 'A leave that has already ended cannot be changed or deleted',
   SLOT_DAYS_MAX: 'days array cannot contain more than 7 entries',
   SESSION_FROM_REQUIRED: 'from query parameter is required',
   SESSION_TO_REQUIRED: 'to query parameter is required',

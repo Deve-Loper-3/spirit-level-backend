@@ -27,6 +27,16 @@ const MAX_SLOTS_PER_DAY = 10;
 const UNAVAILABILITY_REASON_MAX_LENGTH = 200;
 const UNAVAILABILITY_NOTE_MAX_LENGTH = 1000;
 
+// POST / PATCH of a leave list the class sessions it touches, at most this many (the rest is
+// reported in `affectedTotal`).
+const AFFECTED_SESSIONS_CAP = 100;
+
+// Is another assigned coach free on the day? (API enum strings.)
+const SessionCoverage = Object.freeze({
+  COVERED: 'COVERED',
+  UNCOVERED: 'UNCOVERED',
+});
+
 module.exports = {
   DAY_OF_WEEK,
   DAY_OF_WEEK_MIN,
@@ -38,4 +48,6 @@ module.exports = {
   MAX_SLOTS_PER_DAY,
   UNAVAILABILITY_REASON_MAX_LENGTH,
   UNAVAILABILITY_NOTE_MAX_LENGTH,
+  AFFECTED_SESSIONS_CAP,
+  SessionCoverage,
 };

@@ -3,6 +3,7 @@ const {
   createUnavailabilityBodySchema,
   updateUnavailabilityBodySchema,
   unavailabilityParamsSchema,
+  listUnavailabilityQuerySchema,
 } = require('../../src/validators/coachAvailability.validation');
 const { Messages } = require('../../src/constants/messages');
 const {
@@ -490,18 +491,73 @@ describe('coachAvailability.validation', () => {
     });
   });
 
+  describe('listUnavailabilityQuerySchema', () => {
+    it('accepts no query and applies the page defaults', () => {
+      expect(listUnavailabilityQuerySchema.parse({})).toEqual({ page: 1, limit: 20 });
+    });
+
+    it('accepts from, to, page and limit (strings are coerced)', () => {
+      expect(
+        listUnavailabilityQuerySchema.parse({
+          from: '2026-12-01',
+          to: '2026-12-31',
+          page: '2',
+          limit: '5',
+        }),
+      ).toEqual({ from: '2026-12-01', to: '2026-12-31', page: 2, limit: 5 });
+    });
+
+    it('accepts from equal to to', () => {
+      expect(
+        listUnavailabilityQuerySchema.safeParse({ from: '2026-12-01', to: '2026-12-01' }).success,
+      ).toBe(true);
+    });
+
+    it('rejects a date that is not a calendar date', () => {
+      expect(issuesOf(listUnavailabilityQuerySchema, { from: '2026-02-30' })).toEqual([
+        `from: ${Messages.ORDER_DATE_INVALID}`,
+      ]);
+      expect(issuesOf(listUnavailabilityQuerySchema, { to: 'tomorrow' })).toEqual([
+        `to: ${Messages.ORDER_DATE_INVALID}`,
+      ]);
+    });
+
+    it('rejects from after to', () => {
+      expect(
+        issuesOf(listUnavailabilityQuerySchema, { from: '2026-12-31', to: '2026-12-01' }),
+      ).toEqual([`from: ${Messages.ORDER_DATE_RANGE_INVALID}`]);
+    });
+
+    it('rejects an unknown query parameter', () => {
+      expect(issuesOf(listUnavailabilityQuerySchema, { status: 'x' })).toEqual([
+        `body: ${Messages.ORDER_QUERY_UNKNOWN_FIELD}`,
+      ]);
+    });
+
+    it('rejects a bad page or limit', () => {
+      expect(issuesOf(listUnavailabilityQuerySchema, { page: '0', limit: '101' })).toEqual([
+        `page: ${Messages.PAGE_INVALID}`,
+        `limit: ${Messages.LIMIT_INVALID}`,
+      ]);
+    });
+  });
+
   describe('unavailabilityParamsSchema', () => {
     const uuid = '3f0e5f4e-8f3b-4c8a-9d52-1a2b3c4d5e6f';
 
     it('accepts two UUIDs', () => {
-      expect(unavailabilityParamsSchema.safeParse({ coachId: uuid, id: uuid }).success).toBe(true);
+      expect(
+        unavailabilityParamsSchema.safeParse({ coachId: uuid, unavailabilityId: uuid }).success,
+      ).toBe(true);
     });
 
     it('rejects a malformed coach id and a malformed unavailability id', () => {
-      expect(issuesOf(unavailabilityParamsSchema, { coachId: 'x', id: 'y' })).toEqual([
-        `coachId: ${Messages.COACH_ID_INVALID}`,
-        `id: ${Messages.UNAVAILABILITY_ID_INVALID}`,
-      ]);
+      expect(issuesOf(unavailabilityParamsSchema, { coachId: 'x', unavailabilityId: 'y' })).toEqual(
+        [
+          `coachId: ${Messages.COACH_ID_INVALID}`,
+          `unavailabilityId: ${Messages.UNAVAILABILITY_ID_INVALID}`,
+        ],
+      );
     });
   });
 });

@@ -51,6 +51,15 @@ const getTodayInTimezone = (timeZone = 'Asia/Dubai') => {
   return formatter.format(new Date());
 };
 
+// The facility-local calendar date ('YYYY-MM-DD') of any instant.
+const getDateInTimezone = (date, timeZone = 'Asia/Dubai') =>
+  new Intl.DateTimeFormat('en-CA', {
+    timeZone,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).format(date);
+
 const addDaysToDateStr = (dateStr, days) => {
   const [y, m, d] = dateStr.split('-').map(Number);
   const dt = new Date(Date.UTC(y, m - 1, d + days));
@@ -67,6 +76,7 @@ const getIsoDayOfWeek = (dateStr) => {
 module.exports = {
   localDateTimeToUtc,
   getTodayInTimezone,
+  getDateInTimezone,
   addDaysToDateStr,
   getIsoDayOfWeek,
 };

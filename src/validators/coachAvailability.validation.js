@@ -12,7 +12,12 @@ const {
 } = require('../constants/availability');
 const { toMinuteRange, isValidRange, findOverlappingPair } = require('../utils/timeRange.util');
 const { isCalendarDate } = require('./cafeOrder.validation');
-const { validateBody, validateParams } = require('../middlewares/validate.middleware');
+const {
+  validateBody,
+  validateParams,
+  validateQuery,
+} = require('../middlewares/validate.middleware');
+const { paginationQueryFields } = require('./pagination.validation');
 
 // A missing value gets the "required" text, a wrong type or format the "invalid" text.
 const requiredOr = (requiredMessage, invalidMessage) => (issue) =>
@@ -226,23 +231,47 @@ const updateUnavailabilityBodySchema = strictObject({
     return 'note' in sent ? { ...sent, note: sent.note || null } : sent;
   });
 
+// GET list: optional window (leave that touches [from, to]) and the shared page / limit. Strict, so
+// an unknown query parameter is a 400 and never silently ignored.
+const queryDateField = z
+  .string({ error: Messages.ORDER_DATE_INVALID })
+  .refine(isCalendarDate, { message: Messages.ORDER_DATE_INVALID })
+  .optional();
+
+const listUnavailabilityQuerySchema = z
+  .strictObject(
+    { from: queryDateField, to: queryDateField, ...paginationQueryFields },
+    {
+      error: (issue) =>
+        issue.code === 'unrecognized_keys' ? Messages.ORDER_QUERY_UNKNOWN_FIELD : undefined,
+    },
+  )
+  .superRefine((query, ctx) => {
+    if (query.from && query.to && query.from > query.to) {
+      ctx.addIssue({ code: 'custom', path: ['from'], message: Messages.ORDER_DATE_RANGE_INVALID });
+    }
+  });
+
 const unavailabilityParamsSchema = z.looseObject({
   coachId: z.uuid({ error: Messages.COACH_ID_INVALID }),
-  id: z.uuid({ error: Messages.UNAVAILABILITY_ID_INVALID }),
+  unavailabilityId: z.uuid({ error: Messages.UNAVAILABILITY_ID_INVALID }),
 });
 
 const validateSaveWeeklyAvailabilityBody = validateBody(saveWeeklyAvailabilityBodySchema);
 const validateCreateUnavailabilityBody = validateBody(createUnavailabilityBodySchema);
 const validateUpdateUnavailabilityBody = validateBody(updateUnavailabilityBodySchema);
 const validateUnavailabilityParams = validateParams(unavailabilityParamsSchema);
+const validateListUnavailabilityQuery = validateQuery(listUnavailabilityQuerySchema);
 
 module.exports = {
   saveWeeklyAvailabilityBodySchema,
   createUnavailabilityBodySchema,
   updateUnavailabilityBodySchema,
   unavailabilityParamsSchema,
+  listUnavailabilityQuerySchema,
   validateSaveWeeklyAvailabilityBody,
   validateCreateUnavailabilityBody,
   validateUpdateUnavailabilityBody,
   validateUnavailabilityParams,
+  validateListUnavailabilityQuery,
 };

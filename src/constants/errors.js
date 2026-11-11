@@ -221,6 +221,21 @@ const AppErrors = Object.freeze({
     message: Messages.COACH_CONFLICT,
     code: 'COACH_CONFLICT',
   }),
+  UNAVAILABILITY_NOT_FOUND: Object.freeze({
+    statusCode: 404,
+    message: Messages.UNAVAILABILITY_NOT_FOUND,
+    code: 'UNAVAILABILITY_NOT_FOUND',
+  }),
+  UNAVAILABILITY_OVERLAP: Object.freeze({
+    statusCode: 409,
+    message: Messages.UNAVAILABILITY_OVERLAP,
+    code: 'UNAVAILABILITY_OVERLAP',
+  }),
+  UNAVAILABILITY_PAST_IMMUTABLE: Object.freeze({
+    statusCode: 409,
+    message: Messages.UNAVAILABILITY_PAST_IMMUTABLE,
+    code: 'UNAVAILABILITY_PAST_IMMUTABLE',
+  }),
   SESSION_VERSION_CONFLICT: Object.freeze({
     statusCode: 409,
     message: Messages.SESSION_VERSION_CONFLICT,

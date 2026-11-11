@@ -1397,6 +1397,291 @@ paths:
                 message: Method not allowed for this route
                 code: METHOD_NOT_ALLOWED
 
+  /api/v1/coaches/{coachId}/unavailability:
+    get:
+      tags: [Coaches]
+      summary: List a coach's unavailability (leave)
+      description: |
+        ADMIN or OWNER for any coach. A COACH may read only their own leave (another coach is 403).
+        A MEMBER is 403.
+
+        Sorted by `startDate`, then `id`. `from` / `to` (YYYY-MM-DD, inclusive) keep the leave that
+        shares at least one date with that window; either can be sent alone. Unknown query
+        parameters are 400. `note` is always present and is `null` when there is none. Dates are
+        facility calendar dates, timestamps are ISO 8601 UTC.
+      operationId: listCoachUnavailability
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/CoachId'
+        - name: from
+          in: query
+          description: Keep leave that ends on or after this date (YYYY-MM-DD)
+          schema:
+            type: string
+            format: date
+        - name: to
+          in: query
+          description: Keep leave that starts on or before this date (YYYY-MM-DD). Must not be before `from`.
+          schema:
+            type: string
+            format: date
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/Limit'
+      responses:
+        '200':
+          description: One page of leave
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/SuccessEnvelope'
+                  - type: object
+                    required: [pagination]
+                    properties:
+                      data:
+                        type: array
+                        items:
+                          $ref: '#/components/schemas/CoachUnavailability'
+                      pagination:
+                        $ref: '#/components/schemas/Pagination'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/CoachNotFound'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+    post:
+      tags: [Coaches]
+      summary: Add a coach's unavailability (leave)
+      description: |
+        ADMIN or OWNER only (a COACH or MEMBER is 403).
+
+        `startDate` and `endDate` (YYYY-MM-DD, inclusive facility calendar dates) and `reason` (free
+        text, 1-200 characters) are required; `note` (max 1000, blank = `null`) is optional. There are
+        no categories and no approval states.
+
+        Rules: `endDate` must not be before `startDate`; `startDate` must be today or later in the
+        facility timezone (400, `errors[].field` is `startDate`); the dates must not share a day with
+        another leave of the same coach (409 `UNAVAILABILITY_OVERLAP`, the message and
+        `details.conflict` name the existing range; adjacent ranges with no shared date are fine);
+        unknown fields are 400.
+
+        **No side effects:** adding leave never cancels, reassigns or changes a class session or an
+        appointment. The response lists the upcoming, not-cancelled class sessions inside the leave
+        that this coach is assigned to (`affectedSessions`, at most 100, in start order) and the full
+        count (`affectedTotal`). `coverage` is `COVERED` when at least one OTHER assigned coach is not
+        on leave on that facility day, otherwise `UNCOVERED`. An audit row
+        (`COACH_UNAVAILABILITY_CREATED`) is written in the same transaction.
+      operationId: createCoachUnavailability
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/CoachId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateCoachUnavailabilityRequest'
+            example:
+              startDate: '2026-12-01'
+              endDate: '2026-12-05'
+              reason: Sick leave
+              note: Doctor's note on file
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/SuccessEnvelope'
+                  - type: object
+                    properties:
+                      message:
+                        example: Coach unavailability created successfully
+                      data:
+                        $ref: '#/components/schemas/CoachUnavailabilityWithImpact'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/CoachNotFound'
+        '409':
+          $ref: '#/components/responses/UnavailabilityConflict'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+    put:
+      tags:
+        - Coaches
+      summary: Not supported
+      description: 'Every method other than GET, POST answers 405 with `Allow: GET, POST`.'
+      operationId: methodNotAllowed_api_v1_coaches__coachId_unavailability
+      responses:
+        '405':
+          description: 'Route exists but not for this method (`Allow: GET, POST`)'
+          headers:
+            Allow:
+              description: Methods the route supports
+              schema:
+                type: string
+                example: GET, POST
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+              example:
+                success: false
+                message: Method not allowed for this route
+                code: METHOD_NOT_ALLOWED
+
+  /api/v1/coaches/{coachId}/unavailability/{unavailabilityId}:
+    patch:
+      tags: [Coaches]
+      summary: Edit a coach's unavailability (leave)
+      description: |
+        ADMIN or OWNER only (a COACH or MEMBER is 403). Send any subset of `startDate`, `endDate`,
+        `reason`, `note` (at least one; a blank or `null` note clears it). The date rules run on the
+        MERGED values (stored row + patch), so `{ "endDate": ... }` alone is checked against the stored
+        `startDate`.
+
+        What can change depends on the leave, by facility date:
+
+        - **Not started yet** (`startDate` is today or later): every field; a changed date must not be in the past.
+        - **Ongoing** (`startDate` before today, `endDate` today or later): `startDate` is locked (400,
+          `errors[].field` is `startDate`); `endDate` can be extended or shortened, but not to a day before today;
+          `reason` and `note` can change.
+        - **Ended** (`endDate` before today): nothing can change (409 `UNAVAILABILITY_PAST_IMMUTABLE`).
+
+        The result must not share a day with another leave of the same coach (409
+        `UNAVAILABILITY_OVERLAP`); the row being edited is not compared with itself. A leave id that
+        belongs to another coach is 404, like an unknown id.
+
+        **No side effects:** no session or appointment changes. The response carries `affectedSessions`
+        and `affectedTotal` for the NEW range, exactly as on POST. An audit row
+        (`COACH_UNAVAILABILITY_UPDATED`: before / after dates and the changed field names) is written in
+        the same transaction.
+      operationId: updateCoachUnavailability
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/CoachId'
+        - $ref: '#/components/parameters/UnavailabilityId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateCoachUnavailabilityRequest'
+            example:
+              endDate: '2026-12-09'
+      responses:
+        '200':
+          description: Updated
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/SuccessEnvelope'
+                  - type: object
+                    properties:
+                      message:
+                        example: Coach unavailability updated successfully
+                      data:
+                        $ref: '#/components/schemas/CoachUnavailabilityWithImpact'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/UnavailabilityNotFound'
+        '409':
+          $ref: '#/components/responses/UnavailabilityConflict'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+    delete:
+      tags: [Coaches]
+      summary: Remove a coach's unavailability (leave)
+      description: |
+        ADMIN or OWNER only (a COACH or MEMBER is 403). A leave that has not started or is ongoing
+        (`endDate` today or later, facility date) can be removed. A leave that has already ended is
+        history and is 409 `UNAVAILABILITY_PAST_IMMUTABLE`. A leave id that belongs to another coach is
+        404, like an unknown id.
+
+        **No side effects:** no session or appointment changes. An audit row
+        (`COACH_UNAVAILABILITY_DELETED`) is written in the same transaction.
+      operationId: deleteCoachUnavailability
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/CoachId'
+        - $ref: '#/components/parameters/UnavailabilityId'
+      responses:
+        '200':
+          description: Deleted
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/SuccessEnvelope'
+                  - type: object
+                    properties:
+                      message:
+                        example: Coach unavailability deleted successfully
+                      data:
+                        type: object
+                        additionalProperties: false
+                        required: [id]
+                        properties:
+                          id:
+                            type: string
+                            format: uuid
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/UnavailabilityNotFound'
+        '409':
+          $ref: '#/components/responses/UnavailabilityConflict'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+    post:
+      tags:
+        - Coaches
+      summary: Not supported
+      description: 'Every method other than PATCH, DELETE answers 405 with `Allow: PATCH, DELETE`.'
+      operationId: methodNotAllowed_api_v1_coaches__coachId_unavailability__unavailabilityId
+      responses:
+        '405':
+          description: 'Route exists but not for this method (`Allow: PATCH, DELETE`)'
+          headers:
+            Allow:
+              description: Methods the route supports
+              schema:
+                type: string
+                example: PATCH, DELETE
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+              example:
+                success: false
+                message: Method not allowed for this route
+                code: METHOD_NOT_ALLOWED
+
   /api/v1/coaches/{coachId}/availability:
     get:
       tags: [Coaches]
@@ -4709,6 +4994,15 @@ components:
         format: uuid
       description: Coach profile id (not the user id)
 
+    UnavailabilityId:
+      name: unavailabilityId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+      description: Leave id. A value that is not a UUID is 400 `VALIDATION_ERROR`; an unknown UUID, or a leave of another coach, is 404 `UNAVAILABILITY_NOT_FOUND`.
+
     CafeCategoryId:
       name: categoryId
       in: path
@@ -4823,6 +5117,36 @@ components:
             success: false
             message: Coach not found
             code: COACH_NOT_FOUND
+
+    UnavailabilityNotFound:
+      description: Coach missing (`COACH_NOT_FOUND`), or the leave is missing or belongs to another coach (`UNAVAILABILITY_NOT_FOUND`)
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorEnvelope'
+          example:
+            success: false
+            message: Coach unavailability not found
+            code: UNAVAILABILITY_NOT_FOUND
+
+    UnavailabilityConflict:
+      description: |
+        `UNAVAILABILITY_OVERLAP` - the dates share a day with another leave of the same coach; the message
+        and `details.conflict` name that range. `UNAVAILABILITY_PAST_IMMUTABLE` - the leave has already
+        ended and cannot be changed or deleted.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorEnvelope'
+          example:
+            success: false
+            message: This coach already has leave from 2026-12-04 to 2026-12-10, which overlaps the requested dates
+            code: UNAVAILABILITY_OVERLAP
+            details:
+              conflict:
+                id: 7e7e7e7e-0000-4000-8000-000000000009
+                startDate: '2026-12-04'
+                endDate: '2026-12-10'
 
     PlanNotFound:
       description: No plan with this id. (An id that is not a UUID is 400 `VALIDATION_ERROR`, not 404.)
@@ -5721,6 +6045,134 @@ components:
           description: Always 7 entries in dayOfWeek order 1..7
           items:
             $ref: '#/components/schemas/AvailabilityDay'
+
+    CoachUnavailability:
+      type: object
+      additionalProperties: false
+      required: [id, coachId, startDate, endDate, reason, note, createdAt, updatedAt]
+      properties:
+        id:
+          type: string
+          format: uuid
+        coachId:
+          type: string
+          format: uuid
+        startDate:
+          type: string
+          format: date
+          example: '2026-12-01'
+          description: First day of leave, YYYY-MM-DD facility calendar date (inclusive)
+        endDate:
+          type: string
+          format: date
+          example: '2026-12-05'
+          description: Last day of leave, YYYY-MM-DD facility calendar date (inclusive)
+        reason:
+          type: string
+          maxLength: 200
+          example: Sick leave
+        note:
+          type: string
+          maxLength: 1000
+          nullable: true
+          description: Always present; null when there is no note
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+
+    AffectedSession:
+      type: object
+      additionalProperties: false
+      required: [sessionId, classId, title, startAt, endAt, coverage]
+      properties:
+        sessionId:
+          type: string
+          format: uuid
+        classId:
+          type: string
+          format: uuid
+        title:
+          type: string
+          description: Class name
+        startAt:
+          type: string
+          format: date-time
+          description: ISO 8601 UTC
+        endAt:
+          type: string
+          format: date-time
+          description: ISO 8601 UTC
+        coverage:
+          type: string
+          enum: [COVERED, UNCOVERED]
+          description: COVERED = at least one OTHER coach assigned to the session is not on leave on that facility day. UNCOVERED = no other coach, or every other coach is on leave.
+
+    CoachUnavailabilityWithImpact:
+      description: The leave plus the class sessions it touches. Read-only information; no session is changed.
+      allOf:
+        - $ref: '#/components/schemas/CoachUnavailability'
+        - type: object
+          required: [affectedSessions, affectedTotal]
+          properties:
+            affectedSessions:
+              type: array
+              maxItems: 100
+              description: Upcoming, not-cancelled class sessions inside the leave that this coach is assigned to, in start order. At most 100.
+              items:
+                $ref: '#/components/schemas/AffectedSession'
+            affectedTotal:
+              type: integer
+              minimum: 0
+              description: How many such sessions there are in total (can be larger than the list)
+
+    CreateCoachUnavailabilityRequest:
+      type: object
+      additionalProperties: false
+      required: [startDate, endDate, reason]
+      properties:
+        startDate:
+          type: string
+          format: date
+          description: Today or later (facility timezone)
+        endDate:
+          type: string
+          format: date
+          description: Not before startDate
+        reason:
+          type: string
+          minLength: 1
+          maxLength: 200
+          description: Free text; trimmed
+        note:
+          type: string
+          maxLength: 1000
+          nullable: true
+          description: Optional; blank or null is stored as null
+
+    UpdateCoachUnavailabilityRequest:
+      type: object
+      additionalProperties: false
+      minProperties: 1
+      description: Any subset of the fields, at least one. See the PATCH description for what can change on an ongoing leave.
+      properties:
+        startDate:
+          type: string
+          format: date
+        endDate:
+          type: string
+          format: date
+        reason:
+          type: string
+          minLength: 1
+          maxLength: 200
+        note:
+          type: string
+          maxLength: 1000
+          nullable: true
+          description: Blank or null clears the note
 
     PlanKind:
       type: string

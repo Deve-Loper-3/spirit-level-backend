@@ -17,6 +17,10 @@ const {
 } = require('../validators/coach.validation');
 const {
   validateSaveWeeklyAvailabilityBody,
+  validateCreateUnavailabilityBody,
+  validateUpdateUnavailabilityBody,
+  validateUnavailabilityParams,
+  validateListUnavailabilityQuery,
 } = require('../validators/coachAvailability.validation');
 const {
   listCoaches,
@@ -29,6 +33,12 @@ const {
   getWeeklyAvailability,
   saveWeeklyAvailability,
 } = require('../controllers/coachAvailability.controller');
+const {
+  listUnavailability,
+  createUnavailability,
+  updateUnavailability,
+  deleteUnavailability,
+} = require('../controllers/coachUnavailability.controller');
 
 const router = Router();
 
@@ -90,11 +100,51 @@ router.put(
   saveWeeklyAvailability,
 );
 
+// Coach unavailability / leave (SLAPP 66/111). Managers read and write any coach's leave; a coach
+// reads only their own (coach.access.assertCanViewAvailability) and can never write.
+router.get(
+  '/:coachId/unavailability',
+  authenticate,
+  authorize(...COACH_MANAGER_ROLES, Role.COACH),
+  coachReadLimiter,
+  validateCoachIdParam,
+  validateListUnavailabilityQuery,
+  listUnavailability,
+);
+router.post(
+  '/:coachId/unavailability',
+  authenticate,
+  authorize(...COACH_MANAGER_ROLES),
+  coachLimiter,
+  validateCoachIdParam,
+  validateCreateUnavailabilityBody,
+  createUnavailability,
+);
+router.patch(
+  '/:coachId/unavailability/:unavailabilityId',
+  authenticate,
+  authorize(...COACH_MANAGER_ROLES),
+  coachLimiter,
+  validateUnavailabilityParams,
+  validateUpdateUnavailabilityBody,
+  updateUnavailability,
+);
+router.delete(
+  '/:coachId/unavailability/:unavailabilityId',
+  authenticate,
+  authorize(...COACH_MANAGER_ROLES),
+  coachLimiter,
+  validateUnavailabilityParams,
+  deleteUnavailability,
+);
+
 // Any other method on these paths: 405 with an Allow header (not 404).
 router.all('/', methodNotAllowed(['GET']));
 router.all('/me', methodNotAllowed(['GET']));
 router.all('/:coachId', methodNotAllowed(['GET', 'PATCH']));
 router.all('/:coachId/status', methodNotAllowed(['PATCH']));
 router.all('/:coachId/availability', methodNotAllowed(['GET', 'PUT']));
+router.all('/:coachId/unavailability', methodNotAllowed(['GET', 'POST']));
+router.all('/:coachId/unavailability/:unavailabilityId', methodNotAllowed(['PATCH', 'DELETE']));
 
 module.exports = router;

@@ -1,5 +1,6 @@
 const scheduleService = require('../services/schedule.service');
 const { sendSuccess } = require('../utils/apiResponse.util');
+const { getRequestMeta } = require('../utils/requestMeta.util');
 const { Messages } = require('../constants/messages');
 
 // Slot Controllers
@@ -114,6 +115,7 @@ const patchSession = async (req, res, next) => {
       sessionId: req.params.id,
       payload: req.body,
       user: req.user,
+      meta: getRequestMeta(req),
     });
     return sendSuccess(res, {
       message: Messages.SESSION_UPDATED_SUCCESS,

@@ -362,6 +362,21 @@ const Messages = Object.freeze({
   ELIGIBLE_SESSION_ID_INVALID: 'excludeSessionId must be a valid UUID',
   ELIGIBLE_APPOINTMENT_ID_INVALID: 'excludeAppointmentId must be a valid UUID',
 
+  // Open appointment slots (SLAPP 66/111 S8)
+  SLOTS_TYPE_REQUIRED: 'appointmentTypeId is required',
+  SLOTS_FROM_REQUIRED: 'from is required (YYYY-MM-DD)',
+  SLOTS_TO_REQUIRED: 'to is required (YYYY-MM-DD)',
+  SLOTS_RANGE_TOO_LONG: (max) => `The date range must not be longer than ${max} days`,
+  SLOTS_RANGE_ORDER: 'to must not be before from',
+
+  // Session coverage (SLAPP 66/111 S9)
+  COVERAGE_FROM_REQUIRED: 'from is required (YYYY-MM-DD)',
+  COVERAGE_TO_REQUIRED: 'to is required (YYYY-MM-DD)',
+  COVERAGE_RANGE_ORDER: 'to must not be before from',
+  COVERAGE_RANGE_TOO_LONG: (max) => `The date range must not be longer than ${max} days`,
+  COVERAGE_COACH_ID_INVALID: 'coachId must be a valid UUID',
+  COVERAGE_CLASS_ID_INVALID: 'classId must be a valid UUID',
+
   // Appointment types and appointments (SLAPP 66/111 S6)
   APPOINTMENT_TYPE_ID_INVALID: 'Appointment type id must be a valid UUID',
   APPOINTMENT_ID_INVALID: 'Appointment id must be a valid UUID',

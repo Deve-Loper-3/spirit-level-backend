@@ -35,6 +35,10 @@ const {
   addDaysToDateStr,
   getIsoDayOfWeek,
 } = require('../utils/timezone.util');
+const { AuditAction } = require('../constants/audit');
+const { createAuditLog } = require('../repositories/audit-log.repository');
+const { lockCoachSchedule } = require('../repositories/coachSchedule.repository');
+const { checkCoachesForInterval } = require('./coachSchedule.service');
 const { BookingRuleKey } = require('../constants/bookingRule');
 const { getLimitValue } = require('./bookingRule.service');
 const { limitToVisibleDays } = require('./bookingRule.guards');
@@ -189,6 +193,46 @@ const validateCoachesForInterval = async ({
       );
     }
   }
+};
+
+// ==========================================
+// Coach schedule engine on the MANUAL session paths (SLAPP 66/111 S9)
+//
+// Used by createSession, patchSession and restoreSession only, AFTER validateCoachesForInterval (which
+// keeps its own errors for inactive / unassigned / unqualified coaches and for session-vs-session
+// overlaps). It adds what that function does not know: weekly availability, leave and appointments,
+// with the S7 conflict types. NEVER call it from generateSessionsForWindow or the cron: a conflict there
+// would silently skip or drop generated sessions.
+// Sessions have no buffers, so the interval is the session itself.
+// ==========================================
+const assertCoachesSchedulable = async ({ coachIds, startAt, endAt, excludeSessionId, client }) => {
+  const ids = [...new Set(coachIds ?? [])];
+  if (ids.length === 0) return;
+
+  // The engine's contract: run under the coach's schedule lock. Locks are taken in sorted order, so two
+  // requests that share several coaches cannot deadlock.
+  for (const coachId of [...ids].sort()) {
+    await lockCoachSchedule(coachId, client);
+  }
+
+  const conflicts = await checkCoachesForInterval(
+    { coachIds: ids, startAt, endAt, excludeSessionId: excludeSessionId ?? undefined },
+    client,
+  );
+  const found = ids.map((id) => conflicts.get(id)).filter(Boolean);
+  if (found.length === 0) return;
+  throw createAppError(
+    AppErrors.COACH_CONFLICT,
+    found.length === 1 ? found[0].message : Messages.COACH_CONFLICT,
+    AppErrors.COACH_CONFLICT.code,
+    { conflicts: found },
+  );
+};
+
+const sameIdSet = (a, b) => {
+  const left = new Set(a);
+  const right = new Set(b);
+  return left.size === right.size && [...left].every((id) => right.has(id));
 };
 
 // Rolling Generation Core Function
@@ -883,6 +927,14 @@ const createSession = async ({ payload, user: _user }) => {
       excludeSessionId: null,
       client: tx,
     });
+    // Availability, leave and appointments (S9, manual path only)
+    await assertCoachesSchedulable({
+      coachIds: targetCoachIds,
+      startAt: startUtc,
+      endAt: endUtc,
+      excludeSessionId: null,
+      client: tx,
+    });
 
     const session = await scheduleRepository.createSession(
       {
@@ -913,7 +965,7 @@ const createSession = async ({ payload, user: _user }) => {
   }, TX_OPTIONS);
 };
 
-const patchSession = async ({ sessionId, payload, user }) => {
+const patchSession = async ({ sessionId, payload, user, meta = {} }) => {
   return prisma.$transaction(async (tx) => {
     const session = await scheduleRepository.findSessionById(sessionId, tx);
     if (!session) {
@@ -1037,6 +1089,26 @@ const patchSession = async ({ sessionId, payload, user }) => {
       });
     }
 
+    // Availability / leave / appointments (S9). Simplest safe rule: re-check the FINAL coach set for the
+    // FINAL interval only when the coach set really changes (this is the replacement flow) or the time
+    // really changes (the existing coaches must fit the new time). A PATCH that resends the same coaches
+    // and the same time, or touches other fields, is not checked, so unrelated edits never break. A
+    // cancelled session occupies nobody; restoring it re-checks.
+    const currentCoachIds = session.coaches.map((c) => c.coachId || c.coach?.id).filter(Boolean);
+    const coachSetChanged = coachIds !== undefined && !sameIdSet(coachIds, currentCoachIds);
+    const timeChanged =
+      targetStartAt.getTime() !== session.startAt.getTime() ||
+      targetEndAt.getTime() !== session.endAt.getTime();
+    if ((coachSetChanged || timeChanged) && session.state !== SessionState.CANCELLED) {
+      await assertCoachesSchedulable({
+        coachIds: targetCoachIds,
+        startAt: targetStartAt,
+        endAt: targetEndAt,
+        excludeSessionId: session.id,
+        client: tx,
+      });
+    }
+
     // Validate mandatory override reasons
     for (const mandatoryField of SESSION_OVERRIDE_MANDATORY_REASON_FIELDS) {
       if (mandatoryField === 'cancel') continue;
@@ -1103,6 +1175,23 @@ const patchSession = async ({ sessionId, payload, user }) => {
 
     if (!updatedSession) {
       throw createAppError(AppErrors.SESSION_VERSION_CONFLICT);
+    }
+
+    // Replacement trail: this one session only (the class template and the other occurrences keep their
+    // coaches). Same transaction as the change.
+    if (coachSetChanged) {
+      await createAuditLog(tx, {
+        action: AuditAction.SESSION_COACH_REPLACED,
+        actorId: user.id,
+        actorRole: user.role,
+        details: {
+          sessionId,
+          classId: session.classId,
+          previousCoachIds: currentCoachIds,
+          newCoachIds: targetCoachIds,
+        },
+        meta,
+      });
     }
 
     return toSessionResponse(updatedSession, stats);
@@ -1228,6 +1317,14 @@ const restoreSession = async ({ sessionId, user: _user }) => {
       excludeSessionId: session.id,
       client: tx,
     });
+    // Availability, leave and appointments (S9): a restored session needs its coaches free again.
+    await assertCoachesSchedulable({
+      coachIds,
+      startAt: session.startAt,
+      endAt: session.endAt,
+      excludeSessionId: session.id,
+      client: tx,
+    });
 
     const updatedOverrideDetails = { ...(session.overrideDetails || {}) };
     delete updatedOverrideDetails.cancel;
@@ -1267,4 +1364,6 @@ module.exports = {
   patchSession,
   cancelSession,
   restoreSession,
+  assertCoachesSchedulable,
+  sameIdSet,
 };

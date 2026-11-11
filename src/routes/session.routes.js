@@ -11,6 +11,8 @@ const {
   validatePatchSessionBody,
   validateCancelSessionBody,
 } = require('../validators/schedule.validation');
+const { validateSessionCoverageQuery } = require('../validators/sessionCoverage.validation');
+const { listSessionCoverage } = require('../controllers/sessionCoverage.controller');
 const {
   listSessions,
   getSession,
@@ -42,6 +44,18 @@ router.post(
   createSession,
 );
 router.all('/', methodNotAllowed(['GET', 'POST']));
+
+// GET /api/v1/sessions/coverage - Sessions with a coach on leave, and whether they are covered (SLAPP 66/111 S9).
+// Declared BEFORE every /:id route, otherwise "coverage" would be read as a session id.
+router.get(
+  '/coverage',
+  authenticate,
+  authorize(Role.OWNER, Role.ADMIN, Role.COACH),
+  classReadLimiter,
+  validateSessionCoverageQuery,
+  listSessionCoverage,
+);
+router.all('/coverage', methodNotAllowed(['GET']));
 
 // POST /api/v1/sessions/:id/cancel - Cancel session
 router.post(

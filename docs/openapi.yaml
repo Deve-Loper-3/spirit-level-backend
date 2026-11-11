@@ -1801,6 +1801,124 @@ paths:
                 message: Method not allowed for this route
                 code: METHOD_NOT_ALLOWED
 
+  /api/v1/coaches/{coachId}/availability/slots:
+    get:
+      tags: [Coaches]
+      summary: Open appointment slots of a coach
+      description: |
+        ADMIN or OWNER for any coach; a COACH only for their own coach id (another coach is 403); a MEMBER is
+        403 (booking is done by staff on behalf of the member).
+
+        Returns the free start times for ONE appointment type over a date range. For each facility day in
+        `from`..`to` (inclusive, at most 31 days; `to` before `from` or a longer range is 400): the coach's
+        saved hours (touching slots merged) minus leave days, not-cancelled class sessions (raw time) and
+        BOOKED appointments with their buffers, cut into back-to-back slots of the type's `durationMin`
+        (step = duration, counted from the start of each free stretch). A slot is returned only if booking it
+        would pass the same coach schedule rules as `POST /api/v1/appointments`, including the type's own
+        `bufferBeforeMin` / `bufferAfterMin`. Slots that do not start in the future are never returned.
+        `excludeAppointmentId` leaves that appointment out (to move it onto its own time).
+
+        Every day of the range is present in `days`, with an empty `slots` array when nothing is free.
+        `availabilityConfigured` is `false` when the coach has never saved weekly hours ("hours not set").
+        Timestamps are ISO 8601 UTC; `date` is a facility calendar day in `timezone`. A slot is a suggestion:
+        the booking checks again under the coach's lock, so it can still answer 409 `COACH_CONFLICT`.
+
+        Errors: unknown coach 404 `COACH_NOT_FOUND`, unknown type 404 `APPOINTMENT_TYPE_NOT_FOUND`, inactive
+        coach 409 `COACH_INACTIVE`, inactive type 409 `APPOINTMENT_TYPE_INACTIVE`.
+      operationId: getCoachOpenSlots
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/CoachId'
+        - name: appointmentTypeId
+          in: query
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: from
+          in: query
+          required: true
+          description: First facility day, YYYY-MM-DD
+          schema:
+            type: string
+            format: date
+        - name: to
+          in: query
+          required: true
+          description: Last facility day (inclusive), YYYY-MM-DD; at most 31 days after `from`
+          schema:
+            type: string
+            format: date
+        - name: excludeAppointmentId
+          in: query
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: The open slots, one entry per day
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/SuccessEnvelope'
+                  - type: object
+                    properties:
+                      data:
+                        $ref: '#/components/schemas/CoachOpenSlots'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          description: '`COACH_NOT_FOUND` or `APPOINTMENT_TYPE_NOT_FOUND`'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+              example:
+                success: false
+                message: Appointment type not found
+                code: APPOINTMENT_TYPE_NOT_FOUND
+        '409':
+          description: '`COACH_INACTIVE` or `APPOINTMENT_TYPE_INACTIVE`'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+              example:
+                success: false
+                message: This coach is inactive and cannot be booked
+                code: COACH_INACTIVE
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+    put:
+      tags:
+        - Coaches
+      summary: Not supported
+      description: 'Every method other than GET answers 405 with `Allow: GET`.'
+      operationId: methodNotAllowed_api_v1_coaches__coachId_availability_slots
+      responses:
+        '405':
+          description: 'Route exists but not for this method (`Allow: GET`)'
+          headers:
+            Allow:
+              description: Methods the route supports
+              schema:
+                type: string
+                example: GET
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+              example:
+                success: false
+                message: Method not allowed for this route
+                code: METHOD_NOT_ALLOWED
+
   /api/v1/coaches/{coachId}/availability:
     get:
       tags: [Coaches]
@@ -4785,6 +4903,12 @@ paths:
         coaches, intensity, type, description, image). `startAt` must be in the future, and
         `durationMin` must match the interval. Another session of the class at the same `startAt`
         is 409 `SESSION_CONFLICT`.
+
+        **Coach schedule (409 `COACH_CONFLICT`):** the coaches the session ends up with must be free for its
+        interval. Besides the older entries (`type: COACH_CONFLICT` for another session of the coach,
+        `COACH_LEAVE`, `COACH_UNQUALIFIED`), `details.conflicts[]` can carry the entries described by
+        `CoachConflict` (`AVAILABILITY_NOT_SET`, `OUTSIDE_AVAILABILITY`, `COACH_UNAVAILABLE`,
+        `SESSION_OVERLAP`, `APPOINTMENT_OVERLAP`, `APPOINTMENT_BUFFER`), one per coach that cannot take it.
       operationId: createSession
       security:
         - bearerAuth: []
@@ -4847,6 +4971,105 @@ paths:
                 success: false
                 message: Method not allowed for this route
                 code: METHOD_NOT_ALLOWED
+  /api/v1/sessions/coverage:
+    get:
+      tags:
+        - Sessions
+      summary: Sessions with a coach on leave, and whether they are covered
+      description: |
+        OWNER or ADMIN: every session. A COACH: only the sessions where THEY are on leave (a `coachId` of
+        another coach is 403, a coach without a profile is 403). A MEMBER is 403.
+
+        Lists the not-cancelled class sessions that start in `from`..`to` (inclusive facility days, at most 31
+        days, `to` before `from` is 400) and have at least one assigned coach on leave on the session's
+        facility day. Sorted by `startAt`. `coachId` keeps the sessions where that coach is on leave;
+        `classId` keeps one class. Paged in memory after filtering (`pagination.total` is the number of
+        matching sessions).
+
+        `unavailableCoaches` are the assigned coaches on leave that day, with the leave that covers it.
+        `coverage` is `COVERED` when at least one assigned coach is NOT on leave that day (they are listed in
+        `coveringCoaches`), otherwise `UNCOVERED` (`coveringCoaches` is empty). This is the same definition as
+        `affectedSessions` of the leave endpoints. Read only: it never changes a session, a booking or a leave.
+        The existing `GET /api/v1/sessions` response is unchanged.
+      operationId: listSessionCoverage
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: from
+          in: query
+          required: true
+          description: First facility day, YYYY-MM-DD
+          schema:
+            type: string
+            format: date
+        - name: to
+          in: query
+          required: true
+          description: Last facility day (inclusive), YYYY-MM-DD; at most 31 days after `from`
+          schema:
+            type: string
+            format: date
+        - name: coachId
+          in: query
+          description: Keep the sessions where this coach is on leave
+          schema:
+            type: string
+            format: uuid
+        - name: classId
+          in: query
+          schema:
+            type: string
+            format: uuid
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/Limit'
+      responses:
+        '200':
+          description: One page of sessions with a coach on leave
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/SuccessEnvelope'
+                  - type: object
+                    required: [pagination]
+                    properties:
+                      data:
+                        type: array
+                        items:
+                          $ref: '#/components/schemas/SessionCoverageEntry'
+                      pagination:
+                        $ref: '#/components/schemas/Pagination'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+    put:
+      tags:
+        - Sessions
+      summary: Not supported
+      description: 'Every method other than GET answers 405 with `Allow: GET`.'
+      operationId: methodNotAllowed_api_v1_sessions_coverage
+      responses:
+        '405':
+          description: 'Route exists but not for this method (`Allow: GET`)'
+          headers:
+            Allow:
+              description: Methods the route supports
+              schema:
+                type: string
+                example: GET
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+              example:
+                success: false
+                message: Method not allowed for this route
+                code: METHOD_NOT_ALLOWED
   /api/v1/sessions/{id}:
     parameters:
       - $ref: '#/components/parameters/SessionId'
@@ -4891,6 +5114,21 @@ paths:
         Send the `version` you read; if the session changed since, the answer is 409
         `SESSION_VERSION_CONFLICT`. Changing coaches or times needs a reason in `overrideReasons`
         (400 when missing).
+
+        **Replacing a coach:** send the FINAL `coachIds` of this one session (plus `overrideReasons.coachIds`).
+        It changes only this session, never the class template or the other occurrences, and writes the audit
+        entry `SESSION_COACH_REPLACED` (previous and new coach ids). The replacement is manual; nothing is
+        chosen automatically. The final coach set is checked for the session interval; every coach must be
+        assignable to the class and free (`CoachConflict`). A PATCH that does not change the coach set or the
+        time (other fields, or the same coaches sent again) is not checked against availability, leave or
+        appointments, so unrelated edits keep working. Changing the time checks the existing coaches against
+        the new time.
+
+        **Coach schedule (409 `COACH_CONFLICT`):** the coaches the session ends up with must be free for its
+        interval. Besides the older entries (`type: COACH_CONFLICT` for another session of the coach,
+        `COACH_LEAVE`, `COACH_UNQUALIFIED`), `details.conflicts[]` can carry the entries described by
+        `CoachConflict` (`AVAILABILITY_NOT_SET`, `OUTSIDE_AVAILABILITY`, `COACH_UNAVAILABLE`,
+        `SESSION_OVERLAP`, `APPOINTMENT_OVERLAP`, `APPOINTMENT_BUFFER`), one per coach that cannot take it.
       operationId: patchSession
       security:
         - bearerAuth: []
@@ -5023,7 +5261,9 @@ paths:
       description: |
         OWNER or ADMIN. Only a cancelled, future session can be restored (409 `SESSION_NOT_CANCELLED`
         or `SESSION_PAST_IMMUTABLE`). Conflicts that appeared since the cancellation (another session
-        at the same start, a busy coach) are 409.
+        at the same start, a busy coach) are 409. The session's coaches must be free again for its interval
+        (availability, leave, appointments): 409 `COACH_CONFLICT` with the entries of `CoachConflict`, and the
+        session stays cancelled.
       operationId: restoreSession
       security:
         - bearerAuth: []
@@ -6307,7 +6547,8 @@ components:
     ScheduleConflict:
       description: |
         The change collides with existing data. `code` is one of `SLOT_CONFLICT`, `SESSION_CONFLICT`,
-        `COACH_CONFLICT` (coach double-booked, unqualified or on leave), `SESSION_VERSION_CONFLICT`
+        `COACH_CONFLICT` (coach double-booked, unqualified, on leave, or, on the manual session create /
+        update / restore paths, not available: see `CoachConflict`), `SESSION_VERSION_CONFLICT`
         (another user changed the session first), `SESSION_NOT_CANCELLED`, `SESSION_PAST_IMMUTABLE`
         or `CLASS_INACTIVE`. `details.conflicts[]` lists what collided where that applies.
       content:
@@ -9268,3 +9509,128 @@ components:
               allOf:
                 - $ref: '#/components/schemas/CoachConflictItem'
               nullable: true
+
+    OpenSlot:
+      type: object
+      additionalProperties: false
+      required: [startAt, endAt]
+      properties:
+        startAt:
+          type: string
+          format: date-time
+          example: '2026-12-01T05:00:00.000Z'
+        endAt:
+          type: string
+          format: date-time
+          description: "`startAt` plus the type's duration"
+          example: '2026-12-01T06:00:00.000Z'
+
+    CoachOpenSlots:
+      type: object
+      additionalProperties: false
+      required: [coachId, appointmentTypeId, timezone, from, to, availabilityConfigured, days]
+      properties:
+        coachId:
+          type: string
+          format: uuid
+        appointmentTypeId:
+          type: string
+          format: uuid
+        timezone:
+          type: string
+          example: Asia/Dubai
+          description: Facility timezone of `date`
+        from:
+          type: string
+          format: date
+        to:
+          type: string
+          format: date
+        availabilityConfigured:
+          type: boolean
+          description: false when the coach has never saved weekly hours (show "hours not set")
+        days:
+          type: array
+          description: One entry per facility day from `from` to `to`, in order
+          items:
+            type: object
+            additionalProperties: false
+            required: [date, slots]
+            properties:
+              date:
+                type: string
+                format: date
+              slots:
+                type: array
+                items:
+                  $ref: '#/components/schemas/OpenSlot'
+
+    SessionCoverageEntry:
+      type: object
+      additionalProperties: false
+      required:
+        [sessionId, classId, title, startAt, endAt, unavailableCoaches, coverage, coveringCoaches]
+      properties:
+        sessionId:
+          type: string
+          format: uuid
+        classId:
+          type: string
+          format: uuid
+        title:
+          type: string
+          description: Class name
+        startAt:
+          type: string
+          format: date-time
+        endAt:
+          type: string
+          format: date-time
+        unavailableCoaches:
+          type: array
+          description: Assigned coaches on leave on the session's facility day (at least one)
+          items:
+            type: object
+            additionalProperties: false
+            required: [coachId, fullName, leave]
+            properties:
+              coachId:
+                type: string
+                format: uuid
+              fullName:
+                type: string
+                nullable: true
+              leave:
+                type: object
+                additionalProperties: false
+                required: [id, startDate, endDate, reason]
+                properties:
+                  id:
+                    type: string
+                    format: uuid
+                  startDate:
+                    type: string
+                    format: date
+                  endDate:
+                    type: string
+                    format: date
+                  reason:
+                    type: string
+        coverage:
+          type: string
+          enum: [COVERED, UNCOVERED]
+          description: COVERED when at least one assigned coach is not on leave that day
+        coveringCoaches:
+          type: array
+          description: Assigned coaches not on leave that day; empty when UNCOVERED
+          items:
+            type: object
+            additionalProperties: false
+            required: [coachId, fullName]
+            properties:
+              coachId:
+                type: string
+                format: uuid
+              fullName:
+                type: string
+                nullable: true

@@ -12,6 +12,7 @@ const {
   removeTestRule,
 } = require('../helpers/bookingRule.helper');
 const { BookingRuleKey } = require('../../src/constants/bookingRule');
+const { openAllWeek } = require('../helpers/coachSchedule.helper');
 
 jest.setTimeout(45000);
 
@@ -49,6 +50,9 @@ describe('BE-SCH-1 & BE-SCH-3: Session Endpoints', () => {
     const coach1 = await testData.createCoach({ user: { fullName: 'Primary Coach' } });
     coachUser = coach1.user;
     primaryCoach = coach1.coach;
+    // Strict availability (S9): manual session paths check the coach's weekly hours, so the coach works
+    // every day, all day; this suite is about sessions, not about availability.
+    await openAllWeek(primaryCoach.id);
 
     primaryClass = await createTestClass(PREFIX, {
       name: `${PREFIX}Primary`,

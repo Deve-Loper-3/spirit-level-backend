@@ -213,6 +213,7 @@ const findFirstConflict = ({
 };
 
 module.exports = {
+  mergeTouching,
   toLocalInterval,
   checkAvailability,
   checkLeave,

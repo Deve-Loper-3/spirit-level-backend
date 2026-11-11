@@ -47,6 +47,27 @@ const findDaysForCoaches = async (coachIds, dayOfWeek, client = prisma) => {
   }));
 };
 
+// The whole saved week of ONE coach (every weekday row, with its slots as minutes). A coach whose week
+// was never saved returns []. Two Prisma queries at most (days, nested slots), whatever the number of days.
+const findWeekForCoach = async (coachId, client = prisma) => {
+  const rows = await client.coachAvailabilityDay.findMany({
+    where: { coachId },
+    select: {
+      dayOfWeek: true,
+      isAvailable: true,
+      slots: { select: { startTime: true, endTime: true }, orderBy: { startTime: 'asc' } },
+    },
+  });
+  return rows.map((row) => ({
+    dayOfWeek: row.dayOfWeek,
+    isAvailable: row.isAvailable,
+    ranges: row.slots.map((slot) => ({
+      start: timeToMinutes(slot.startTime),
+      end: timeToMinutes(slot.endTime),
+    })),
+  }));
+};
+
 // Leave of the given coaches that touches [firstDate, lastDate] (inclusive 'YYYY-MM-DD').
 // Returns [{ id, coachId, startDate, endDate }] with date strings.
 const findLeaveForCoaches = async (coachIds, firstDate, lastDate, client = prisma) => {
@@ -136,6 +157,7 @@ module.exports = {
   lockCoachSchedule,
   findCoachStatus,
   findDaysForCoaches,
+  findWeekForCoach,
   findLeaveForCoaches,
   findSessionsForCoaches,
   findAppointmentsForCoaches,

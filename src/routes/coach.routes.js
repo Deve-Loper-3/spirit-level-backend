@@ -24,6 +24,8 @@ const {
 } = require('../validators/coachAvailability.validation');
 const { validateEligibleCoachesQuery } = require('../validators/coachEligibility.validation');
 const { listEligibleCoaches } = require('../controllers/coachEligibility.controller');
+const { validateOpenSlotsQuery } = require('../validators/coachSlots.validation');
+const { getOpenSlots } = require('../controllers/coachSlots.controller');
 const {
   listCoaches,
   getCoach,
@@ -112,6 +114,18 @@ router.put(
   saveWeeklyAvailability,
 );
 
+// Open appointment slots (SLAPP 66/111 S8): free start times of one coach for one appointment type.
+// Managers any coach, a coach only their own (coachSlots.service answers 403 for another coach).
+router.get(
+  '/:coachId/availability/slots',
+  authenticate,
+  authorize(...COACH_MANAGER_ROLES, Role.COACH),
+  coachReadLimiter,
+  validateCoachIdParam,
+  validateOpenSlotsQuery,
+  getOpenSlots,
+);
+
 // Coach unavailability / leave (SLAPP 66/111). Managers read and write any coach's leave; a coach
 // reads only their own (coach.access.assertCanViewAvailability) and can never write.
 router.get(
@@ -157,6 +171,7 @@ router.all('/eligible', methodNotAllowed(['GET']));
 router.all('/:coachId', methodNotAllowed(['GET', 'PATCH']));
 router.all('/:coachId/status', methodNotAllowed(['PATCH']));
 router.all('/:coachId/availability', methodNotAllowed(['GET', 'PUT']));
+router.all('/:coachId/availability/slots', methodNotAllowed(['GET']));
 router.all('/:coachId/unavailability', methodNotAllowed(['GET', 'POST']));
 router.all('/:coachId/unavailability/:unavailabilityId', methodNotAllowed(['PATCH', 'DELETE']));
 

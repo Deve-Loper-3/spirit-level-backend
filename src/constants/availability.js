@@ -31,6 +31,12 @@ const UNAVAILABILITY_NOTE_MAX_LENGTH = 1000;
 // reported in `affectedTotal`).
 const AFFECTED_SESSIONS_CAP = 100;
 
+// GET /coaches/:coachId/availability/slots: the longest date range one request may ask for (inclusive days).
+const OPEN_SLOTS_MAX_DAYS = 31;
+
+// GET /sessions/coverage: the longest date range one request may ask for (inclusive days).
+const COVERAGE_MAX_DAYS = 31;
+
 // Is another assigned coach free on the day? (API enum strings.)
 const SessionCoverage = Object.freeze({
   COVERED: 'COVERED',
@@ -49,5 +55,7 @@ module.exports = {
   UNAVAILABILITY_REASON_MAX_LENGTH,
   UNAVAILABILITY_NOTE_MAX_LENGTH,
   AFFECTED_SESSIONS_CAP,
+  OPEN_SLOTS_MAX_DAYS,
+  COVERAGE_MAX_DAYS,
   SessionCoverage,
 };

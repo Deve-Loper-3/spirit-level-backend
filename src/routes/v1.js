@@ -9,6 +9,8 @@ const classRoutes = require('./class.routes');
 const sessionRoutes = require('./session.routes');
 const cafeRoutes = require('./cafe.routes');
 const bookingRuleRoutes = require('./bookingRule.routes');
+const appointmentTypeRoutes = require('./appointmentType.routes');
+const appointmentRoutes = require('./appointment.routes');
 
 const router = Router();
 
@@ -22,5 +24,7 @@ router.use('/classes', classRoutes);
 router.use('/sessions', sessionRoutes);
 router.use('/cafe', cafeRoutes);
 router.use('/settings/booking-rules', bookingRuleRoutes);
+router.use('/appointment-types', appointmentTypeRoutes);
+router.use('/appointments', appointmentRoutes);
 
 module.exports = router;

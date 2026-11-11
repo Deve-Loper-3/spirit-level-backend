@@ -9,6 +9,10 @@ const sweepStaleTestData = async (prisma, now = new Date()) => {
   const createdBefore = new Date(now.getTime() - STALE_AFTER_MS);
   const where = { email: TEST_EMAIL, createdAt: { lt: createdBefore } };
 
+  // Appointments RESTRICT their member and coach, so a test user's appointments go first.
+  await prisma.appointment.deleteMany({
+    where: { OR: [{ member: where }, { coach: { user: where } }] },
+  });
   // Cafe orders RESTRICT user deletion, so a test user's orders (and their items, by cascade) go first.
   await prisma.cafeOrder.deleteMany({ where: { createdBy: where } });
   // Audit rows keep the email but lose the user (SET NULL), so they are removed explicitly.

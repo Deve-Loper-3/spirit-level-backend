@@ -79,6 +79,8 @@ tags:
     description: 'Dated class sessions: calendar, create, update, cancel and restore'
   - name: Settings
     description: Studio-wide booking rules (read for OWNER / ADMIN, create, change and delete for OWNER only)
+  - name: Appointments
+    description: Appointment types (any role reads active types, ADMIN / OWNER write) and one-to-one appointments (ADMIN / OWNER book and cancel; COACH and MEMBER read their own)
   - name: Docs
     description: This specification and Swagger UI
 
@@ -1760,10 +1762,26 @@ paths:
                   slots:
                     - { startTime: '06:00', endTime: '12:00' }
                     - { startTime: '16:00', endTime: '20:00' }
-                - { dayOfWeek: 2, isAvailable: true, slots: [{ startTime: '06:00', endTime: '12:00' }] }
-                - { dayOfWeek: 3, isAvailable: true, slots: [{ startTime: '06:00', endTime: '12:00' }] }
-                - { dayOfWeek: 4, isAvailable: true, slots: [{ startTime: '06:00', endTime: '12:00' }] }
-                - { dayOfWeek: 5, isAvailable: true, slots: [{ startTime: '06:00', endTime: '12:00' }] }
+                - {
+                    dayOfWeek: 2,
+                    isAvailable: true,
+                    slots: [{ startTime: '06:00', endTime: '12:00' }],
+                  }
+                - {
+                    dayOfWeek: 3,
+                    isAvailable: true,
+                    slots: [{ startTime: '06:00', endTime: '12:00' }],
+                  }
+                - {
+                    dayOfWeek: 4,
+                    isAvailable: true,
+                    slots: [{ startTime: '06:00', endTime: '12:00' }],
+                  }
+                - {
+                    dayOfWeek: 5,
+                    isAvailable: true,
+                    slots: [{ startTime: '06:00', endTime: '12:00' }],
+                  }
                 - { dayOfWeek: 6, isAvailable: false, slots: [] }
                 - { dayOfWeek: 7, isAvailable: false, slots: [] }
       responses:
@@ -5197,6 +5215,476 @@ paths:
                 success: false
                 message: Method not allowed for this route
                 code: METHOD_NOT_ALLOWED
+  /api/v1/appointment-types:
+    get:
+      tags: [Appointments]
+      summary: List appointment types
+      description: |
+        Every signed-in role. ADMIN and OWNER see active and inactive types and may filter with
+        `isActive=true|false`; COACH and MEMBER always get active types only (their `isActive` filter is
+        ignored). Sorted by `name`, then `id`. Unknown query parameters are 400.
+      operationId: listAppointmentTypes
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: isActive
+          in: query
+          description: 'ADMIN / OWNER only: `true` or `false` (lowercase). Omit for both.'
+          schema:
+            type: string
+            enum: ['true', 'false']
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/Limit'
+      responses:
+        '200':
+          description: One page of appointment types
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/SuccessEnvelope'
+                  - type: object
+                    required: [pagination]
+                    properties:
+                      data:
+                        type: array
+                        items:
+                          $ref: '#/components/schemas/AppointmentType'
+                      pagination:
+                        $ref: '#/components/schemas/Pagination'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+    post:
+      tags: [Appointments]
+      summary: Create an appointment type
+      description: |
+        ADMIN or OWNER only. `name` (trimmed, 1-100 characters) and `durationMin` (1-480) are required;
+        `bufferBeforeMin` / `bufferAfterMin` (0-240, default 0) and `isActive` (default true) are optional.
+        Unknown fields are 400. An ACTIVE type with the same name (ignoring case) is 409
+        `APPOINTMENT_TYPE_NAME_TAKEN`; the name of an inactive type can be reused. An audit row
+        (`APPOINTMENT_TYPE_CREATED`) is written in the same transaction.
+      operationId: createAppointmentType
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateAppointmentTypeRequest'
+            example:
+              name: PT 60 minutes
+              durationMin: 60
+              bufferBeforeMin: 5
+              bufferAfterMin: 10
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/SuccessEnvelope'
+                  - type: object
+                    properties:
+                      message:
+                        example: Appointment type created successfully
+                      data:
+                        $ref: '#/components/schemas/AppointmentType'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '409':
+          $ref: '#/components/responses/AppointmentTypeConflict'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+    put:
+      tags:
+        - Appointments
+      summary: Not supported
+      description: 'Every method other than GET, POST answers 405 with `Allow: GET, POST`.'
+      operationId: methodNotAllowed_api_v1_appointment_types
+      responses:
+        '405':
+          description: 'Route exists but not for this method (`Allow: GET, POST`)'
+          headers:
+            Allow:
+              description: Methods the route supports
+              schema:
+                type: string
+                example: GET, POST
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+              example:
+                success: false
+                message: Method not allowed for this route
+                code: METHOD_NOT_ALLOWED
+
+  /api/v1/appointment-types/{typeId}:
+    patch:
+      tags: [Appointments]
+      summary: Edit or deactivate an appointment type
+      description: |
+        ADMIN or OWNER only. Any subset of `name`, `durationMin`, `bufferBeforeMin`, `bufferAfterMin`,
+        `isActive`; at least one field (an empty body is 400 with `errors[].field` = `body`). There is no
+        DELETE: set `isActive: false` to retire a type. Re-activating a type, or renaming an active one, to
+        a name already used by another ACTIVE type is 409 `APPOINTMENT_TYPE_NAME_TAKEN`.
+
+        **Existing appointments never change:** each appointment keeps its own copy (snapshot) of the buffers
+        and its own start and end, so editing a type only affects appointments booked afterwards. A request
+        that changes nothing returns the type unchanged and writes no audit row; otherwise
+        `APPOINTMENT_TYPE_UPDATED` (changed fields, before and after) is written in the same transaction.
+      operationId: updateAppointmentType
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/AppointmentTypeId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateAppointmentTypeRequest'
+            example:
+              durationMin: 45
+              isActive: true
+      responses:
+        '200':
+          description: Updated
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/SuccessEnvelope'
+                  - type: object
+                    properties:
+                      message:
+                        example: Appointment type updated successfully
+                      data:
+                        $ref: '#/components/schemas/AppointmentType'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/AppointmentTypeNotFound'
+        '409':
+          $ref: '#/components/responses/AppointmentTypeConflict'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+    put:
+      tags:
+        - Appointments
+      summary: Not supported
+      description: 'Every method other than PATCH answers 405 with `Allow: PATCH`.'
+      operationId: methodNotAllowed_api_v1_appointment_types__typeId
+      responses:
+        '405':
+          description: 'Route exists but not for this method (`Allow: PATCH`)'
+          headers:
+            Allow:
+              description: Methods the route supports
+              schema:
+                type: string
+                example: PATCH
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+              example:
+                success: false
+                message: Method not allowed for this route
+                code: METHOD_NOT_ALLOWED
+
+  /api/v1/appointments:
+    get:
+      tags: [Appointments]
+      summary: List appointments
+      description: |
+        Sorted by `startAt`, then `id`. ADMIN and OWNER see every appointment. A COACH is limited to their
+        own (`coachId` is forced to their coach id; asking for another coach is 403) and a MEMBER to their
+        own (`memberId` is forced to themselves; asking for another member is 403). A COACH with no coach
+        profile is 403.
+
+        Filters: `coachId`, `memberId`, `state` (`BOOKED` or `CANCELLED`, uppercase), `from` (inclusive) and
+        `to` (exclusive) on `startAt`, ISO 8601 with `Z` or a UTC offset; `from` must be before `to`.
+        Unknown query parameters are 400. Timestamps are ISO 8601 UTC, empty fields are explicit `null`.
+      operationId: listAppointments
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: coachId
+          in: query
+          schema:
+            type: string
+            format: uuid
+        - name: memberId
+          in: query
+          schema:
+            type: string
+            format: uuid
+        - name: state
+          in: query
+          schema:
+            $ref: '#/components/schemas/AppointmentState'
+        - name: from
+          in: query
+          description: Keep appointments starting at or after this instant (ISO 8601 with Z or offset)
+          schema:
+            type: string
+            format: date-time
+        - name: to
+          in: query
+          description: Keep appointments starting before this instant (ISO 8601 with Z or offset). Must be after `from`.
+          schema:
+            type: string
+            format: date-time
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/Limit'
+      responses:
+        '200':
+          description: One page of appointments
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/SuccessEnvelope'
+                  - type: object
+                    required: [pagination]
+                    properties:
+                      data:
+                        type: array
+                        items:
+                          $ref: '#/components/schemas/Appointment'
+                      pagination:
+                        $ref: '#/components/schemas/Pagination'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+    post:
+      tags: [Appointments]
+      summary: Book an appointment
+      description: |
+        ADMIN or OWNER only (booking is done on behalf of the member). Body: `coachId`, `memberId`,
+        `appointmentTypeId` and `startAt` (ISO 8601 with `Z` or a UTC offset); unknown fields are 400.
+
+        `endAt` = `startAt` + the type's `durationMin`. The type's `bufferBeforeMin` and `bufferAfterMin`
+        are copied onto the appointment (snapshot). The new appointment is `BOOKED` with `version` 1.
+
+        Checks, in order: validation and `startAt` in the future (400, `errors[].field` = `startAt`); the
+        coach, the member (a user with role MEMBER) and the type exist (404 `COACH_NOT_FOUND`,
+        `MEMBER_NOT_FOUND`, `APPOINTMENT_TYPE_NOT_FOUND`); the coach is active, the member account is active
+        and the type is active (409 `COACH_INACTIVE`, `MEMBER_NOT_ACTIVE`, `APPOINTMENT_TYPE_INACTIVE`).
+
+        The write runs in one transaction under a per-coach lock and calls the coach schedule check
+        (`assertIntervalAssignable`). **In this version that check only confirms the coach exists and is
+        active; availability, leave and overlap rules (409 `COACH_CONFLICT`) are added in a later release,
+        so clients must already handle a 409 `COACH_CONFLICT` here.** An audit row (`APPOINTMENT_CREATED`)
+        is written in the same transaction. Booking rules for appointments (opening window, limits) are not
+        applied.
+      operationId: createAppointment
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateAppointmentRequest'
+            example:
+              coachId: 3f0e5f4e-8f3b-4c8a-9d52-1a2b3c4d5e6f
+              memberId: 5b1f5b9e-5c1e-4a55-9d7e-2a3b4c5d6e7f
+              appointmentTypeId: 7e7e7e7e-0000-4000-8000-000000000009
+              startAt: '2026-12-01T06:00:00Z'
+      responses:
+        '201':
+          description: Booked
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/SuccessEnvelope'
+                  - type: object
+                    properties:
+                      message:
+                        example: Appointment booked successfully
+                      data:
+                        $ref: '#/components/schemas/Appointment'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/AppointmentReferenceNotFound'
+        '409':
+          $ref: '#/components/responses/AppointmentBookingConflict'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+    put:
+      tags:
+        - Appointments
+      summary: Not supported
+      description: 'Every method other than GET, POST answers 405 with `Allow: GET, POST`.'
+      operationId: methodNotAllowed_api_v1_appointments
+      responses:
+        '405':
+          description: 'Route exists but not for this method (`Allow: GET, POST`)'
+          headers:
+            Allow:
+              description: Methods the route supports
+              schema:
+                type: string
+                example: GET, POST
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+              example:
+                success: false
+                message: Method not allowed for this route
+                code: METHOD_NOT_ALLOWED
+
+  /api/v1/appointments/{appointmentId}:
+    get:
+      tags: [Appointments]
+      summary: Get an appointment
+      description: |
+        ADMIN or OWNER: any appointment. COACH: only their own (another coach's appointment is 403).
+        MEMBER: only their own (another member's appointment is 403). An unknown id is 404.
+      operationId: getAppointment
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/AppointmentId'
+      responses:
+        '200':
+          description: The appointment
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/SuccessEnvelope'
+                  - type: object
+                    properties:
+                      data:
+                        $ref: '#/components/schemas/Appointment'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/AppointmentNotFound'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+    put:
+      tags:
+        - Appointments
+      summary: Not supported
+      description: 'Every method other than GET answers 405 with `Allow: GET`.'
+      operationId: methodNotAllowed_api_v1_appointments__appointmentId
+      responses:
+        '405':
+          description: 'Route exists but not for this method (`Allow: GET`)'
+          headers:
+            Allow:
+              description: Methods the route supports
+              schema:
+                type: string
+                example: GET
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+              example:
+                success: false
+                message: Method not allowed for this route
+                code: METHOD_NOT_ALLOWED
+
+  /api/v1/appointments/{appointmentId}/cancel:
+    post:
+      tags: [Appointments]
+      summary: Cancel an appointment
+      description: |
+        ADMIN or OWNER only. No request body. `BOOKED` becomes `CANCELLED`, `cancelledAt` is set and
+        `version` goes up by one, together with an audit row (`APPOINTMENT_CANCELLED`), in one transaction.
+
+        Cancelling twice is 409 `APPOINTMENT_ALREADY_CANCELLED`. An appointment whose `startAt` is now or in
+        the past cannot be cancelled: 409 `APPOINTMENT_PAST_IMMUTABLE`. Cancelling has no other effect (no
+        credit, notification or e-mail) in this version.
+      operationId: cancelAppointment
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/AppointmentId'
+      responses:
+        '200':
+          description: Cancelled
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/SuccessEnvelope'
+                  - type: object
+                    properties:
+                      message:
+                        example: Appointment cancelled successfully
+                      data:
+                        $ref: '#/components/schemas/Appointment'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/AppointmentNotFound'
+        '409':
+          $ref: '#/components/responses/AppointmentCancelConflict'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+    put:
+      tags:
+        - Appointments
+      summary: Not supported
+      description: 'Every method other than POST answers 405 with `Allow: POST`.'
+      operationId: methodNotAllowed_api_v1_appointments__appointmentId_cancel
+      responses:
+        '405':
+          description: 'Route exists but not for this method (`Allow: POST`)'
+          headers:
+            Allow:
+              description: Methods the route supports
+              schema:
+                type: string
+                example: POST
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+              example:
+                success: false
+                message: Method not allowed for this route
+                code: METHOD_NOT_ALLOWED
 
 components:
   securitySchemes:
@@ -5232,6 +5720,24 @@ components:
         type: string
         format: uuid
       description: Leave id. A value that is not a UUID is 400 `VALIDATION_ERROR`; an unknown UUID, or a leave of another coach, is 404 `UNAVAILABILITY_NOT_FOUND`.
+
+    AppointmentTypeId:
+      name: typeId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+      description: Appointment type id. A value that is not a UUID is 400 `VALIDATION_ERROR`; an unknown UUID is 404 `APPOINTMENT_TYPE_NOT_FOUND`.
+
+    AppointmentId:
+      name: appointmentId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+      description: Appointment id. A value that is not a UUID is 400 `VALIDATION_ERROR`; an unknown UUID is 404 `APPOINTMENT_NOT_FOUND`.
 
     CafeCategoryId:
       name: categoryId
@@ -5386,6 +5892,72 @@ components:
                 id: 7e7e7e7e-0000-4000-8000-000000000009
                 startDate: '2026-12-04'
                 endDate: '2026-12-10'
+
+    AppointmentTypeNotFound:
+      description: No appointment type with this id
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorEnvelope'
+          example:
+            success: false
+            message: Appointment type not found
+            code: APPOINTMENT_TYPE_NOT_FOUND
+
+    AppointmentTypeConflict:
+      description: '`APPOINTMENT_TYPE_NAME_TAKEN` - another ACTIVE type already has this name (ignoring case)'
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorEnvelope'
+          example:
+            success: false
+            message: An active appointment type with this name already exists
+            code: APPOINTMENT_TYPE_NAME_TAKEN
+
+    AppointmentNotFound:
+      description: No appointment with this id
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorEnvelope'
+          example:
+            success: false
+            message: Appointment not found
+            code: APPOINTMENT_NOT_FOUND
+
+    AppointmentReferenceNotFound:
+      description: 'The coach (`COACH_NOT_FOUND`), the member (`MEMBER_NOT_FOUND`) or the appointment type (`APPOINTMENT_TYPE_NOT_FOUND`) named in the body does not exist'
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorEnvelope'
+          example:
+            success: false
+            message: Member not found
+            code: MEMBER_NOT_FOUND
+
+    AppointmentBookingConflict:
+      description: '`COACH_INACTIVE`, `MEMBER_NOT_ACTIVE` or `APPOINTMENT_TYPE_INACTIVE` - the coach, member or type exists but cannot be booked. `COACH_CONFLICT` (availability, leave or overlap) is reserved for a later release.'
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorEnvelope'
+          example:
+            success: false
+            message: This coach is inactive and cannot be booked
+            code: COACH_INACTIVE
+
+    AppointmentCancelConflict:
+      description: '`APPOINTMENT_ALREADY_CANCELLED` - already cancelled. `APPOINTMENT_PAST_IMMUTABLE` - the appointment has already started.'
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorEnvelope'
+          example:
+            success: false
+            message: This appointment is already cancelled
+            code: APPOINTMENT_ALREADY_CANCELLED
 
     PlanNotFound:
       description: No plan with this id. (An id that is not a UUID is 400 `VALIDATION_ERROR`, not 404.)
@@ -8299,3 +8871,189 @@ components:
               nullable: true
               type: object
               additionalProperties: true
+
+    AppointmentState:
+      type: string
+      enum: [BOOKED, CANCELLED]
+
+    AppointmentType:
+      type: object
+      additionalProperties: false
+      required:
+        [id, name, durationMin, bufferBeforeMin, bufferAfterMin, isActive, createdAt, updatedAt]
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+          maxLength: 100
+          example: PT 60 minutes
+        durationMin:
+          type: integer
+          minimum: 1
+          maximum: 480
+          example: 60
+        bufferBeforeMin:
+          type: integer
+          minimum: 0
+          maximum: 240
+          example: 5
+        bufferAfterMin:
+          type: integer
+          minimum: 0
+          maximum: 240
+          example: 10
+        isActive:
+          type: boolean
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+
+    CreateAppointmentTypeRequest:
+      type: object
+      additionalProperties: false
+      required: [name, durationMin]
+      properties:
+        name:
+          type: string
+          maxLength: 100
+          description: Trimmed; must not be blank
+        durationMin:
+          type: integer
+          minimum: 1
+          maximum: 480
+        bufferBeforeMin:
+          type: integer
+          minimum: 0
+          maximum: 240
+          default: 0
+        bufferAfterMin:
+          type: integer
+          minimum: 0
+          maximum: 240
+          default: 0
+        isActive:
+          type: boolean
+          default: true
+
+    UpdateAppointmentTypeRequest:
+      type: object
+      additionalProperties: false
+      minProperties: 1
+      properties:
+        name:
+          type: string
+          maxLength: 100
+        durationMin:
+          type: integer
+          minimum: 1
+          maximum: 480
+        bufferBeforeMin:
+          type: integer
+          minimum: 0
+          maximum: 240
+        bufferAfterMin:
+          type: integer
+          minimum: 0
+          maximum: 240
+        isActive:
+          type: boolean
+
+    Appointment:
+      type: object
+      additionalProperties: false
+      required:
+        - id
+        - coachId
+        - coachName
+        - memberId
+        - memberName
+        - appointmentTypeId
+        - appointmentTypeName
+        - startAt
+        - endAt
+        - bufferBeforeMin
+        - bufferAfterMin
+        - state
+        - cancelledAt
+        - version
+        - createdAt
+        - updatedAt
+      properties:
+        id:
+          type: string
+          format: uuid
+        coachId:
+          type: string
+          format: uuid
+        coachName:
+          type: string
+          nullable: true
+        memberId:
+          type: string
+          format: uuid
+        memberName:
+          type: string
+          nullable: true
+        appointmentTypeId:
+          type: string
+          format: uuid
+        appointmentTypeName:
+          type: string
+          nullable: true
+          description: The type's current name (the type can be renamed later)
+        startAt:
+          type: string
+          format: date-time
+          description: ISO 8601 UTC
+        endAt:
+          type: string
+          format: date-time
+          description: ISO 8601 UTC; `startAt` plus the type's duration at booking time
+        bufferBeforeMin:
+          type: integer
+          description: Snapshot copied from the type when the appointment was booked
+        bufferAfterMin:
+          type: integer
+          description: Snapshot copied from the type when the appointment was booked
+        state:
+          $ref: '#/components/schemas/AppointmentState'
+        cancelledAt:
+          type: string
+          format: date-time
+          nullable: true
+          description: Always present; null unless the appointment is cancelled
+        version:
+          type: integer
+          description: Starts at 1 and goes up by one on every change
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+
+    CreateAppointmentRequest:
+      type: object
+      additionalProperties: false
+      required: [coachId, memberId, appointmentTypeId, startAt]
+      properties:
+        coachId:
+          type: string
+          format: uuid
+          description: Coach profile id (not the user id)
+        memberId:
+          type: string
+          format: uuid
+          description: User id of an active MEMBER
+        appointmentTypeId:
+          type: string
+          format: uuid
+        startAt:
+          type: string
+          format: date-time
+          description: ISO 8601 with `Z` or a UTC offset; must be in the future

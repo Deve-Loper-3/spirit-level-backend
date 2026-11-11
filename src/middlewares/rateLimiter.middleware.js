@@ -51,6 +51,10 @@ const cafeReadLimiter = createPlanLimiter();
 const settingsLimiter = createPlanLimiter();
 const settingsReadLimiter = createPlanLimiter();
 
+// Appointment types and appointments share one pair: reads and writes count separately.
+const appointmentLimiter = createPlanLimiter();
+const appointmentReadLimiter = createPlanLimiter();
+
 const staffLimiter = createPlanLimiter();
 const coachLimiter = createPlanLimiter();
 const coachReadLimiter = createPlanLimiter();
@@ -73,6 +77,8 @@ module.exports = {
   cafeReadLimiter,
   settingsLimiter,
   settingsReadLimiter,
+  appointmentLimiter,
+  appointmentReadLimiter,
   staffLimiter,
   coachLimiter,
   coachReadLimiter,

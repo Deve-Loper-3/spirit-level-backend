@@ -236,6 +236,51 @@ const AppErrors = Object.freeze({
     message: Messages.UNAVAILABILITY_PAST_IMMUTABLE,
     code: 'UNAVAILABILITY_PAST_IMMUTABLE',
   }),
+  APPOINTMENT_TYPE_NOT_FOUND: Object.freeze({
+    statusCode: 404,
+    message: Messages.APPOINTMENT_TYPE_NOT_FOUND,
+    code: 'APPOINTMENT_TYPE_NOT_FOUND',
+  }),
+  APPOINTMENT_TYPE_NAME_TAKEN: Object.freeze({
+    statusCode: 409,
+    message: Messages.APPOINTMENT_TYPE_NAME_TAKEN,
+    code: 'APPOINTMENT_TYPE_NAME_TAKEN',
+  }),
+  APPOINTMENT_TYPE_INACTIVE: Object.freeze({
+    statusCode: 409,
+    message: Messages.APPOINTMENT_TYPE_INACTIVE,
+    code: 'APPOINTMENT_TYPE_INACTIVE',
+  }),
+  APPOINTMENT_NOT_FOUND: Object.freeze({
+    statusCode: 404,
+    message: Messages.APPOINTMENT_NOT_FOUND,
+    code: 'APPOINTMENT_NOT_FOUND',
+  }),
+  APPOINTMENT_ALREADY_CANCELLED: Object.freeze({
+    statusCode: 409,
+    message: Messages.APPOINTMENT_ALREADY_CANCELLED,
+    code: 'APPOINTMENT_ALREADY_CANCELLED',
+  }),
+  APPOINTMENT_PAST_IMMUTABLE: Object.freeze({
+    statusCode: 409,
+    message: Messages.APPOINTMENT_PAST_IMMUTABLE,
+    code: 'APPOINTMENT_PAST_IMMUTABLE',
+  }),
+  MEMBER_NOT_FOUND: Object.freeze({
+    statusCode: 404,
+    message: Messages.APPOINTMENT_MEMBER_NOT_FOUND,
+    code: 'MEMBER_NOT_FOUND',
+  }),
+  MEMBER_NOT_ACTIVE: Object.freeze({
+    statusCode: 409,
+    message: Messages.APPOINTMENT_MEMBER_NOT_ACTIVE,
+    code: 'MEMBER_NOT_ACTIVE',
+  }),
+  COACH_INACTIVE: Object.freeze({
+    statusCode: 409,
+    message: Messages.APPOINTMENT_COACH_INACTIVE,
+    code: 'COACH_INACTIVE',
+  }),
   SESSION_VERSION_CONFLICT: Object.freeze({
     statusCode: 409,
     message: Messages.SESSION_VERSION_CONFLICT,

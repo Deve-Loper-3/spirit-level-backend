@@ -13,6 +13,8 @@ const classRoutes = require('../../src/routes/class.routes');
 const sessionRoutes = require('../../src/routes/session.routes');
 const cafeRoutes = require('../../src/routes/cafe.routes');
 const bookingRuleRoutes = require('../../src/routes/bookingRule.routes');
+const appointmentTypeRoutes = require('../../src/routes/appointmentType.routes');
+const appointmentRoutes = require('../../src/routes/appointment.routes');
 const healthRoutes = require('../../src/routes/health.routes');
 
 const SPEC_PATH = path.join(__dirname, '../../docs/openapi.yaml');
@@ -46,6 +48,8 @@ const MOUNTS = [
   [sessionRoutes, '/api/v1/sessions'],
   [cafeRoutes, '/api/v1/cafe'],
   [bookingRuleRoutes, '/api/v1/settings/booking-rules'],
+  [appointmentTypeRoutes, '/api/v1/appointment-types'],
+  [appointmentRoutes, '/api/v1/appointments'],
   [healthRoutes, '/health'],
 ];
 

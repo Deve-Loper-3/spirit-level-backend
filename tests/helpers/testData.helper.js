@@ -58,6 +58,17 @@ const createTestData = (label) => {
   };
 
   const cleanup = async () => {
+    // Appointments RESTRICT both the member and the coach (and their users): remove them first.
+    const testUsers = {
+      OR: [
+        { id: { in: userIds } },
+        { email: { in: emails } },
+        { email: { startsWith: `test_${label}_` } },
+      ],
+    };
+    await prisma.appointment.deleteMany({
+      where: { OR: [{ member: testUsers }, { coach: { user: testUsers } }] },
+    });
     // Cafe orders RESTRICT user deletion; remove the test users' orders (items cascade) first.
     await prisma.cafeOrder.deleteMany({
       where: {

@@ -5,6 +5,11 @@ const prisma = require('../../src/config/prisma');
 // class_slot_coaches go with the class (cascade); session coaches go with their session.
 const deleteTestClasses = async (prefix, client = prisma) => {
   const where = { name: { startsWith: prefix, mode: 'insensitive' } };
+  // Bookings RESTRICT their session; the credit ledger references the bookings, so it goes first.
+  await client.memberCreditTransaction.deleteMany({
+    where: { booking: { session: { class: where } } },
+  });
+  await client.classBooking.deleteMany({ where: { session: { class: where } } });
   await client.classSession.deleteMany({ where: { class: where } });
   return client.class.deleteMany({ where });
 };

@@ -281,6 +281,11 @@ const AppErrors = Object.freeze({
     message: Messages.APPOINTMENT_COACH_INACTIVE,
     code: 'COACH_INACTIVE',
   }),
+  NOTIFICATION_NOT_FOUND: Object.freeze({
+    statusCode: 404,
+    message: Messages.NOTIFICATION_NOT_FOUND,
+    code: 'NOTIFICATION_NOT_FOUND',
+  }),
   SESSION_VERSION_CONFLICT: Object.freeze({
     statusCode: 409,
     message: Messages.SESSION_VERSION_CONFLICT,

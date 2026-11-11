@@ -55,6 +55,10 @@ const settingsReadLimiter = createPlanLimiter();
 const appointmentLimiter = createPlanLimiter();
 const appointmentReadLimiter = createPlanLimiter();
 
+// In-app notifications of the signed-in user: reads and writes count separately.
+const notificationLimiter = createPlanLimiter();
+const notificationReadLimiter = createPlanLimiter();
+
 const staffLimiter = createPlanLimiter();
 const coachLimiter = createPlanLimiter();
 const coachReadLimiter = createPlanLimiter();
@@ -79,6 +83,8 @@ module.exports = {
   settingsReadLimiter,
   appointmentLimiter,
   appointmentReadLimiter,
+  notificationLimiter,
+  notificationReadLimiter,
   staffLimiter,
   coachLimiter,
   coachReadLimiter,

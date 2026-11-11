@@ -81,6 +81,8 @@ tags:
     description: Studio-wide booking rules (read for OWNER / ADMIN, create, change and delete for OWNER only)
   - name: Appointments
     description: Appointment types (any role reads active types, ADMIN / OWNER write) and one-to-one appointments (ADMIN / OWNER book and cancel; COACH and MEMBER read their own)
+  - name: Notifications
+    description: In-app notifications of the signed-in user (any role; own notifications only)
   - name: Docs
     description: This specification and Swagger UI
 
@@ -5198,6 +5200,16 @@ paths:
       description: |
         OWNER, ADMIN or COACH. A COACH may cancel only their own session, and only while it has no
         bookings (otherwise 403). A reason is required. Past sessions are 409 `SESSION_PAST_IMMUTABLE`.
+
+        **Bookings (class cancellation only):** in the same transaction every BOOKED booking of the session
+        becomes CANCELLED (with `cancelledAt`) and the member gets one credit back: one ledger row of +1
+        (`CLASS_CANCELLED_REFUND`) per booking. A booking is refunded only once, so cancelling again (or
+        restoring and cancelling again) never refunds twice; `outcome.credit.refundedCount` counts the rows
+        really inserted. After the commit each booked member gets an in-app notification (`CLASS_CANCELLED`,
+        see `GET /api/v1/notifications`) and an e-mail. A failure of the notification or the e-mail is logged
+        and never fails or undoes the cancellation. A session without bookings answers as before
+        (`outcome` parts are `null`). Restoring a session does not re-book members or reverse credits. A coach
+        replacement, a coach's leave or availability never create notifications or e-mails.
       operationId: cancelSession
       security:
         - bearerAuth: []
@@ -6036,6 +6048,259 @@ paths:
               schema:
                 type: string
                 example: POST
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+              example:
+                success: false
+                message: Method not allowed for this route
+                code: METHOD_NOT_ALLOWED
+  /api/v1/notifications:
+    get:
+      tags: [Notifications]
+      summary: List my notifications
+      description: |
+        Any signed-in role (OWNER, ADMIN, COACH, MEMBER). Only the caller's own notifications, newest first.
+        `unread=true` keeps the unread ones (`false` or omitted: all). Unknown query parameters are 400.
+        `readAt` is `null` while a notification is unread; timestamps are ISO 8601 UTC. Today the only type is
+        `CLASS_CANCELLED` (`data` holds `sessionId`, `classId` and `startAt`).
+      operationId: listNotifications
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: unread
+          in: query
+          description: '`true` keeps only unread notifications (lowercase `true` / `false`)'
+          schema:
+            type: string
+            enum: ['true', 'false']
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/Limit'
+      responses:
+        '200':
+          description: One page of notifications
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/SuccessEnvelope'
+                  - type: object
+                    required: [pagination]
+                    properties:
+                      data:
+                        type: array
+                        items:
+                          $ref: '#/components/schemas/Notification'
+                      pagination:
+                        $ref: '#/components/schemas/Pagination'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+    put:
+      tags:
+        - Notifications
+      summary: Not supported
+      description: 'Every method other than GET answers 405 with `Allow: GET`.'
+      operationId: methodNotAllowed_api_v1_notifications
+      responses:
+        '405':
+          description: 'Route exists but not for this method (`Allow: GET`)'
+          headers:
+            Allow:
+              description: Methods the route supports
+              schema:
+                type: string
+                example: GET
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+              example:
+                success: false
+                message: Method not allowed for this route
+                code: METHOD_NOT_ALLOWED
+
+  /api/v1/notifications/unread-count:
+    get:
+      tags: [Notifications]
+      summary: Count my unread notifications
+      description: Any signed-in role. Counts only the caller's own unread notifications. Query parameters are not accepted (400).
+      operationId: getUnreadNotificationCount
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: The unread count
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/SuccessEnvelope'
+                  - type: object
+                    properties:
+                      data:
+                        type: object
+                        additionalProperties: false
+                        required: [unreadCount]
+                        properties:
+                          unreadCount:
+                            type: integer
+                            example: 3
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+    put:
+      tags:
+        - Notifications
+      summary: Not supported
+      description: 'Every method other than GET answers 405 with `Allow: GET`.'
+      operationId: methodNotAllowed_api_v1_notifications_unread_count
+      responses:
+        '405':
+          description: 'Route exists but not for this method (`Allow: GET`)'
+          headers:
+            Allow:
+              description: Methods the route supports
+              schema:
+                type: string
+                example: GET
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+              example:
+                success: false
+                message: Method not allowed for this route
+                code: METHOD_NOT_ALLOWED
+
+  /api/v1/notifications/read-all:
+    post:
+      tags: [Notifications]
+      summary: Mark all my notifications as read
+      description: Any signed-in role. Marks the caller's own unread notifications as read and returns how many changed (0 when none). No request body.
+      operationId: markAllNotificationsRead
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Notifications marked as read
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/SuccessEnvelope'
+                  - type: object
+                    properties:
+                      message:
+                        example: Notifications marked as read
+                      data:
+                        type: object
+                        additionalProperties: false
+                        required: [updatedCount]
+                        properties:
+                          updatedCount:
+                            type: integer
+                            example: 2
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+    put:
+      tags:
+        - Notifications
+      summary: Not supported
+      description: 'Every method other than POST answers 405 with `Allow: POST`.'
+      operationId: methodNotAllowed_api_v1_notifications_read_all
+      responses:
+        '405':
+          description: 'Route exists but not for this method (`Allow: POST`)'
+          headers:
+            Allow:
+              description: Methods the route supports
+              schema:
+                type: string
+                example: POST
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+              example:
+                success: false
+                message: Method not allowed for this route
+                code: METHOD_NOT_ALLOWED
+
+  /api/v1/notifications/{notificationId}/read:
+    patch:
+      tags: [Notifications]
+      summary: Mark one notification as read
+      description: |
+        Any signed-in role. Idempotent: reading an already-read notification returns it unchanged (the first
+        `readAt` is kept). A notification of another user, or an unknown id, is 404 `NOTIFICATION_NOT_FOUND`
+        (never 403). A value that is not a UUID is 400. No request body.
+      operationId: markNotificationRead
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: notificationId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: The notification, now read
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/SuccessEnvelope'
+                  - type: object
+                    properties:
+                      message:
+                        example: Notification marked as read
+                      data:
+                        $ref: '#/components/schemas/Notification'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          description: No such notification for the caller
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+              example:
+                success: false
+                message: Notification not found
+                code: NOTIFICATION_NOT_FOUND
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+    put:
+      tags:
+        - Notifications
+      summary: Not supported
+      description: 'Every method other than PATCH answers 405 with `Allow: PATCH`.'
+      operationId: methodNotAllowed_api_v1_notifications__notificationId_read
+      responses:
+        '405':
+          description: 'Route exists but not for this method (`Allow: PATCH`)'
+          headers:
+            Allow:
+              description: Methods the route supports
+              schema:
+                type: string
+                example: PATCH
           content:
             application/json:
               schema:
@@ -9223,7 +9488,7 @@ components:
             - cancelled
         outcome:
           type: object
-          description: What happened to bookings, credits and the waitlist. All null until booking exists.
+          description: What happened to bookings, credits and the waitlist. `booking` and `credit` are null when the session had no booked members; `waitlist` is always null for now.
           required:
             - booking
             - credit
@@ -9232,11 +9497,26 @@ components:
             booking:
               nullable: true
               type: object
-              additionalProperties: true
+              additionalProperties: false
+              required: [cancelledCount]
+              properties:
+                cancelledCount:
+                  type: integer
+                  description: Bookings cancelled by this request
             credit:
               nullable: true
               type: object
-              additionalProperties: true
+              additionalProperties: false
+              required: [refundedCount, creditsPerBooking, totalCredits]
+              properties:
+                refundedCount:
+                  type: integer
+                  description: Refund rows really inserted (a booking that was already refunded adds none)
+                creditsPerBooking:
+                  type: integer
+                  example: 1
+                totalCredits:
+                  type: integer
             waitlist:
               nullable: true
               type: object
@@ -9637,3 +9917,37 @@ components:
               fullName:
                 type: string
                 nullable: true
+
+    Notification:
+      type: object
+      additionalProperties: false
+      required: [id, type, title, body, data, readAt, createdAt]
+      properties:
+        id:
+          type: string
+          format: uuid
+        type:
+          type: string
+          enum: [CLASS_CANCELLED]
+        title:
+          type: string
+          example: Class cancelled
+        body:
+          type: string
+          example: 'Your booking for Power Yoga on Tue, 1 Dec 2026, 10:00 was cancelled. 1 credit has been returned to your account.'
+        data:
+          type: object
+          additionalProperties: true
+          description: For `CLASS_CANCELLED`, `sessionId`, `classId` and `startAt` (ISO 8601 UTC)
+          example:
+            sessionId: 7b0c3a5e-2f0d-4f65-9a7f-1d3a9a0f2c11
+            classId: 3f0e5f4e-8f3b-4c8a-9d52-1a2b3c4d5e6f
+            startAt: '2026-12-01T06:00:00.000Z'
+        readAt:
+          type: string
+          format: date-time
+          nullable: true
+          description: Always present; null while unread
+        createdAt:
+          type: string
+          format: date-time

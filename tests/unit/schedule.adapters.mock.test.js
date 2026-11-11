@@ -394,7 +394,8 @@ describe('Schedule Service - Adapter Seams & Stubs Unit Tests', () => {
         state: 'cancelled',
         outcome: { booking: { cancelledCount: 8 }, credit: true, waitlist: true },
       });
-      expect(getCancelOutcome).toHaveBeenCalledWith(sessionId, 'Facility maintenance');
+      // The transaction client is passed as the third argument (S11: bookings are cancelled in the same transaction).
+      expect(getCancelOutcome).toHaveBeenCalledWith(sessionId, 'Facility maintenance', mockTx);
     });
   });
 });

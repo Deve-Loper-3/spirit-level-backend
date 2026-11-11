@@ -377,6 +377,17 @@ const Messages = Object.freeze({
   COVERAGE_COACH_ID_INVALID: 'coachId must be a valid UUID',
   COVERAGE_CLASS_ID_INVALID: 'classId must be a valid UUID',
 
+  // Class cancellation side effects and notifications (SLAPP 66/111 S11)
+  NOTIFICATION_ID_INVALID: 'Notification id must be a valid UUID',
+  NOTIFICATION_UNREAD_INVALID: 'unread must be true or false',
+  NOTIFICATION_NOT_FOUND: 'Notification not found',
+  NOTIFICATION_READ_SUCCESS: 'Notification marked as read',
+  NOTIFICATIONS_READ_ALL_SUCCESS: 'Notifications marked as read',
+  CLASS_CANCELLED_TITLE: 'Class cancelled',
+  CLASS_CANCELLED_BODY: (className, when, credits) =>
+    `Your booking for ${className} on ${when} was cancelled. ${credits} credit${credits === 1 ? ' has' : 's have'} been returned to your account.`,
+  CLASS_CANCELLED_EMAIL_SUBJECT: (className) => `Your class was cancelled: ${className}`,
+
   // Appointment types and appointments (SLAPP 66/111 S6)
   APPOINTMENT_TYPE_ID_INVALID: 'Appointment type id must be a valid UUID',
   APPOINTMENT_ID_INVALID: 'Appointment id must be a valid UUID',

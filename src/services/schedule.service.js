@@ -39,6 +39,7 @@ const { AuditAction } = require('../constants/audit');
 const { createAuditLog } = require('../repositories/audit-log.repository');
 const { lockCoachSchedule } = require('../repositories/coachSchedule.repository');
 const { checkCoachesForInterval } = require('./coachSchedule.service');
+const { notifyMembersOfCancellation } = require('./classCancellation.service');
 const { BookingRuleKey } = require('../constants/bookingRule');
 const { getLimitValue } = require('./bookingRule.service');
 const { limitToVisibleDays } = require('./bookingRule.guards');
@@ -1207,7 +1208,10 @@ const patchSession = async ({ sessionId, payload, user, meta = {} }) => {
 };
 
 const cancelSession = async ({ sessionId, payload, user }) => {
-  return prisma.$transaction(async (tx) => {
+  // Filled inside the transaction, used only after it committed (class cancellation side effects).
+  let afterCommit = null;
+
+  const result = await prisma.$transaction(async (tx) => {
     const session = await scheduleRepository.findSessionById(sessionId, tx);
     if (!session) {
       throw createAppError(AppErrors.SESSION_NOT_FOUND);
@@ -1238,8 +1242,9 @@ const cancelSession = async ({ sessionId, payload, user }) => {
       throw createAppError(AppErrors.FORBIDDEN);
     }
 
-    // Call cancellation outcome seam
-    const outcome = await getCancelOutcome(sessionId, reason);
+    // Cancel the bookings and refund the credits (same transaction); `recipients` is internal.
+    const { recipients = [], ...outcome } = await getCancelOutcome(sessionId, reason, tx);
+    afterCommit = { session, recipients };
 
     const updatedOverriddenFields = Array.from(
       new Set([...(session.overriddenFields || []), 'cancel']),
@@ -1271,6 +1276,13 @@ const cancelSession = async ({ sessionId, payload, user }) => {
       outcome,
     };
   }, TX_OPTIONS);
+
+  // After the commit: in-app notifications and e-mails for the members whose booking was cancelled. A
+  // failure here is logged inside and never fails or undoes the cancellation.
+  if (afterCommit) {
+    await notifyMembersOfCancellation(afterCommit).catch(() => undefined);
+  }
+  return result;
 };
 
 const restoreSession = async ({ sessionId, user: _user }) => {

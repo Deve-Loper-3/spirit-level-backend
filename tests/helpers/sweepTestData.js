@@ -13,6 +13,10 @@ const sweepStaleTestData = async (prisma, now = new Date()) => {
   await prisma.appointment.deleteMany({
     where: { OR: [{ member: where }, { coach: { user: where } }] },
   });
+  // Class bookings and the credit ledger RESTRICT the member; the ledger references the bookings, so it
+  // goes first (notifications cascade with the user).
+  await prisma.memberCreditTransaction.deleteMany({ where: { member: where } });
+  await prisma.classBooking.deleteMany({ where: { member: where } });
   // Cafe orders RESTRICT user deletion, so a test user's orders (and their items, by cascade) go first.
   await prisma.cafeOrder.deleteMany({ where: { createdBy: where } });
   // Audit rows keep the email but lose the user (SET NULL), so they are removed explicitly.

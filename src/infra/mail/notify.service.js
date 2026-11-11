@@ -1,6 +1,7 @@
 const nodemailer = require('nodemailer');
 const env = require('../../config/env');
 const { escapeHtml } = require('../../utils/html.util');
+const { Messages } = require('../../constants/messages');
 
 const buildStaffInvitationEmail = ({ fullName, role, tempPassword }) => {
   const subject = 'Your Spirit Level Staff Account';
@@ -53,6 +54,29 @@ const buildPasswordResetOtpEmail = ({ fullName, otp }) => {
   return { subject, text, html };
 };
 
+// Class cancellation mail (SLAPP 66/111 S11). `when` is already formatted in the facility timezone.
+const buildClassCancelledEmail = ({ fullName, className, when, credits }) => {
+  const subject = Messages.CLASS_CANCELLED_EMAIL_SUBJECT(className);
+  const text = [
+    `Hello ${fullName},`,
+    '',
+    `Your class ${className} on ${when} has been cancelled.`,
+    `${credits} credit${credits === 1 ? ' has' : 's have'} been returned to your account.`,
+    '',
+    'Best regards,',
+    'The Spirit Level Team',
+  ].join('\n');
+
+  const html = [
+    `<p>Hello ${escapeHtml(fullName)},</p>`,
+    `<p>Your class <strong>${escapeHtml(className)}</strong> on ${escapeHtml(when)} has been cancelled.</p>`,
+    `<p>${credits} credit${credits === 1 ? ' has' : 's have'} been returned to your account.</p>`,
+    '<p>Best regards,<br/>The Spirit Level Team</p>',
+  ].join('\n');
+
+  return { subject, text, html };
+};
+
 const createTransporter = () =>
   nodemailer.createTransport({
     host: env.SMTP_HOST,
@@ -98,7 +122,22 @@ const sendPasswordResetOtp = async ({ email, fullName }, otp) => {
   });
 };
 
+const sendClassCancelled = async ({ email, fullName }, details) => {
+  const { subject, text, html } = buildClassCancelledEmail({ fullName, ...details });
+  const client = getTransporter();
+
+  return client.sendMail({
+    from: env.SMTP_FROM,
+    to: email,
+    subject,
+    text,
+    html,
+  });
+};
+
 module.exports = {
+  sendClassCancelled,
+  buildClassCancelledEmail,
   sendStaffInvitation,
   buildStaffInvitationEmail,
   sendPasswordResetOtp,

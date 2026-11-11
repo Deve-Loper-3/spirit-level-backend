@@ -69,6 +69,10 @@ const createTestData = (label) => {
     await prisma.appointment.deleteMany({
       where: { OR: [{ member: testUsers }, { coach: { user: testUsers } }] },
     });
+    // Class bookings and the credit ledger RESTRICT the member (the ledger references the bookings, so it goes
+    // first). Notifications cascade with the user.
+    await prisma.memberCreditTransaction.deleteMany({ where: { member: testUsers } });
+    await prisma.classBooking.deleteMany({ where: { member: testUsers } });
     // Cafe orders RESTRICT user deletion; remove the test users' orders (items cascade) first.
     await prisma.cafeOrder.deleteMany({
       where: {

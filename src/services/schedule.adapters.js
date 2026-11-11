@@ -1,3 +1,5 @@
+const { cancelBookingsAndRefund } = require('./classCancellation.service');
+
 /**
  * Out-of-scope integration seam functions (BE-SCH-1/2/3).
  * Safe defaults for booking stats, cancellation outcomes, coach qualification and leave.
@@ -18,19 +20,17 @@ const getBookingStats = async (_sessionId) => {
 };
 
 /**
- * Handles booking cancellation side effects (credit restoration, waitlist notifications).
- * @param {string} _sessionId
+ * Handles the booking side of a cancelled class session (SLAPP 66/111 S11): every BOOKED booking becomes
+ * CANCELLED and gets one +1 credit ledger row (idempotent). Must run inside the cancel transaction (`client`).
+ * `recipients` (who to notify after the commit) is internal: the caller removes it before answering.
+ * With no bookings the outcome is the same all-null object as before.
+ * @param {string} sessionId
  * @param {string} _reason
- * @returns {Promise<{ booking: any, credit: any, waitlist: any }>}
+ * @param {object} [client] Prisma transaction client
+ * @returns {Promise<{ booking: any, credit: any, waitlist: any, recipients: any[] }>}
  */
-const getCancelOutcome = async (_sessionId, _reason) => {
-  // TODO: Wire to booking/credit engine when cancellation review flow lands.
-  return {
-    booking: null,
-    credit: null,
-    waitlist: null,
-  };
-};
+const getCancelOutcome = async (sessionId, _reason, client) =>
+  cancelBookingsAndRefund({ sessionId, client });
 
 /**
  * Checks if a coach is qualified for a specific class template.

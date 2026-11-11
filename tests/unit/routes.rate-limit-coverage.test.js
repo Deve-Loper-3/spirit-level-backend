@@ -10,6 +10,7 @@ const cafeRoutes = require('../../src/routes/cafe.routes');
 const bookingRuleRoutes = require('../../src/routes/bookingRule.routes');
 const appointmentTypeRoutes = require('../../src/routes/appointmentType.routes');
 const appointmentRoutes = require('../../src/routes/appointment.routes');
+const notificationRoutes = require('../../src/routes/notification.routes');
 const healthRoutes = require('../../src/routes/health.routes');
 const { createDocsRouter } = require('../../src/routes/docs.routes');
 
@@ -39,6 +40,7 @@ describe('every route has a rate limiter', () => {
     ['booking rules', bookingRuleRoutes],
     ['appointment types', appointmentTypeRoutes],
     ['appointments', appointmentRoutes],
+    ['notifications', notificationRoutes],
   ])('%s router', (_name, router) => {
     expect(routesWithoutLimiter(router)).toEqual([]);
   });

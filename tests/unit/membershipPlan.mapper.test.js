@@ -87,7 +87,7 @@ describe('membershipPlan.mapper - toMembershipPlanResponse', () => {
     });
   });
 
-  it('maps term, recurring, periodMonths, joiningFee, creditSummary, and creditNote', () => {
+  it('maps term, recurring, periodMonths, joiningFee and creditSummary', () => {
     const fullPlan = {
       ...basePlan,
       term: '12 Months',
@@ -101,7 +101,7 @@ describe('membershipPlan.mapper - toMembershipPlanResponse', () => {
     expect(res.periodMonths).toBe(12);
     expect(res.joiningFee).toBe(150);
     expect(res.creditSummary).toBe('10 class credits');
-    expect(res.creditNote).toBe('10 class credits');
+    expect(res).not.toHaveProperty('creditNote');
   });
 
   it('returns null when input is falsy', () => {

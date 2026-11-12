@@ -17,6 +17,7 @@ const uuidParams = (messagesByParam) =>
   );
 
 const validatePlanIdParam = uuidParams({ id: Messages.PLAN_ID_INVALID });
+const validateMembershipIdParam = uuidParams({ id: Messages.MEMBERSHIP_ID_INVALID });
 const validateClassIdParam = uuidParams({ id: Messages.CLASS_ID_INVALID });
 const validateSlotIdParams = uuidParams({
   id: Messages.CLASS_ID_INVALID,
@@ -26,6 +27,7 @@ const validateSessionIdParam = uuidParams({ id: Messages.SESSION_ID_INVALID });
 
 module.exports = {
   validatePlanIdParam,
+  validateMembershipIdParam,
   validateClassIdParam,
   validateSlotIdParams,
   validateSessionIdParam,

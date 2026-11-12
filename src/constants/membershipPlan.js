@@ -110,6 +110,7 @@ const PLAN_EDITABLE_FIELDS = Object.freeze([
   'term',
   'recurring',
   'periodMonths',
+  'joiningFee',
 ]);
 
 // Sent in a PATCH body they are rejected (status has its own endpoint).
@@ -119,7 +120,6 @@ const PLAN_NON_EDITABLE_FIELDS = Object.freeze([
   'status',
   'version',
   'externalRef',
-  'joiningFee',
   'createdAt',
   'updatedAt',
 ]);
@@ -132,6 +132,10 @@ const COMMERCIAL_FIELDS = Object.freeze([
   'creditRefill',
   'validityValue',
   'validityUnit',
+  'term',
+  'recurring',
+  'periodMonths',
+  'joiningFee',
 ]);
 
 const PLAN_NAME_MIN_LENGTH = 2;

@@ -18,11 +18,7 @@ jest.mock('../../src/repositories/audit-log.repository', () => ({ createAuditLog
 const prisma = require('../../src/config/prisma');
 const scheduleRepository = require('../../src/repositories/schedule.repository');
 const classRepository = require('../../src/repositories/class.repository');
-const {
-  getBookingStats,
-  isCoachQualified,
-  isCoachOnLeave,
-} = require('../../src/services/schedule.adapters');
+const { getBookingStats } = require('../../src/services/schedule.adapters');
 const { checkCoachesForInterval } = require('../../src/services/coachSchedule.service');
 const { lockCoachSchedule } = require('../../src/repositories/coachSchedule.repository');
 const { createAuditLog } = require('../../src/repositories/audit-log.repository');
@@ -88,8 +84,6 @@ beforeEach(() => {
   );
   classRepository.findById.mockResolvedValue(classRecord);
   getBookingStats.mockResolvedValue({ bookedCount: 0, waitlistCount: 0 });
-  isCoachQualified.mockResolvedValue(true);
-  isCoachOnLeave.mockResolvedValue(false);
   checkCoachesForInterval.mockResolvedValue(new Map());
   scheduleRepository.createSession.mockImplementation(async (data, coachIds) => ({
     id: 'new-session',
@@ -405,15 +399,6 @@ describe('patchSession: replacement with a coach that is NOT on the class templa
     });
     expect(scheduleRepository.updateSession).not.toHaveBeenCalled();
     expect(createAuditLog).not.toHaveBeenCalled();
-  });
-
-  it('a qualification rule is still applied (isCoachQualified false is a 409)', async () => {
-    isCoachQualified.mockResolvedValue(false);
-    await expect(replaceWith(['coach-3'])).rejects.toMatchObject({
-      statusCode: 409,
-      code: 'COACH_CONFLICT',
-    });
-    expect(scheduleRepository.updateSession).not.toHaveBeenCalled();
   });
 
   it('a later time-only PATCH of that session keeps working (the stored coach is off-template)', async () => {

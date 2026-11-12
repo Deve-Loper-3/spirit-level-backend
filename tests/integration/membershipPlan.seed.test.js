@@ -98,6 +98,26 @@ describe('membership-plans.seed runner with fixture', () => {
     expect(monthlyPlan.billingCycle).toBe(PlanBillingCycle.MONTH);
     expect(monthlyPlan.creditRefill).toBe(PlanCreditRefill.MONTHLY);
     expect(monthlyPlan.creditsIncluded).toBe(15);
+    expect(monthlyPlan.recurring).toBe(true);
+    expect(monthlyPlan.periodMonths).toBe(1);
+    expect(packPlan.recurring).toBe(false);
+    expect(packPlan.periodMonths).toBeNull();
+    expect(trialPlan.recurring).toBe(false);
+    expect(trialPlan.periodMonths).toBeNull();
+
+    // No plan is ever "recurring" without being a SUBSCRIPTION, and a SUBSCRIPTION always renews.
+    const seeded = await prisma.membershipPlan.findMany({
+      where: { name: { startsWith: TEST_PREFIX } },
+    });
+    seeded.forEach((plan) => {
+      expect(plan.recurring).toBe(plan.kind === PlanKind.SUBSCRIPTION);
+      if (plan.kind === PlanKind.SUBSCRIPTION) {
+        expect(plan.billingCycle).not.toBe(PlanBillingCycle.ONE_OFF);
+        expect([1, 3, 6, 12]).toContain(plan.periodMonths);
+      } else {
+        expect(plan.periodMonths).toBeNull();
+      }
+    });
 
     // 3. Manual reassignment: must not be overwritten by seed rerun
     const manualMem = await createTestMembership(TEST_PREFIX, {

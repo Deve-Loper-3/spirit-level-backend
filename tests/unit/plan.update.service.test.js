@@ -96,6 +96,29 @@ describe('updatePlan', () => {
     expect(result.price).toBe(400);
   });
 
+  it('updates joiningFee, with the old and new fee in the audit and no extra field', async () => {
+    const plan = planRow({ joiningFee: { toNumber: () => 10, valueOf: () => '10.00' } });
+    repository.updatePlanWithAudit.mockImplementation(async ({ auditFor }) => {
+      const updated = planRow({ joiningFee: 50, version: 2 });
+      repository.lastAudit = auditFor(updated);
+      return updated;
+    });
+
+    await run(plan, { joiningFee: 50 });
+
+    const call = repository.updatePlanWithAudit.mock.calls[0][0];
+    expect(call.data).toEqual({ joiningFee: 50 });
+    expect(repository.lastAudit.details.changes).toEqual({ joiningFee: { from: 10, to: 50 } });
+  });
+
+  it('treats a Decimal joiningFee equal to the sent number as unchanged', async () => {
+    const plan = planRow({ joiningFee: { toNumber: () => 25, valueOf: () => '25.00' } });
+
+    await run(plan, { joiningFee: 25 });
+
+    expect(repository.updatePlanWithAudit).not.toHaveBeenCalled();
+  });
+
   it('writes nothing and no audit when no value really changes', async () => {
     const plan = planRow();
 

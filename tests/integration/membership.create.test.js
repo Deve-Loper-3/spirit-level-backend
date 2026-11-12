@@ -4,6 +4,7 @@ const prisma = require('../../src/config/prisma');
 const { Role } = require('../../src/constants/roles');
 const { Messages } = require('../../src/constants/messages');
 const { AppErrors } = require('../../src/constants/errors');
+const { AuditAction } = require('../../src/constants/audit');
 const { createTestData } = require('../helpers/testData.helper');
 const { bearerFor } = require('../helpers/auth.helper');
 const { deleteTestMemberships, deleteTestPlans } = require('../helpers/membershipPlan.helper');
@@ -67,8 +68,39 @@ describe('POST /api/v1/memberships', () => {
       });
       expect(res.body.data.id).toBeDefined();
       expect(res.body.data.createdAt).toBeDefined();
-      // There is no GET /memberships/:id, so no Location header is sent.
-      expect(res.headers.location).toBeUndefined();
+      expect(res.headers.location).toBe(`/api/v1/memberships/${res.body.data.id}`);
+    });
+
+    it('writes one MEMBERSHIP_CREATED audit row with the actor in the same transaction', async () => {
+      const name = `${TEST_PREFIX}Audited_${Date.now()}`;
+      const res = await postMembership({ name });
+
+      expect(res.status).toBe(201);
+      const rows = await prisma.auditLog.findMany({
+        where: { action: AuditAction.MEMBERSHIP_CREATED, reason: `${name} (${res.body.data.id})` },
+      });
+      expect(rows).toHaveLength(1);
+      expect(rows[0]).toMatchObject({
+        actorId: adminUser.id,
+        actorRole: Role.ADMIN,
+        email: adminUser.email,
+      });
+    });
+
+    it('writes no audit row and no membership when the name is a duplicate', async () => {
+      const name = `${TEST_PREFIX}NoAudit_${Date.now()}`;
+      await postMembership({ name });
+      const before = await prisma.auditLog.count({
+        where: { action: AuditAction.MEMBERSHIP_CREATED, actorId: adminUser.id },
+      });
+
+      const res = await postMembership({ name: name.toUpperCase() });
+
+      expect(res.status).toBe(409);
+      const after = await prisma.auditLog.count({
+        where: { action: AuditAction.MEMBERSHIP_CREATED, actorId: adminUser.id },
+      });
+      expect(after).toBe(before);
     });
 
     it('trims name and allows description to be omitted', async () => {

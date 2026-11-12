@@ -118,7 +118,10 @@ const membershipPlanSchema = z
     ),
     joiningFee: z.preprocess(
       (val) => (val === undefined || val === null || val === '' ? 0 : Number(val)),
-      z.number().min(0).default(0),
+      z
+        .number({ error: Messages.PLAN_JOINING_FEE_INVALID })
+        .min(0, Messages.PLAN_JOINING_FEE_INVALID)
+        .default(0),
     ),
     membershipId: z.preprocess(
       (val) => (val === '' ? null : val),
@@ -313,6 +316,10 @@ const findBadPatchKeys = (body) => {
     }
     if (!PLAN_EDITABLE_FIELDS.includes(key)) {
       return [{ path: [key], message: Messages.PLAN_FIELD_UNKNOWN }];
+    }
+    // On create a missing fee means 0, but in a PATCH an explicit null or blank is a mistake.
+    if (key === 'joiningFee' && (body[key] === null || body[key] === '')) {
+      return [{ path: [key], message: Messages.PLAN_JOINING_FEE_INVALID }];
     }
     return [];
   });

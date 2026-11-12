@@ -1,22 +1,36 @@
+const prisma = require('../config/prisma');
 const { cancelBookingsAndRefund } = require('./classCancellation.service');
+const { countBookedBySessions } = require('../repositories/classBooking.repository');
 
 /**
- * Out-of-scope integration seam functions (BE-SCH-1/2/3).
- * Safe defaults for booking stats, cancellation outcomes, coach qualification and leave.
- * Wire real implementations when their respective tickets land. See CODEMAP §21.
+ * Seam between the schedule and the booking side.
+ * Booked counts are real (class_bookings). There is no waitlist table yet, so `waitlistCount` is always 0
+ * (documented, CODEMAP §21): it is display only and no guard reads it for a schedule decision.
  */
 
+const toStats = (bookedCount) => ({ bookedCount: bookedCount ?? 0, waitlistCount: 0 });
+
 /**
- * Returns booking and waitlist counts for a session.
- * @param {string} _sessionId
+ * Booking counts for one session. Pass the transaction client when called inside a transaction.
+ * @param {string} sessionId
+ * @param {object} [client]
  * @returns {Promise<{ bookedCount: number, waitlistCount: number }>}
  */
-const getBookingStats = async (_sessionId) => {
-  // TODO: Wire to booking repository / service when booking ticket lands.
-  return {
-    bookedCount: 0,
-    waitlistCount: 0,
-  };
+const getBookingStats = async (sessionId, client = prisma) => {
+  const counts = await countBookedBySessions([sessionId], client);
+  return toStats(counts.get(sessionId));
+};
+
+/**
+ * Booking counts for many sessions in one query. Returns a Map sessionId -> stats; every requested id
+ * is present (0 booked when it has no bookings).
+ * @param {string[]} sessionIds
+ * @param {object} [client]
+ * @returns {Promise<Map<string, { bookedCount: number, waitlistCount: number }>>}
+ */
+const getBookingStatsMap = async (sessionIds, client = prisma) => {
+  const counts = await countBookedBySessions(sessionIds, client);
+  return new Map(sessionIds.map((id) => [id, toStats(counts.get(id))]));
 };
 
 /**
@@ -32,32 +46,8 @@ const getBookingStats = async (_sessionId) => {
 const getCancelOutcome = async (sessionId, _reason, client) =>
   cancelBookingsAndRefund({ sessionId, client });
 
-/**
- * Checks if a coach is qualified for a specific class template.
- * @param {string} _coachId
- * @param {string} _classId
- * @returns {Promise<boolean>}
- */
-const isCoachQualified = async (_coachId, _classId) => {
-  // TODO: Wire to coach certification / qualification matrix when coach ticket lands.
-  return true;
-};
-
-/**
- * Checks if a coach is approved on leave during a given interval.
- * @param {string} _coachId
- * @param {Date} _startAt
- * @param {Date} _endAt
- * @returns {Promise<boolean>}
- */
-const isCoachOnLeave = async (_coachId, _startAt, _endAt) => {
-  // TODO: Wire to coach leave / unavailability calendar when leave ticket lands.
-  return false;
-};
-
 module.exports = {
   getBookingStats,
+  getBookingStatsMap,
   getCancelOutcome,
-  isCoachQualified,
-  isCoachOnLeave,
 };

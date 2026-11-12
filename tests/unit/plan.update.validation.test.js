@@ -81,6 +81,37 @@ describe('validateUpdatePlanBody', () => {
     expect(run(validateUpdatePlanBody, { body: undefined }).res.status).toHaveBeenCalledWith(400);
   });
 
+  describe('joiningFee', () => {
+    it('is editable: a valid number goes into the validated set', () => {
+      const { req, next } = run(validateUpdatePlanBody, { body: { joiningFee: '75.5' } });
+
+      expect(next).toHaveBeenCalledWith();
+      expect(req.validatedBody.joiningFee).toBe(75.5);
+    });
+
+    it('keeps the stored fee when it is not sent', () => {
+      const { req } = run(validateUpdatePlanBody, {
+        body: { price: 360 },
+        plan: storedPlan({ joiningFee: { valueOf: () => '40.00' } }),
+      });
+
+      expect(req.validatedBody.joiningFee).toBe(40);
+    });
+
+    it.each([
+      ['negative', -5],
+      ['null', null],
+      ['blank', ''],
+      ['not a number', 'abc'],
+    ])('rejects a %s fee with a joiningFee error', (_label, joiningFee) => {
+      const { res, next, errors } = run(validateUpdatePlanBody, { body: { joiningFee } });
+
+      expect(next).not.toHaveBeenCalled();
+      expect(res.status).toHaveBeenCalledWith(400);
+      expect(fields(errors)).toEqual(['joiningFee']);
+    });
+  });
+
   it('reports non-editable fields before it validates the merged result', () => {
     const { errors } = run(validateUpdatePlanBody, { body: { id: 'x', price: -5 } });
     expect(fields(errors)).toEqual(['id']);

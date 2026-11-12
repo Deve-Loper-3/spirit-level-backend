@@ -181,7 +181,6 @@ describe('PATCH /api/v1/plans/:id', () => {
       ['externalRef', 'GLOFOX-1'],
       ['createdAt', '2020-01-01T00:00:00.000Z'],
       ['updatedAt', '2020-01-01T00:00:00.000Z'],
-      ['joiningFee', 50],
     ])('rejects %s', async (field, value) => {
       const plan = await createTestPlan(PREFIX);
 
@@ -389,6 +388,55 @@ describe('PATCH /api/v1/plans/:id', () => {
       const plan = await createTestPlan(PREFIX);
       const res = await patchAs(users.admin, plan.id, { name: archived.name });
       expect(res.status).toBe(200);
+    });
+  });
+
+  describe('joiningFee', () => {
+    it('updates the fee, returns it as a number and bumps the version once', async () => {
+      const plan = await createTestPlan(PREFIX, { joiningFee: 10 });
+
+      const res = await patchAs(users.admin, plan.id, { joiningFee: 50 });
+
+      expect(res.status).toBe(200);
+      expect(res.body.data.joiningFee).toBe(50);
+      expect(res.body.data.version).toBe(plan.version + 1);
+      expect((await reload(plan.id)).joiningFee.toNumber()).toBe(50);
+    });
+
+    it('records the old and new fee in the audit log', async () => {
+      const plan = await createTestPlan(PREFIX, { joiningFee: 10 });
+
+      await patchAs(users.admin, plan.id, { joiningFee: 50 });
+
+      const audits = await findPlanAudits(plan.id, AuditAction.PLAN_UPDATED);
+      expect(audits).toHaveLength(1);
+      expect(audits[0].details.changes.joiningFee).toEqual({ from: 10, to: 50 });
+    });
+
+    it('writes nothing and keeps the version when the same fee is sent', async () => {
+      const plan = await createTestPlan(PREFIX, { joiningFee: 25 });
+
+      const res = await patchAs(users.admin, plan.id, { joiningFee: 25 });
+
+      expect(res.status).toBe(200);
+      expect(res.body.data.version).toBe(plan.version);
+      expect(await findPlanAudits(plan.id, AuditAction.PLAN_UPDATED)).toHaveLength(0);
+    });
+
+    it.each([
+      ['a negative number', -1],
+      ['null', null],
+      ['an empty string', ''],
+      ['text', 'abc'],
+    ])('rejects %s with 400 and changes nothing', async (_label, value) => {
+      const plan = await createTestPlan(PREFIX, { joiningFee: 10 });
+
+      const res = await patchAs(users.admin, plan.id, { joiningFee: value });
+
+      expect(res.status).toBe(400);
+      expect(res.body.code).toBe('VALIDATION_ERROR');
+      expect(res.body.errors[0].field).toBe('joiningFee');
+      expect((await reload(plan.id)).joiningFee.toNumber()).toBe(10);
     });
   });
 

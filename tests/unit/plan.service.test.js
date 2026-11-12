@@ -1,6 +1,5 @@
 const planService = require('../../src/services/plan.service');
 const membershipPlanRepository = require('../../src/repositories/membershipPlan.repository');
-const userRepository = require('../../src/repositories/user.repository');
 const {
   PlanKind,
   PlanBillingCycle,
@@ -15,7 +14,6 @@ const { AuditAction } = require('../../src/constants/audit');
 const { Role } = require('../../src/constants/roles');
 
 jest.mock('../../src/repositories/membershipPlan.repository');
-jest.mock('../../src/repositories/user.repository');
 
 describe('plan.service - createPlan', () => {
   const actor = {
@@ -175,14 +173,8 @@ describe('plan.service - createPlan', () => {
     ).rejects.toThrow('DB connection failed');
   });
 
-  it('loads actor email from DB when controller does not pass it', async () => {
+  it('writes the actor id, role and email from the authenticated caller into the audit row', async () => {
     membershipPlanRepository.findActiveByName.mockResolvedValue(null);
-    userRepository.findAuthWithEmailById.mockResolvedValue({
-      id: actor.id,
-      email: 'looked-up@test.invalid',
-      role: Role.ADMIN,
-      status: 'ACTIVE',
-    });
     membershipPlanRepository.createPlanWithAudit.mockResolvedValue({
       id: 'created-plan-uuid',
       name: 'Gold Class Membership',
@@ -205,16 +197,15 @@ describe('plan.service - createPlan', () => {
       updatedAt: new Date('2026-10-25T10:00:00.000Z'),
     });
 
-    await planService.createPlan({
-      actor: { id: actor.id, role: actor.role },
-      payload: validPayload,
-      meta,
-    });
+    await planService.createPlan({ actor, payload: validPayload, meta });
 
-    expect(userRepository.findAuthWithEmailById).toHaveBeenCalledWith(actor.id);
     expect(membershipPlanRepository.createPlanWithAudit).toHaveBeenCalledWith(
       expect.objectContaining({
-        auditData: expect.objectContaining({ email: 'looked-up@test.invalid' }),
+        auditData: expect.objectContaining({
+          actorId: actor.id,
+          actorRole: actor.role,
+          email: actor.email,
+        }),
       }),
     );
   });

@@ -161,6 +161,7 @@ describe('docs/openapi.yaml is the client contract and matches the code', () => 
     const lists = [
       '/api/v1/coaches',
       '/api/v1/plans',
+      '/api/v1/memberships',
       '/api/v1/classes',
       '/api/v1/sessions',
       '/api/v1/cafe/items',

@@ -38,8 +38,8 @@ const loadActiveUser = async (userId) => {
 const authenticate = async (req, _res, next) => {
   try {
     const { sub } = verifyTokenOrThrow(extractBearerToken(req));
-    const { id, role, status } = await loadActiveUser(sub);
-    req.user = { id, role, status };
+    const { id, role, status, email } = await loadActiveUser(sub);
+    req.user = { id, role, status, email };
     return next();
   } catch (err) {
     return next(err);

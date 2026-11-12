@@ -23,12 +23,7 @@ const {
   formatTimeHHMM,
   formatDateYYYYMMDD,
 } = require('../repositories/schedule.mapper');
-const {
-  getBookingStats,
-  getCancelOutcome,
-  isCoachQualified,
-  isCoachOnLeave,
-} = require('./schedule.adapters');
+const { getBookingStats, getBookingStatsMap, getCancelOutcome } = require('./schedule.adapters');
 const {
   localDateTimeToUtc,
   getTodayInTimezone,
@@ -129,49 +124,7 @@ const validateCoachesForInterval = async ({
     }
   }
 
-  // 3. Adapter checks: Qualification & Leave
-  for (const coachId of dedupedIds) {
-    const qualified = await isCoachQualified(coachId, classRecord?.id);
-    if (!qualified) {
-      throw createAppError(
-        AppErrors.COACH_CONFLICT,
-        Messages.SESSION_COACH_NOT_QUALIFIED(coachId),
-        AppErrors.COACH_CONFLICT.code,
-        {
-          conflicts: [
-            {
-              type: 'COACH_UNQUALIFIED',
-              coachId,
-              classId: classRecord?.id,
-              startAt: startAt instanceof Date ? startAt.toISOString() : startAt,
-              endAt: endAt instanceof Date ? endAt.toISOString() : endAt,
-            },
-          ],
-        },
-      );
-    }
-
-    const onLeave = await isCoachOnLeave(coachId, startAt, endAt);
-    if (onLeave) {
-      throw createAppError(
-        AppErrors.COACH_CONFLICT,
-        Messages.SESSION_COACH_ON_LEAVE(coachId),
-        AppErrors.COACH_CONFLICT.code,
-        {
-          conflicts: [
-            {
-              type: 'COACH_LEAVE',
-              coachId,
-              startAt: startAt instanceof Date ? startAt.toISOString() : startAt,
-              endAt: endAt instanceof Date ? endAt.toISOString() : endAt,
-            },
-          ],
-        },
-      );
-    }
-  }
-
-  // 4. Overlap check across all sessions
+  // 3. Overlap check across all sessions
   for (const coachId of dedupedIds) {
     const overlapping = await scheduleRepository.findCoachOverlappingSessions(
       coachId,
@@ -341,21 +294,12 @@ const generateSessionsForWindow = async ({
         continue;
       }
 
-      // In-memory coach availability check
+      // In-memory coach check: active coach and no overlap. Leave and weekly hours are NOT applied to generated
+      // sessions (S9): a clash would silently drop a session; GET /sessions/coverage reports them instead.
       let coachConflict = false;
       for (const coachId of slotCoachIds) {
         const coach = coachMap.get(coachId);
         if (!coach || coach.status !== 'ACTIVE' || coach.user?.status === 'DISABLED') {
-          coachConflict = true;
-          break;
-        }
-        const qualified = await isCoachQualified(coachId, classId);
-        if (!qualified) {
-          coachConflict = true;
-          break;
-        }
-        const onLeave = await isCoachOnLeave(coachId, candidateStartAt, candidateEndAt);
-        if (onLeave) {
           coachConflict = true;
           break;
         }
@@ -438,8 +382,12 @@ const reconcileSlotChange = async ({ slotId, client = prisma }) => {
     client,
   );
 
+  const statsBySession = await getBookingStatsMap(
+    futureSessions.map((session) => session.id),
+    client,
+  );
   for (const session of futureSessions) {
-    const stats = await getBookingStats(session.id);
+    const stats = statsBySession.get(session.id);
     if (stats.bookedCount > 0) {
       // Booked sessions must never be touched by reconciliation
       continue;
@@ -711,8 +659,12 @@ const deleteSlot = async ({ slotId, classId, user: _user }) => {
     );
 
     const sessionsToDelete = [];
+    const statsBySession = await getBookingStatsMap(
+      futureSessions.map((session) => session.id),
+      tx,
+    );
     for (const session of futureSessions) {
-      const stats = await getBookingStats(session.id);
+      const stats = statsBySession.get(session.id);
       if (stats.bookedCount > 0) {
         continue;
       }
@@ -801,11 +753,9 @@ const listSessions = async ({ user, query }) => {
     return true; // OWNER, ADMIN
   });
 
-  const sessionResponses = await Promise.all(
-    visibleSessions.map(async (s) => {
-      const stats = await getBookingStats(s.id);
-      return toSessionResponse(s, stats);
-    }),
+  const statsBySession = await getBookingStatsMap(visibleSessions.map((s) => s.id));
+  const sessionResponses = visibleSessions.map((s) =>
+    toSessionResponse(s, statsBySession.get(s.id)),
   );
 
   return {
@@ -966,7 +916,7 @@ const createSession = async ({ payload, user: _user }) => {
       tx,
     );
 
-    const stats = await getBookingStats(session.id);
+    const stats = await getBookingStats(session.id, tx);
     return toSessionResponse(session, stats);
   }, TX_OPTIONS);
 };
@@ -986,7 +936,7 @@ const patchSession = async ({ sessionId, payload, user, meta = {} }) => {
       throw createAppError(AppErrors.SESSION_PAST_IMMUTABLE);
     }
 
-    const stats = await getBookingStats(sessionId);
+    const stats = await getBookingStats(sessionId, tx);
     const isCoach = user.role === Role.COACH;
 
     // Coach role check: capacity only on own session
@@ -1228,7 +1178,7 @@ const cancelSession = async ({ sessionId, payload, user }) => {
       throw createAppError(AppErrors.CANCEL_REASON_REQUIRED);
     }
 
-    const stats = await getBookingStats(sessionId);
+    const stats = await getBookingStats(sessionId, tx);
 
     // Role check
     if (user.role === Role.COACH) {
@@ -1364,7 +1314,7 @@ const restoreSession = async ({ sessionId, user: _user }) => {
       tx,
     );
 
-    const stats = await getBookingStats(sessionId);
+    const stats = await getBookingStats(sessionId, tx);
     return toSessionResponse(restored, stats);
   }, TX_OPTIONS);
 };

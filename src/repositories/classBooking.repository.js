@@ -27,4 +27,16 @@ const cancelBookings = async (bookingIds, cancelledAt, client = prisma) => {
   return count;
 };
 
-module.exports = { findBookedBySession, cancelBookings };
+// Number of BOOKED bookings per session for many sessions in ONE grouped query (no N+1).
+// Returns a Map sessionId -> count; a session without bookings is simply absent.
+const countBookedBySessions = async (sessionIds, client = prisma) => {
+  if (sessionIds.length === 0) return new Map();
+  const rows = await client.classBooking.groupBy({
+    by: ['sessionId'],
+    where: { sessionId: { in: sessionIds }, state: ClassBookingState.BOOKED },
+    _count: { _all: true },
+  });
+  return new Map(rows.map((row) => [row.sessionId, row._count._all]));
+};
+
+module.exports = { findBookedBySession, cancelBookings, countBookedBySessions };

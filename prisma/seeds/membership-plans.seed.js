@@ -70,22 +70,27 @@ const recurringBillingFromDuration = (durationStr) => {
   return null;
 };
 
-/**
- * Trial → TRIAL; time-based → SUBSCRIPTION; credit-based with a standard
- * recurring duration (1/3/6/12 months) and not buy-once → SUBSCRIPTION;
- * otherwise CREDIT_PACK.
- */
+// Months of one billing period for the recurring cycles; every other cycle has no period.
+const PERIOD_MONTHS_BY_CYCLE = Object.freeze({
+  [PlanBillingCycle.MONTH]: 1,
+  [PlanBillingCycle.QUARTER]: 3,
+  [PlanBillingCycle.HALF_YEAR]: 6,
+  [PlanBillingCycle.YEAR]: 12,
+});
+
 const asLower = (val) =>
   String(val || '')
     .toLowerCase()
     .trim();
 
-const deriveKind = ({ trialVal, planType, durationStr, buyOnceVal }) => {
+/**
+ * Trial → TRIAL. A plan that renews (SUBSCRIPTION) needs a standard recurring duration (1, 3, 6 or 12
+ * months) and must not be buy-once, whatever its plan type. Everything else (a 1 or 2 week plan, no
+ * expiry, buy-once) does not renew, so it is a CREDIT_PACK with a one-off billing cycle.
+ */
+const deriveKind = ({ trialVal, durationStr, buyOnceVal }) => {
   if (asLower(trialVal) === 'yes') {
     return PlanKind.TRIAL;
-  }
-  if (asLower(planType).startsWith('time-based')) {
-    return PlanKind.SUBSCRIPTION;
   }
   const buyOnce = asLower(buyOnceVal) === 'yes';
   if (!buyOnce && recurringBillingFromDuration(durationStr)) {
@@ -93,6 +98,14 @@ const deriveKind = ({ trialVal, planType, durationStr, buyOnceVal }) => {
   }
   return PlanKind.CREDIT_PACK;
 };
+
+// Only a subscription with a recurring cycle renews.
+const deriveRecurring = (kind, billingCycle) =>
+  kind === PlanKind.SUBSCRIPTION && billingCycle in PERIOD_MONTHS_BY_CYCLE;
+
+// 1, 3, 6 or 12 for a recurring plan, null for everything else.
+const derivePeriodMonths = (kind, billingCycle) =>
+  deriveRecurring(kind, billingCycle) ? PERIOD_MONTHS_BY_CYCLE[billingCycle] : null;
 
 const deriveBillingCycle = (kind, durationStr) => {
   if (kind !== PlanKind.SUBSCRIPTION) {
@@ -233,7 +246,7 @@ const runSeed = async (filePath, options = {}) => {
     const priceStr = getRowVal(row, 'Price (AED)');
 
     // 1. Kind (credit-based recurring memberships are SUBSCRIPTION, not CREDIT_PACK)
-    const kind = deriveKind({ trialVal, planType, durationStr, buyOnceVal });
+    const kind = deriveKind({ trialVal, durationStr, buyOnceVal });
 
     // 2. oneTimePurchasePerClient
     const oneTimePurchasePerClient =
@@ -290,6 +303,21 @@ const runSeed = async (filePath, options = {}) => {
       message: `billingCycle=${billingCycle} (from kind=${kind}, duration="${durationStr}")`,
     });
 
+    // 4b. recurring and periodMonths follow from kind and billingCycle, never from guesses
+    const recurring = deriveRecurring(kind, billingCycle);
+    const periodMonths = derivePeriodMonths(kind, billingCycle);
+
+    // A time-based plan used to be a SUBSCRIPTION whatever its duration. When its duration is not a
+    // standard recurring cycle (or it is buy-once) it is now a CREDIT_PACK: report it, never hide it.
+    if (asLower(planType).startsWith('time-based') && kind === PlanKind.CREDIT_PACK) {
+      warnings.push({
+        row: r,
+        name: planName,
+        type: 'NON_RECURRING_DURATION',
+        message: `Time-based plan with duration "${durationStr}" (buy-once: ${buyOnceVal || 'no'}) does not renew; assigned kind=${kind}, recurring=false, periodMonths=null`,
+      });
+    }
+
     // 5. creditRefill
     const creditRefill = deriveCreditRefill(kind, billingCycle, creditType, creditsIncluded);
     warnings.push({
@@ -339,6 +367,8 @@ const runSeed = async (filePath, options = {}) => {
       visibility,
       status,
       description,
+      recurring,
+      periodMonths,
       externalRef: trimmedPlanCode,
     };
 
@@ -457,6 +487,15 @@ if (require.main === module) {
         process.stdout.write(`    - Row ${w.row}: "${w.name}" (assigned kind=${w.kind})\n`),
       );
 
+      const nonRecurring = result.warnings.filter((w) => w.type === 'NON_RECURRING_DURATION');
+      process.stdout.write(`
+  Time-based plans that do not renew (${nonRecurring.length}):
+`);
+      nonRecurring.forEach((w) =>
+        process.stdout.write(`    - Row ${w.row} [${w.name}]: ${w.message}
+`),
+      );
+
       const derivedBilling = result.warnings.filter((w) => w.type === 'DERIVED_BILLING_CYCLE');
       process.stdout.write(`\n  Derived Billing Cycle Decisions (${derivedBilling.length}):\n`);
       derivedBilling.forEach((w) =>
@@ -486,4 +525,6 @@ module.exports = {
   deriveKind,
   deriveBillingCycle,
   deriveCreditRefill,
+  deriveRecurring,
+  derivePeriodMonths,
 };

@@ -35,7 +35,12 @@ const expectAppError = (error, { statusCode, code }) => {
 
 describe('authenticate middleware', () => {
   beforeEach(() => {
-    findAuthById.mockResolvedValue({ id: USER_ID, role: Role.ADMIN, status: AccountStatus.ACTIVE });
+    findAuthById.mockResolvedValue({
+      id: USER_ID,
+      email: 'admin@test.invalid',
+      role: Role.ADMIN,
+      status: AccountStatus.ACTIVE,
+    });
   });
 
   describe('Authorization header', () => {
@@ -152,7 +157,12 @@ describe('authenticate middleware', () => {
 
       expect(error).toBeUndefined();
       expect(next).toHaveBeenCalledTimes(1);
-      expect(req.user).toEqual({ id: USER_ID, role: Role.ADMIN, status: AccountStatus.ACTIVE });
+      expect(req.user).toEqual({
+        id: USER_ID,
+        email: 'admin@test.invalid',
+        role: Role.ADMIN,
+        status: AccountStatus.ACTIVE,
+      });
     });
 
     it('uses the DB role when it differs from the token role', async () => {

@@ -4,8 +4,8 @@ const prisma = require('../../src/config/prisma');
 const { findAuthById } = require('../../src/repositories/user.repository');
 
 describe('user.repository - findAuthById', () => {
-  it('looks the user up by id and selects only id, role and status', async () => {
-    const row = { id: 'user-1', role: 'ADMIN', status: 'ACTIVE' };
+  it('looks the user up by id and selects only id, email, role and status', async () => {
+    const row = { id: 'user-1', email: 'a@test.invalid', role: 'ADMIN', status: 'ACTIVE' };
     prisma.user.findUnique.mockResolvedValue(row);
 
     const result = await findAuthById('user-1');
@@ -13,7 +13,7 @@ describe('user.repository - findAuthById', () => {
     expect(result).toBe(row);
     expect(prisma.user.findUnique).toHaveBeenCalledWith({
       where: { id: 'user-1' },
-      select: { id: true, role: true, status: true },
+      select: { id: true, email: true, role: true, status: true },
     });
   });
 

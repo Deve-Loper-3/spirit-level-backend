@@ -87,7 +87,6 @@ describe('GET /api/v1/plans/:id', () => {
       version: 1,
       section: 'class_membership',
       creditSummary: '10 class credits a month',
-      creditNote: '10 class credits a month',
       activeClientCount: 0,
       membershipId: null,
       membership: null,

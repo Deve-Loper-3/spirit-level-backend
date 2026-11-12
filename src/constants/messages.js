@@ -133,6 +133,7 @@ const Messages = Object.freeze({
   MEMBERSHIP_CREATED_SUCCESS: 'Membership created successfully',
   MEMBERSHIP_EXISTS: 'A membership with this name already exists',
   MEMBERSHIP_NOT_FOUND: 'Membership not found',
+  MEMBERSHIP_ID_INVALID: 'Membership ID must be a valid UUID',
   MEMBERSHIP_NAME_REQUIRED: 'Name is required',
   MEMBERSHIP_NAME_MAX_LENGTH: 'Name must not exceed 80 characters',
   MEMBERSHIP_DESCRIPTION_MAX_LENGTH: 'Description must not exceed 500 characters',
@@ -454,6 +455,7 @@ const Messages = Object.freeze({
   SLOT_DAY_DUPLICATE: (dayOfWeek) => `Duplicate dayOfWeek '${dayOfWeek}' in request body`,
   PLAN_PRICE_MAX_EXCEEDED: (max) => `Price must not exceed ${max}`,
   PLAN_PERIOD_MONTHS_INVALID: 'periodMonths must be 1, 3, 6, or 12',
+  PLAN_JOINING_FEE_INVALID: 'joiningFee must be a number of 0 or more',
   PLAN_MEMBERSHIP_ID_INVALID: 'membershipId must be a valid UUID',
   PLAN_CREDITS_TIME_NONZERO: 'creditsIncluded must be 0 when creditType is TIME',
   PLAN_REFILL_TIME_NOT_NULL: 'creditRefill must be null when creditType is TIME',
@@ -477,8 +479,6 @@ const Messages = Object.freeze({
   SESSION_OVERRIDE_REASON_REQUIRED: (field) =>
     `Override reason is required when modifying ${field}`,
   SESSION_OVERRIDE_REASON_FIELD: 'Reason is required',
-  SESSION_COACH_NOT_QUALIFIED: (coachId) => `Coach ${coachId} is not qualified for this class`,
-  SESSION_COACH_ON_LEAVE: (coachId) => `Coach ${coachId} is on approved leave during this time`,
   SESSION_COACH_CAPACITY_ONLY:
     'Coaches are only permitted to update capacity on their own sessions',
 

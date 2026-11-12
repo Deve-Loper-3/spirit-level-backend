@@ -1,6 +1,7 @@
 const z = require('zod');
 const { Messages } = require('../constants/messages');
 const { sendValidationFailed } = require('../utils/validationError.util');
+const { paginationQueryFields } = require('./pagination.validation');
 
 const createMembershipSchema = z.object({
   name: z.preprocess(
@@ -27,7 +28,20 @@ const validateCreateMembership = (req, res, next) => {
   return next();
 };
 
+// Unknown query params are dropped (not rejected), like on GET /plans, so web and mobile clients
+// can add params without breaking; a known param with a bad value is a 400.
+const listMembershipsQuerySchema = z.object({ ...paginationQueryFields });
+
+const validateListMembershipsQuery = (req, res, next) => {
+  const result = listMembershipsQuerySchema.safeParse(req.query);
+  if (!result.success) return sendValidationFailed(res, result.error);
+  req.validatedQuery = result.data;
+  return next();
+};
+
 module.exports = {
   createMembershipSchema,
+  listMembershipsQuerySchema,
   validateCreateMembership,
+  validateListMembershipsQuery,
 };

@@ -4,9 +4,8 @@ const scheduleRepository = require('../../src/repositories/schedule.repository')
 const classRepository = require('../../src/repositories/class.repository');
 const {
   getBookingStats,
+  getBookingStatsMap,
   getCancelOutcome,
-  isCoachQualified,
-  isCoachOnLeave,
 } = require('../../src/services/schedule.adapters');
 const {
   patchSession,
@@ -31,7 +30,7 @@ jest.mock('../../src/repositories/schedule.repository');
 jest.mock('../../src/repositories/class.repository');
 jest.mock('../../src/services/schedule.adapters');
 
-describe('Schedule Service - Adapter Seams & Stubs Unit Tests', () => {
+describe('Schedule Service - Adapter Seams Unit Tests', () => {
   const adminUser = { id: 'admin-user-1', role: Role.ADMIN };
   const coachUser = { id: 'coach-user-1', role: Role.COACH, coachId: 'coach-1' };
   const classId = 'class-123';
@@ -141,7 +140,9 @@ describe('Schedule Service - Adapter Seams & Stubs Unit Tests', () => {
       };
 
       scheduleRepository.findGeneratedFutureSessionsForSlot.mockResolvedValue([bookedSession]);
-      getBookingStats.mockResolvedValue({ bookedCount: 4, waitlistCount: 1 });
+      getBookingStatsMap.mockResolvedValue(
+        new Map([['session-booked', { bookedCount: 4, waitlistCount: 1 }]]),
+      );
       scheduleRepository.findSlotsByClassId.mockResolvedValue([]);
 
       await reconcileSlotChange({ slotId, client: mockTx });
@@ -167,10 +168,15 @@ describe('Schedule Service - Adapter Seams & Stubs Unit Tests', () => {
         overriddenSession,
       ]);
 
-      getBookingStats.mockImplementation(async (id) => {
-        if (id === 'session-booked') return { bookedCount: 3, waitlistCount: 0 };
-        return { bookedCount: 0, waitlistCount: 0 };
-      });
+      getBookingStatsMap.mockImplementation(
+        async (ids) =>
+          new Map(
+            ids.map((id) => [
+              id,
+              { bookedCount: id === 'session-booked' ? 3 : 0, waitlistCount: 0 },
+            ]),
+          ),
+      );
 
       const result = await deleteSlot({ slotId, classId, user: adminUser });
 
@@ -184,157 +190,7 @@ describe('Schedule Service - Adapter Seams & Stubs Unit Tests', () => {
     });
   });
 
-  describe('3. isCoachOnLeave true -> 409 COACH_CONFLICT', () => {
-    it('rejects slot POST with 409 COACH_CONFLICT when coach is on approved leave', async () => {
-      isCoachQualified.mockResolvedValue(true);
-      isCoachOnLeave.mockResolvedValue(true);
-
-      await expect(
-        createSlots({
-          classId,
-          payload: {
-            startDate: futureStartDate,
-            days: [
-              {
-                dayOfWeek: 1,
-                times: [
-                  {
-                    startTime: '10:00',
-                    endTime: '11:00',
-                    coachIds: ['coach-1'],
-                    capacity: 20,
-                  },
-                ],
-              },
-            ],
-          },
-          user: adminUser,
-        }),
-      ).rejects.toMatchObject({
-        statusCode: 409,
-        code: AppErrors.COACH_CONFLICT.code,
-        details: {
-          conflicts: [
-            expect.objectContaining({
-              type: 'COACH_LEAVE',
-              coachId: 'coach-1',
-            }),
-          ],
-        },
-      });
-
-      expect(scheduleRepository.createSlotWithCoaches).not.toHaveBeenCalled();
-    });
-
-    it('rejects session PATCH with 409 COACH_CONFLICT when updated coach is on leave', async () => {
-      scheduleRepository.findSessionById.mockResolvedValue(baseSessionRecord);
-      isCoachQualified.mockResolvedValue(true);
-      isCoachOnLeave.mockResolvedValue(true);
-      getBookingStats.mockResolvedValue({ bookedCount: 0, waitlistCount: 0 });
-
-      await expect(
-        patchSession({
-          sessionId,
-          payload: {
-            coachIds: ['coach-1'],
-            overrideReasons: { coachIds: 'Assigning covering coach' },
-          },
-          user: adminUser,
-        }),
-      ).rejects.toMatchObject({
-        statusCode: 409,
-        code: AppErrors.COACH_CONFLICT.code,
-        details: {
-          conflicts: [
-            expect.objectContaining({
-              type: 'COACH_LEAVE',
-              coachId: 'coach-1',
-            }),
-          ],
-        },
-      });
-
-      expect(scheduleRepository.updateSession).not.toHaveBeenCalled();
-    });
-  });
-
-  describe('4. isCoachQualified false -> 409 COACH_CONFLICT', () => {
-    it('rejects slot POST with 409 COACH_CONFLICT when coach is unqualified', async () => {
-      isCoachQualified.mockResolvedValue(false);
-      isCoachOnLeave.mockResolvedValue(false);
-
-      await expect(
-        createSlots({
-          classId,
-          payload: {
-            startDate: futureStartDate,
-            days: [
-              {
-                dayOfWeek: 1,
-                times: [
-                  {
-                    startTime: '10:00',
-                    endTime: '11:00',
-                    coachIds: ['coach-1'],
-                    capacity: 20,
-                  },
-                ],
-              },
-            ],
-          },
-          user: adminUser,
-        }),
-      ).rejects.toMatchObject({
-        statusCode: 409,
-        code: AppErrors.COACH_CONFLICT.code,
-        details: {
-          conflicts: [
-            expect.objectContaining({
-              type: 'COACH_UNQUALIFIED',
-              coachId: 'coach-1',
-              classId,
-            }),
-          ],
-        },
-      });
-
-      expect(scheduleRepository.createSlotWithCoaches).not.toHaveBeenCalled();
-    });
-
-    it('rejects session PATCH with 409 COACH_CONFLICT when assigned coach is unqualified', async () => {
-      scheduleRepository.findSessionById.mockResolvedValue(baseSessionRecord);
-      isCoachQualified.mockResolvedValue(false);
-      isCoachOnLeave.mockResolvedValue(false);
-      getBookingStats.mockResolvedValue({ bookedCount: 0, waitlistCount: 0 });
-
-      await expect(
-        patchSession({
-          sessionId,
-          payload: {
-            coachIds: ['coach-1'],
-            overrideReasons: { coachIds: 'Assigning new coach' },
-          },
-          user: adminUser,
-        }),
-      ).rejects.toMatchObject({
-        statusCode: 409,
-        code: AppErrors.COACH_CONFLICT.code,
-        details: {
-          conflicts: [
-            expect.objectContaining({
-              type: 'COACH_UNQUALIFIED',
-              coachId: 'coach-1',
-              classId,
-            }),
-          ],
-        },
-      });
-
-      expect(scheduleRepository.updateSession).not.toHaveBeenCalled();
-    });
-  });
-
-  describe('5. Coach cancel on a session with bookedCount > 0 is rejected', () => {
+  describe('3. Coach cancel on a session with bookedCount > 0 is rejected', () => {
     it('rejects coach cancel on session with active bookings with 403 FORBIDDEN', async () => {
       scheduleRepository.findSessionById.mockResolvedValue(baseSessionRecord);
       getBookingStats.mockResolvedValue({ bookedCount: 2, waitlistCount: 1 });

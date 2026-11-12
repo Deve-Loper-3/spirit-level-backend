@@ -1,0 +1,5 @@
+-- Rollback for 20261112100000_add_membership_created_password_changed_audit_actions
+-- The enum values MEMBERSHIP_CREATED and PASSWORD_CHANGED cannot be dropped with ALTER TYPE.
+-- To remove them: delete AuditLog rows that use them, create a new enum type without them,
+-- alter "AuditLog"."action" to it, drop the old type, then delete this migration's row from
+-- "_prisma_migrations".

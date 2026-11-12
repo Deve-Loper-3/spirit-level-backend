@@ -371,7 +371,6 @@ describe('POST /api/v1/plans', () => {
           description: hyroxPayload.description,
           section: 'online_coaching',
           creditSummary: 'Time-based access',
-          creditNote: 'Time-based access',
           activeClientCount: 0,
           membershipId: null,
           membership: null,

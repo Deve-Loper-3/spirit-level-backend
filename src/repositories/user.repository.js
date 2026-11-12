@@ -27,12 +27,14 @@ const findById = (id) =>
     },
   });
 
-// Minimal lookup for request authentication: current role and status straight from the DB.
+// Minimal lookup for request authentication: current role, status and email straight from the DB.
+// The email is carried on `req.user` so audit rows never need a second lookup.
 const findAuthById = (id) =>
   prisma.user.findUnique({
     where: { id },
     select: {
       id: true,
+      email: true,
       role: true,
       status: true,
     },

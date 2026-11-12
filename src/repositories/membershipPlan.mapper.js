@@ -42,6 +42,7 @@ const toEditableFields = (source) => ({
   membershipId: source.membershipId ?? null,
   term: source.term ?? null,
   recurring: Boolean(source.recurring),
+  joiningFee: Number(source.joiningFee ?? 0),
   periodMonths:
     source.periodMonths !== null && source.periodMonths !== undefined
       ? Number(source.periodMonths)
@@ -91,7 +92,6 @@ const toMembershipPlanResponse = (plan, { activeClientCount = 0 } = {}) => {
     version: plan.version,
     section: toSection(plan.creditType),
     creditSummary,
-    creditNote: creditSummary,
     activeClientCount,
     membershipId: plan.membershipId ?? null,
     membership,

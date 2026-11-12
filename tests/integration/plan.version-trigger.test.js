@@ -14,8 +14,9 @@ jest.setTimeout(60000);
 describe('membership_plans version trigger', () => {
   const PREFIX = 'test_slmp04_ver_';
 
-  // SL-MP-01: the fields that make a new commercial version.
-  const SL_MP_01_COMMERCIAL_FIELDS = [
+  // The fields that make a new commercial version: the 7 of SL-MP-01 plus term, recurring,
+  // periodMonths and joiningFee (migration 20261112110000).
+  const EXPECTED_COMMERCIAL_FIELDS = [
     'price',
     'billingCycle',
     'creditType',
@@ -23,6 +24,10 @@ describe('membership_plans version trigger', () => {
     'creditRefill',
     'validityValue',
     'validityUnit',
+    'term',
+    'recurring',
+    'periodMonths',
+    'joiningFee',
   ];
 
   const COMMERCIAL_CHANGES = {
@@ -33,6 +38,10 @@ describe('membership_plans version trigger', () => {
     creditRefill: 'ONCE',
     validityValue: 2,
     validityUnit: 'WEEK',
+    term: '6 months',
+    recurring: (plan) => !plan.recurring, // always the opposite of the fixture's value
+    periodMonths: 6,
+    joiningFee: 25,
   };
 
   const NON_COMMERCIAL_CHANGES = {
@@ -44,12 +53,17 @@ describe('membership_plans version trigger', () => {
     status: 'INACTIVE',
     description: 'a different description',
     externalRef: `${PREFIX}ref`,
-    term: '12 months',
-    recurring: true,
-    periodMonths: 12,
-    joiningFee: 25,
     membershipId: null,
   };
+
+  // A change may be a function of the fixture plan, so it can never equal the value already stored.
+  const resolveChanges = (changes, plan) =>
+    Object.fromEntries(
+      Object.entries(changes).map(([field, value]) => [
+        field,
+        typeof value === 'function' ? value(plan) : value,
+      ]),
+    );
 
   const update = (id, data) => prisma.membershipPlan.update({ where: { id }, data });
 
@@ -66,8 +80,8 @@ describe('membership_plans version trigger', () => {
     await prisma.$disconnect();
   });
 
-  it('the app list of commercial fields is exactly the SL-MP-01 list', () => {
-    expect([...COMMERCIAL_FIELDS].sort()).toEqual([...SL_MP_01_COMMERCIAL_FIELDS].sort());
+  it('the app list of commercial fields is exactly the expected list', () => {
+    expect([...COMMERCIAL_FIELDS].sort()).toEqual([...EXPECTED_COMMERCIAL_FIELDS].sort());
   });
 
   it('the trigger function compares exactly the commercial fields', async () => {
@@ -103,7 +117,7 @@ describe('membership_plans version trigger', () => {
     async (field, value) => {
       const plan = await createTestPlan(PREFIX, { creditRefill: 'MONTHLY' });
 
-      const updated = await update(plan.id, { [field]: value });
+      const updated = await update(plan.id, resolveChanges({ [field]: value }, plan));
 
       expect(updated.version).toBe(plan.version + 1);
     },
@@ -123,7 +137,7 @@ describe('membership_plans version trigger', () => {
   it('changing several commercial fields in one statement bumps by 1, not by 1 per field', async () => {
     const plan = await createTestPlan(PREFIX);
 
-    const updated = await update(plan.id, COMMERCIAL_CHANGES);
+    const updated = await update(plan.id, resolveChanges(COMMERCIAL_CHANGES, plan));
 
     expect(updated.version).toBe(plan.version + 1);
   });
@@ -137,11 +151,17 @@ describe('membership_plans version trigger', () => {
   it('writing every commercial field with its current value does not bump the version', async () => {
     const plan = await createTestPlan(PREFIX);
     const sameValues = Object.fromEntries(
-      SL_MP_01_COMMERCIAL_FIELDS.map((field) => [field, plan[field]]),
+      EXPECTED_COMMERCIAL_FIELDS.map((field) => [field, plan[field]]),
     );
 
     const updated = await update(plan.id, sameValues);
 
+    expect(updated.version).toBe(plan.version);
+  });
+
+  it('changing membershipId (a plain link) never bumps the version', async () => {
+    const plan = await createTestPlan(PREFIX);
+    const updated = await update(plan.id, { membershipId: NON_COMMERCIAL_CHANGES.membershipId });
     expect(updated.version).toBe(plan.version);
   });
 

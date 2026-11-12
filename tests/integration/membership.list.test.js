@@ -64,11 +64,20 @@ describe('GET /api/v1/memberships', () => {
     await prisma.$disconnect();
   });
 
-  const getMemberships = ({ token = bearerFor(adminUser), origin } = {}) => {
-    const req = request(app).get('/api/v1/memberships');
+  const getMemberships = ({ token = bearerFor(adminUser), origin, query = {} } = {}) => {
+    const req = request(app).get('/api/v1/memberships').query(query);
     if (token) req.set('Authorization', token);
     if (origin) req.set('Origin', origin);
     return req;
+  };
+
+  // The list is paged (and the shared test database may hold many memberships), so walk the pages.
+  const findInAllPages = async (id) => {
+    for (let page = 1; ; page += 1) {
+      const res = await getMemberships({ query: { page, limit: 100 } });
+      const found = res.body.data.find((m) => m.id === id);
+      if (found || page >= res.body.pagination.totalPages) return found;
+    }
   };
 
   describe('Success & Shape', () => {
@@ -78,7 +87,7 @@ describe('GET /api/v1/memberships', () => {
       expect(res.body.success).toBe(true);
       expect(Array.isArray(res.body.data)).toBe(true);
 
-      const found = res.body.data.find((m) => m.id === testMembership.id);
+      const found = await findInAllPages(testMembership.id);
       expect(found).toBeDefined();
       expect(found).toMatchObject({
         id: testMembership.id,
@@ -115,6 +124,64 @@ describe('GET /api/v1/memberships', () => {
       const coachRes = await getMemberships({ token: bearerFor(coachUser) });
       expect(coachRes.status).toBe(200);
       expect(coachRes.body.success).toBe(true);
+    });
+  });
+
+  describe('Pagination', () => {
+    it('answers with the shared pagination shape and the default page and limit', async () => {
+      const res = await getMemberships();
+
+      expect(res.status).toBe(200);
+      expect(res.body.pagination).toEqual({
+        page: 1,
+        limit: 20,
+        total: expect.any(Number),
+        totalPages: Math.ceil(res.body.pagination.total / 20),
+      });
+      expect(res.body.data.length).toBeLessThanOrEqual(20);
+      expect(res.body).not.toHaveProperty('meta');
+    });
+
+    it('limit 1 returns one membership, and the next page returns a different one', async () => {
+      const first = await getMemberships({ query: { page: 1, limit: 1 } });
+      const second = await getMemberships({ query: { page: 2, limit: 1 } });
+
+      expect(first.body.data).toHaveLength(1);
+      expect(second.body.data).toHaveLength(1);
+      expect(first.body.data[0].id).not.toBe(second.body.data[0].id);
+      expect(first.body.pagination.total).toBeGreaterThanOrEqual(2);
+      expect(first.body.pagination.totalPages).toBe(first.body.pagination.total);
+    });
+
+    it('a page past the end is 200 with an empty list', async () => {
+      const res = await getMemberships({ query: { page: 99999, limit: 100 } });
+
+      expect(res.status).toBe(200);
+      expect(res.body.data).toEqual([]);
+    });
+
+    it.each([
+      ['page 0', { page: 0 }, 'page'],
+      ['page abc', { page: 'abc' }, 'page'],
+      ['limit 0', { limit: 0 }, 'limit'],
+      ['limit 101', { limit: 101 }, 'limit'],
+    ])('rejects %s with 400 VALIDATION_ERROR', async (_label, query, field) => {
+      const res = await getMemberships({ query });
+
+      expect(res.status).toBe(400);
+      expect(res.body.code).toBe('VALIDATION_ERROR');
+      expect(res.body.errors.map((e) => e.field)).toContain(field);
+    });
+
+    it('ignores unknown query parameters', async () => {
+      const res = await getMemberships({ query: { foo: 'bar' } });
+      expect(res.status).toBe(200);
+    });
+
+    it('planCount counts all plans of the membership, not only the loaded ones', async () => {
+      const found = await findInAllPages(testMembership.id);
+      expect(found.planCount).toBe(2);
+      expect(found.plans).toHaveLength(found.planCount);
     });
   });
 

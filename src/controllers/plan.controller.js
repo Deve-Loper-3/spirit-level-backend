@@ -7,15 +7,12 @@ const {
 } = require('../services/plan.service');
 const { sendSuccess } = require('../utils/apiResponse.util');
 const { getRequestMeta } = require('../utils/requestMeta.util');
+const { toActor } = require('../utils/actor.util');
 const { Messages } = require('../constants/messages');
 
 const createPlan = async (req, res, next) => {
   try {
-    // Email is loaded in plan.service (authenticate does not attach it on req.user).
-    const actor = {
-      id: req.user.id,
-      role: req.user.role,
-    };
+    const actor = toActor(req);
     const meta = getRequestMeta(req);
     const plan = await createNewPlan({
       actor,
@@ -42,9 +39,6 @@ const listPlans = async (req, res, next) => {
     return next(err);
   }
 };
-
-// Email is resolved in plan.service (authenticate does not attach it on req.user).
-const toActor = (req) => ({ id: req.user.id, role: req.user.role });
 
 const getPlan = async (req, res, next) => {
   try {

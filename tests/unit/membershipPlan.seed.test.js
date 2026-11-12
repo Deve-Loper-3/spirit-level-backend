@@ -8,6 +8,8 @@ const {
   deriveKind,
   deriveBillingCycle,
   deriveCreditRefill,
+  deriveRecurring,
+  derivePeriodMonths,
   recurringBillingFromDuration,
 } = require('../../prisma/seeds/membership-plans.seed');
 
@@ -69,6 +71,36 @@ describe('membership-plans.seed derivations', () => {
       ).toBe(PlanKind.SUBSCRIPTION);
     });
 
+    it.each([
+      ['1 week'],
+      ['2 weeks'],
+      ['10 days'],
+      ['2 months'],
+      ['9 months'],
+      ['No expiry set (credits only)'],
+      [''],
+    ])('does not make a time-based plan with duration "%s" a SUBSCRIPTION', (durationStr) => {
+      expect(
+        deriveKind({
+          trialVal: 'No',
+          planType: 'Time-based with class credits',
+          durationStr,
+          buyOnceVal: 'No',
+        }),
+      ).toBe(PlanKind.CREDIT_PACK);
+    });
+
+    it('does not renew a buy-once time-based plan even with a standard duration', () => {
+      expect(
+        deriveKind({
+          trialVal: 'No',
+          planType: 'Time-based (unlimited / access)',
+          durationStr: '1 month',
+          buyOnceVal: 'Yes',
+        }),
+      ).toBe(PlanKind.CREDIT_PACK);
+    });
+
     it('returns CREDIT_PACK for buy-once or non-recurring credit plans', () => {
       expect(
         deriveKind({
@@ -86,6 +118,31 @@ describe('membership-plans.seed derivations', () => {
           buyOnceVal: 'No',
         }),
       ).toBe(PlanKind.CREDIT_PACK);
+    });
+  });
+
+  describe('deriveRecurring + derivePeriodMonths', () => {
+    it.each([
+      [PlanBillingCycle.MONTH, 1],
+      [PlanBillingCycle.QUARTER, 3],
+      [PlanBillingCycle.HALF_YEAR, 6],
+      [PlanBillingCycle.YEAR, 12],
+    ])('a SUBSCRIPTION billed %s renews and has period %i months', (cycle, months) => {
+      expect(deriveRecurring(PlanKind.SUBSCRIPTION, cycle)).toBe(true);
+      expect(derivePeriodMonths(PlanKind.SUBSCRIPTION, cycle)).toBe(months);
+    });
+
+    it.each([PlanKind.CREDIT_PACK, PlanKind.TRIAL, PlanKind.SINGLE_VISIT])(
+      'a %s never renews and has no period',
+      (kind) => {
+        expect(deriveRecurring(kind, PlanBillingCycle.ONE_OFF)).toBe(false);
+        expect(derivePeriodMonths(kind, PlanBillingCycle.ONE_OFF)).toBeNull();
+      },
+    );
+
+    it('a one-off cycle never renews, even for a SUBSCRIPTION', () => {
+      expect(deriveRecurring(PlanKind.SUBSCRIPTION, PlanBillingCycle.ONE_OFF)).toBe(false);
+      expect(derivePeriodMonths(PlanKind.SUBSCRIPTION, PlanBillingCycle.ONE_OFF)).toBeNull();
     });
   });
 

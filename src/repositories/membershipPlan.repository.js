@@ -9,6 +9,7 @@ const {
   PLAN_LIST_DEFAULT_STATUSES,
 } = require('../constants/membershipPlan');
 const { escapeLikePattern } = require('../utils/like.util');
+const { AuditAction } = require('../constants/audit');
 const { createAuditLog } = require('./audit-log.repository');
 
 const upsertByExternalRef = async ({ externalRef, data, client = prisma }) => {
@@ -224,6 +225,14 @@ const createPlanWithAudit = async ({ planData, auditData, newMembershipData }, c
         },
       });
       membershipId = createdMembership.id;
+      // A membership created through plan creation is still a membership creation: audit it too.
+      if (auditData) {
+        await createAuditLog(tx, {
+          ...auditData,
+          action: AuditAction.MEMBERSHIP_CREATED,
+          reason: `${createdMembership.name} (${createdMembership.id})`,
+        });
+      }
     }
 
     const plan = await tx.membershipPlan.create({

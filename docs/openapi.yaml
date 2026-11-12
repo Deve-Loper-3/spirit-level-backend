@@ -23,7 +23,7 @@ info:
     `limit` 1 to 100, default 20), and answers
     `{ success: true, data: [...], pagination: { page, limit, total, totalPages } }`.
     `GET /plans` also returns a top-level `counts`. A page past the end is `200` with an empty `data`.
-    `GET /memberships` and `GET /classes/{id}/slots` return their whole (small) set without paging.
+    `GET /classes/{id}/slots` returns its whole (small) set without paging.
 
     **Error envelope:** `{ success: false, message, code, errors?, details? }`. `code` is always
     present (UPPER_SNAKE_CASE) and is the value to branch on; `message` is for people. `errors[]`
@@ -2336,7 +2336,7 @@ paths:
 
         **Versioning:** `version` goes up by 1 when any commercial field changes (`price`,
         `billingCycle`, `creditType`, `creditsIncluded`, `creditRefill`, `validityValue`,
-        `validityUnit`), however many change in one request. Changing only other fields keeps the
+        `validityUnit`, `term`, `recurring`, `periodMonths`, `joiningFee`), however many change in one request. Changing only other fields keeps the
         version. A purchase keeps the version it was bought on, so a price change applies from
         the next billing cycle. Sending a field with its current value changes nothing: no
         version bump, no audit entry, and the current plan is returned.
@@ -4496,25 +4496,36 @@ paths:
       description: |
         OWNER, ADMIN or COACH. A MEMBER receives 403.
 
-        Returns every membership (not paginated; the set is small) with its plans in the full plan
-        view and a `planCount`.
+        One page of memberships, oldest first, each with its plans in the full plan view and a
+        `planCount` (counted in the database). Every item has the same shape as
+        `GET /memberships/{id}`. Unknown query parameters are ignored; a `page` or `limit` that is
+        not a valid number is 400 `VALIDATION_ERROR`.
       operationId: listMemberships
       security:
         - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/Limit'
       responses:
         '200':
-          description: All memberships
+          description: One page of memberships
           content:
             application/json:
               schema:
                 allOf:
                   - $ref: '#/components/schemas/SuccessEnvelope'
                   - type: object
+                    required:
+                      - pagination
                     properties:
                       data:
                         type: array
                         items:
                           $ref: '#/components/schemas/Membership'
+                      pagination:
+                        $ref: '#/components/schemas/Pagination'
+        '400':
+          $ref: '#/components/responses/ValidationError'
         '401':
           $ref: '#/components/responses/Unauthorized'
         '403':
@@ -4526,8 +4537,9 @@ paths:
         - Memberships
       summary: Create a membership
       description: |
-        OWNER or ADMIN. The name is trimmed and must be unique ignoring letter case.
-        There is no `GET /memberships/{id}`, so the response has no `Location` header.
+        OWNER or ADMIN. The name is trimmed and must be unique ignoring letter case. The new
+        membership is written together with its `MEMBERSHIP_CREATED` audit entry in one
+        transaction. The `Location` header points at `GET /memberships/{id}`.
       operationId: createMembership
       security:
         - bearerAuth: []
@@ -4540,6 +4552,12 @@ paths:
       responses:
         '201':
           description: Membership created (with no plans yet)
+          headers:
+            Location:
+              description: URL of the new membership
+              schema:
+                type: string
+                example: /api/v1/memberships/3f1c2b7e-4d5a-4b8e-9c1d-2a6f7e8b9c0d
           content:
             application/json:
               schema:
@@ -4582,6 +4600,67 @@ paths:
               schema:
                 type: string
                 example: GET, POST
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+              example:
+                success: false
+                message: Method not allowed for this route
+                code: METHOD_NOT_ALLOWED
+  /api/v1/memberships/{id}:
+    parameters:
+      - $ref: '#/components/parameters/MembershipId'
+    get:
+      tags:
+        - Memberships
+      summary: Get one membership with its plans
+      description: |
+        OWNER, ADMIN or COACH. A MEMBER receives 403.
+
+        Same shape as an item of `GET /memberships`: the membership, its `planCount` and its plans
+        in the full plan view. A value that is not a UUID is 400 `VALIDATION_ERROR`; an unknown
+        UUID is 404 `MEMBERSHIP_NOT_FOUND`.
+      operationId: getMembership
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: The membership
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/SuccessEnvelope'
+                  - type: object
+                    properties:
+                      data:
+                        $ref: '#/components/schemas/Membership'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/MembershipNotFound'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+    delete:
+      tags:
+        - Memberships
+      summary: Not supported
+      description: 'Every method other than GET answers 405 with `Allow: GET`.'
+      operationId: methodNotAllowed_api_v1_memberships_id
+      responses:
+        '405':
+          description: 'Route exists but not for this method (`Allow: GET`)'
+          headers:
+            Allow:
+              description: Methods the route supports
+              schema:
+                type: string
+                example: GET
           content:
             application/json:
               schema:
@@ -4907,8 +4986,8 @@ paths:
         is 409 `SESSION_CONFLICT`.
 
         **Coach schedule (409 `COACH_CONFLICT`):** the coaches the session ends up with must be free for its
-        interval. Besides the older entries (`type: COACH_CONFLICT` for another session of the coach,
-        `COACH_LEAVE`, `COACH_UNQUALIFIED`), `details.conflicts[]` can carry the entries described by
+        interval. Besides the older entry (`type: COACH_CONFLICT` for another session of the coach),
+        `details.conflicts[]` can carry the entries described by
         `CoachConflict` (`AVAILABILITY_NOT_SET`, `OUTSIDE_AVAILABILITY`, `COACH_UNAVAILABLE`,
         `SESSION_OVERLAP`, `APPOINTMENT_OVERLAP`, `APPOINTMENT_BUFFER`), one per coach that cannot take it.
       operationId: createSession
@@ -5130,8 +5209,8 @@ paths:
         the new time.
 
         **Coach schedule (409 `COACH_CONFLICT`):** the coaches the session ends up with must be free for its
-        interval. Besides the older entries (`type: COACH_CONFLICT` for another session of the coach,
-        `COACH_LEAVE`, `COACH_UNQUALIFIED`), `details.conflicts[]` can carry the entries described by
+        interval. Besides the older entry (`type: COACH_CONFLICT` for another session of the coach),
+        `details.conflicts[]` can carry the entries described by
         `CoachConflict` (`AVAILABILITY_NOT_SET`, `OUTSIDE_AVAILABILITY`, `COACH_UNAVAILABLE`,
         `SESSION_OVERLAP`, `APPOINTMENT_OVERLAP`, `APPOINTMENT_BUFFER`), one per coach that cannot take it.
       operationId: patchSession
@@ -6319,6 +6398,15 @@ components:
       description: Access token from login or refresh
 
   parameters:
+    MembershipId:
+      name: id
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+      description: Membership id (UUID). A value that is not a UUID is 400 `VALIDATION_ERROR`; an unknown UUID is 404 `MEMBERSHIP_NOT_FOUND`.
+
     PlanId:
       name: id
       in: path
@@ -6592,6 +6680,17 @@ components:
             success: false
             message: This appointment is already cancelled
             code: APPOINTMENT_ALREADY_CANCELLED
+
+    MembershipNotFound:
+      description: No membership with this id. (An id that is not a UUID is 400 `VALIDATION_ERROR`, not 404.)
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorEnvelope'
+          example:
+            success: false
+            message: Membership not found
+            code: MEMBERSHIP_NOT_FOUND
 
     PlanNotFound:
       description: No plan with this id. (An id that is not a UUID is 400 `VALIDATION_ERROR`, not 404.)
@@ -7842,6 +7941,27 @@ components:
           type: string
           nullable: true
           maxLength: 500
+        membershipId:
+          type: string
+          format: uuid
+          nullable: true
+          description: An existing membership id, or `null` to make the plan standalone
+        term:
+          type: string
+          nullable: true
+          maxLength: 100
+        recurring:
+          type: boolean
+        periodMonths:
+          type: integer
+          nullable: true
+          enum: [1, 3, 6, 12]
+        joiningFee:
+          type: number
+          minimum: 0
+          description: |
+            One-off joining fee. A number of 0 or more; `null` and blank are 400. A change counts as
+            a commercial change (the plan `version` goes up by 1).
       example:
         price: 480
         description: New price from the next billing cycle
@@ -7892,7 +8012,6 @@ components:
         - section
         - creditSummary
         - activeClientCount
-        - creditNote
         - membershipId
         - membership
         - term
@@ -7961,10 +8080,6 @@ components:
         activeClientCount:
           type: integer
           example: 0
-        creditNote:
-          type: string
-          description: Same text as `creditSummary`
-          example: 15 class credits a month
         membershipId:
           type: string
           format: uuid
@@ -9292,10 +9407,10 @@ components:
           type: integer
         bookedCount:
           type: integer
-          description: Always 0 until bookings exist
+          description: Number of BOOKED bookings of the session (cancelled bookings do not count)
         waitlistCount:
           type: integer
-          description: Always 0 until bookings exist
+          description: Always 0. There is no waitlist yet, so nothing can be waiting
         state:
           type: string
           enum:

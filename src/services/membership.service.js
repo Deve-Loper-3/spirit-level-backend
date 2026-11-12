@@ -1,8 +1,16 @@
 const { isUniqueConstraintError } = require('../utils/prismaError.util');
 const { createAppError } = require('../errors/AppError');
 const { AppErrors } = require('../constants/errors');
-const { findByName, create, listWithPlans } = require('../repositories/membership.repository');
+const { AuditAction } = require('../constants/audit');
+const {
+  findByName,
+  createWithAudit,
+  listPage,
+  findByIdWithPlans,
+} = require('../repositories/membership.repository');
 const { toMembershipPlanResponse } = require('../repositories/membershipPlan.mapper');
+const { toAuditActor } = require('../utils/actor.util');
+const { toSkipTake, buildPagination } = require('../utils/pagination.util');
 
 const isMembershipNameUniqueError = (err) => {
   if (!isUniqueConstraintError(err)) return false;
@@ -19,7 +27,7 @@ const isMembershipNameUniqueError = (err) => {
   );
 };
 
-const createMembership = async ({ payload }) => {
+const createMembership = async ({ actor, payload, meta }) => {
   const trimmedName = (payload.name || '').trim();
 
   const existing = await findByName(trimmedName);
@@ -28,18 +36,16 @@ const createMembership = async ({ payload }) => {
   }
 
   try {
-    const created = await create({
-      name: trimmedName,
-      description: payload.description,
+    const created = await createWithAudit({
+      data: { name: trimmedName, description: payload.description },
+      auditData: {
+        action: AuditAction.MEMBERSHIP_CREATED,
+        ...toAuditActor(actor),
+        userId: null,
+        meta,
+      },
     });
-    return {
-      id: created.id,
-      name: created.name,
-      description: created.description ?? null,
-      createdAt: created.createdAt,
-      planCount: 0,
-      plans: [],
-    };
+    return toMembershipResponse({ ...created, plans: [] });
   } catch (err) {
     if (isMembershipNameUniqueError(err)) {
       throw createAppError(AppErrors.MEMBERSHIP_EXISTS);
@@ -48,32 +54,38 @@ const createMembership = async ({ payload }) => {
   }
 };
 
-const listMemberships = async () => {
-  const rows = await listWithPlans();
-  return rows.map((m) => {
-    const membershipInfo = {
-      id: m.id,
-      name: m.name,
-      description: m.description ?? null,
-    };
-    return {
-      id: m.id,
-      name: m.name,
-      description: m.description ?? null,
-      createdAt: m.createdAt,
-      planCount: (m.plans || []).length,
-      plans: (m.plans || []).map((p) =>
-        toMembershipPlanResponse({
-          ...p,
-          membership: membershipInfo,
-        }),
-      ),
-    };
-  });
+// One shape for a membership everywhere (create, list item, get by id): the membership, its plan
+// count and its plans in the full plan view.
+const toMembershipResponse = (row) => {
+  const membershipInfo = { id: row.id, name: row.name, description: row.description ?? null };
+  const plans = row.plans || [];
+  return {
+    ...membershipInfo,
+    createdAt: row.createdAt,
+    planCount: row._count?.plans ?? plans.length,
+    plans: plans.map((plan) => toMembershipPlanResponse({ ...plan, membership: membershipInfo })),
+  };
+};
+
+const listMemberships = async ({ query }) => {
+  const { page, limit } = query;
+  const { rows, total } = await listPage(toSkipTake({ page, limit }));
+  return {
+    memberships: rows.map(toMembershipResponse),
+    pagination: buildPagination({ page, limit, total }),
+  };
+};
+
+const getMembership = async (id) => {
+  const row = await findByIdWithPlans(id);
+  if (!row) throw createAppError(AppErrors.MEMBERSHIP_NOT_FOUND);
+  return toMembershipResponse(row);
 };
 
 module.exports = {
   isMembershipNameUniqueError,
   createMembership,
   listMemberships,
+  getMembership,
+  toMembershipResponse,
 };
